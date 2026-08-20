@@ -35,6 +35,11 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
@@ -73,6 +78,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
+    var dragging by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -121,21 +127,21 @@ fun SharedTransitionScope.PlayerDetailScreen(
             // TODO 歌词面板插入点：LyricsPane(lyrics, positionMs)
 
             Spacer(Modifier.height(dimens.spaceXl))
-            // 与播放栏一致：播放中 Wave，暂停时静态直线。
+            // 唯一的进度控制：拖动时只更新临时值，松手后才 seek，避免拖到末尾连续跳歌。
+            var draggingProgress by remember(song.id) { mutableFloatStateOf(state.progress) }
+            val shownProgress = if (dragging) draggingProgress else state.progress
             if (state.isPlaying) {
-                LinearWavyProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                LinearWavyProgressIndicator(progress = { shownProgress }, modifier = Modifier.fillMaxWidth())
             } else {
-                LinearProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth(),
-                )
+                LinearProgressIndicator(progress = { shownProgress }, modifier = Modifier.fillMaxWidth())
             }
             Slider(
-                value = state.progress,
-                onValueChange = onSeekFraction,
+                value = shownProgress,
+                onValueChange = { draggingProgress = it; dragging = true },
+                onValueChangeFinished = {
+                    onSeekFraction(draggingProgress)
+                    dragging = false
+                },
                 modifier = Modifier.fillMaxWidth(),
             )
             Row(

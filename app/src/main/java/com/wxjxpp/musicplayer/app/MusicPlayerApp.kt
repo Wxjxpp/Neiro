@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.background
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
@@ -30,6 +31,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wxjxpp.musicplayer.app.navigation.AppDrawerSheet
 import com.wxjxpp.musicplayer.app.navigation.Destination
 import com.wxjxpp.musicplayer.feature.home.HomeScreen
+import com.wxjxpp.musicplayer.feature.home.EmptySongsScreen
 import com.wxjxpp.musicplayer.feature.home.SongsTopBar
 import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
 import com.wxjxpp.musicplayer.feature.settings.SettingsScreen
@@ -64,7 +66,7 @@ fun MusicPlayerApp(container: AppContainer) {
     // motionScheme 是 @Composable 取值，不能在 transitionSpec lambda 里读，先在这里取出
     val routeFadeSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
-    BackHandler(enabled = route != Destination.Home.route) { route = Destination.Home.route }
+    BackHandler(enabled = route != Destination.Home.route || drawerState.isOpen) { if (drawerState.isOpen) scope.launch { drawerState.close() } else route = Destination.Home.route }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -100,12 +102,8 @@ fun MusicPlayerApp(container: AppContainer) {
                     )
 
                     else -> Scaffold(
-                        topBar = {
-                            SongsTopBar(
-                                onOpenDrawer = { scope.launch { drawerState.open() } },
-                                onSearch = { route = Destination.Search.route },
-                            )
-                        },
+                        containerColor = MaterialTheme.colorScheme.background,
+                        topBar = if (currentRoute == Destination.Home.route || currentRoute == Destination.Library.route) { { SongsTopBar(onOpenDrawer = { scope.launch { drawerState.open() } }, onSearch = { route = Destination.Search.route }) } } else null,
                         bottomBar = {
                             if (!uiState.floatingPlayerBar) {
                                 PlayerBar(
@@ -120,7 +118,7 @@ fun MusicPlayerApp(container: AppContainer) {
                             }
                         },
                     ) { padding ->
-                        Box(modifier = Modifier.fillMaxSize()) {
+                        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
                             RouteContent(
                                 route = currentRoute,
                                 viewModel = viewModel,
@@ -172,7 +170,7 @@ private fun RouteContent(
     modifier: Modifier = Modifier,
 ) {
     when (route) {
-        Destination.Home.route, Destination.Library.route -> HomeScreen(
+        Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) EmptySongsScreen() else HomeScreen(
             songs = uiState.songs,
             isRefreshing = uiState.isRefreshing,
             onRefresh = viewModel::refresh,

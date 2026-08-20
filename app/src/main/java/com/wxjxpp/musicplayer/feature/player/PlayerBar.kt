@@ -63,17 +63,22 @@ fun SharedTransitionScope.PlayerBar(
         shadowElevation = elevation,
     ) {
         Column {
-            // 正在播放才用 Expressive Wave；暂停时退化为静态直线，避免视觉暗示仍在播放。
-            if (state.isPlaying) {
-                LinearWavyProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth().padding(start = dimens.spaceMd, end = dimens.spaceMd, top = dimens.spaceSm),
-                )
-            } else {
-                LinearProgressIndicator(
-                    progress = { state.progress },
-                    modifier = Modifier.fillMaxWidth().height(dimens.spaceXs),
-                )
+            // 固定高度容器：状态切换不会改变播放栏总高度。
+            androidx.compose.foundation.layout.Box(
+                modifier = Modifier.fillMaxWidth().height(dimens.spaceMd),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (state.isPlaying) {
+                    LinearWavyProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = dimens.spaceMd),
+                    )
+                } else {
+                    LinearProgressIndicator(
+                        progress = { state.progress },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                }
             }
             Row(
                 modifier = Modifier.fillMaxWidth().height(dimens.playerBarHeight).clickable(onClick = onExpand).padding(horizontal = dimens.spaceMd),

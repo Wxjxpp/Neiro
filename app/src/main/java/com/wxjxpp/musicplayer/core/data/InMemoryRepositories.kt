@@ -25,7 +25,8 @@ import kotlinx.coroutines.flow.update
 
 class InMemorySongRepository : SongRepository {
 
-    private val songs = MutableStateFlow(SampleLibrary.songs)
+    // 主线不再注入占位歌曲；真实歌曲由 dev 分支的扫描器写入。
+    private val songs = MutableStateFlow<List<Song>>(emptyList())
 
     override fun observeSongs(): Flow<List<Song>> = songs.asStateFlow()
 
@@ -44,9 +45,8 @@ class InMemorySongRepository : SongRepository {
     }
 
     override suspend fun rescanLocal() {
-        // 模拟扫描耗时，便于观察下拉刷新指示器
-        delay(900)
-        songs.value = SampleLibrary.songs
+        // 主线尚未接入扫描器：刷新只保留当前曲库，不再回填示例歌曲。
+        delay(300)
     }
 }
 
