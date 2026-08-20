@@ -1,15 +1,27 @@
 # 依赖版本集中管理。新增依赖请在这里登记，不要在模块里写死版本号。
+#
+# 版本选择约束（改动前请先读）：
+#   AGP 8.13.2 最高支持 compileSdk 36。
+#   AndroidX 里凡是标注 minCompileSdk=37 / minAgpVersion=9.1.0 的构件都不能用，
+#   会在 :app:checkDebugAarMetadata 阶段直接失败。
+#   因此这里刻意停在"AGP 8.x 可用的最新版本"上：
+#     - material3   1.5.0-alpha18  （alpha19 起要求 compileSdk 37）
+#     - compose ui  1.11.4         （1.12.0 起要求 compileSdk 37）
+#     - lifecycle   2.10.0         （2.11.0 起要求 compileSdk 37）
+#     - core-ktx    1.17.0         （1.19.0 起要求 compileSdk 37）
+#   等 AGP 9.x 稳定后可整体上抬。
 [versions]
 agp = "8.13.2"
 kotlin = "2.2.21"
 
-# Material 3 Expressive 目前只在 material3 1.5.0-alphaXX 提供，
-# 因此 material3 不走 compose-bom，单独锁版本。
-material3Expressive = "1.5.0-alpha26"
-composeBom = "2026.08.00"
+# Material 3 Expressive 只在 material3 1.5.0-alphaXX 提供，不走 compose-bom。
+material3Expressive = "1.5.0-alpha18"
+# compose ui / foundation / animation 统一版本（不用 BOM，避免 BOM 把 ui 抬到 1.12.0）
+composeUi = "1.11.4"
+materialIcons = "1.7.8"
 
-coreKtx = "1.19.0"
-lifecycle = "2.11.0"
+coreKtx = "1.17.0"
+lifecycle = "2.10.0"
 activityCompose = "1.13.0"
 navigationCompose = "2.9.8"
 graphicsShapes = "1.1.0"
@@ -21,19 +33,20 @@ androidx-lifecycle-viewmodel-compose = { group = "androidx.lifecycle", name = "l
 androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
 androidx-navigation-compose = { group = "androidx.navigation", name = "navigation-compose", version.ref = "navigationCompose" }
 
-androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
-androidx-ui = { group = "androidx.compose.ui", name = "ui" }
-androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
-androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
-androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
-androidx-foundation = { group = "androidx.compose.foundation", name = "foundation" }
-androidx-animation = { group = "androidx.compose.animation", name = "animation" }
+androidx-ui = { group = "androidx.compose.ui", name = "ui", version.ref = "composeUi" }
+androidx-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics", version.ref = "composeUi" }
+androidx-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling", version.ref = "composeUi" }
+androidx-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview", version.ref = "composeUi" }
+androidx-foundation = { group = "androidx.compose.foundation", name = "foundation", version.ref = "composeUi" }
+# SharedTransitionLayout / sharedElement 在这个模块里
+androidx-animation = { group = "androidx.compose.animation", name = "animation", version.ref = "composeUi" }
 
 # M3 Expressive：MaterialExpressiveTheme / MotionScheme / LoadingIndicator /
 # WavyProgressIndicator / MaterialShapes / ButtonGroup / FloatingToolbar 等
 androidx-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "material3Expressive" }
 androidx-material3-window-size = { group = "androidx.compose.material3", name = "material3-window-size-class", version.ref = "material3Expressive" }
-androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
+androidx-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIcons" }
+# MaterialShapes 依赖的多边形形状库
 androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shapes", version.ref = "graphicsShapes" }
 
 [plugins]

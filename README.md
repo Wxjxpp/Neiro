@@ -14,13 +14,18 @@ Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器模板。
 | Gradle | 8.14.5 |
 | compileSdk / targetSdk | 36 |
 | minSdk | 24 |
-| compose-bom | 2026.08.00 |
-| material3 | 1.5.0-alpha26（Expressive API 所在版本） |
+| compose ui/foundation/animation | 1.11.4 |
+| material3 | 1.5.0-alpha18（Expressive API 所在版本） |
 
-> material3 不走 BOM，单独锁 `1.5.0-alphaXX`。
+> material3 不走 compose-bom，单独锁 `1.5.0-alphaXX`。
 > `MaterialExpressiveTheme` / `MotionScheme` / `LoadingIndicator` /
 > `WavyProgressIndicator` / `MaterialShapes` / `ButtonGroup` 只在 1.5.0-alpha 提供，
 > 稳定版 1.4.x 用不了。
+>
+> 版本上限受 AGP 约束：AGP 8.13.2 最高支持 compileSdk 36，
+> 而 material3 1.5.0-alpha19+ / compose ui 1.12.0+ / lifecycle 2.11.0+ / core-ktx 1.19.0+
+> 都要求 compileSdk 37 + AGP 9.1.0，会在 checkDebugAarMetadata 直接失败。
+> 因此依赖刻意停在 AGP 8.x 可用的最新版本，等 AGP 9 稳定后整体上抬。
 
 ## 目录结构
 
