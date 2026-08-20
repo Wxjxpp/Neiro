@@ -103,7 +103,14 @@ fun MusicPlayerApp(container: AppContainer) {
 
                     else -> Scaffold(
                         containerColor = MaterialTheme.colorScheme.background,
-                        topBar = if (currentRoute == Destination.Home.route || currentRoute == Destination.Library.route) { { SongsTopBar(onOpenDrawer = { scope.launch { drawerState.open() } }, onSearch = { route = Destination.Search.route }) } } else null,
+                        topBar = {
+                            if (currentRoute == Destination.Home.route || currentRoute == Destination.Library.route) {
+                                SongsTopBar(
+                                    onOpenDrawer = { scope.launch { drawerState.open() } },
+                                    onSearch = { route = Destination.Search.route },
+                                )
+                            }
+                        },
                         bottomBar = {
                             if (!uiState.floatingPlayerBar) {
                                 PlayerBar(
