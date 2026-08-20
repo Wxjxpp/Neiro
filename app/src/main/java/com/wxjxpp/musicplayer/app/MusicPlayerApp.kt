@@ -59,6 +59,8 @@ fun MusicPlayerApp(container: AppContainer) {
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val dimens = AppTheme.dimens
+    // motionScheme 是 @Composable 取值，不能在 transitionSpec lambda 里读，先在这里取出
+    val routeFadeSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -76,8 +78,7 @@ fun MusicPlayerApp(container: AppContainer) {
             AnimatedContent(
                 targetState = route,
                 transitionSpec = {
-                    val spec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-                    fadeIn(spec) togetherWith fadeOut(spec)
+                    fadeIn(routeFadeSpec) togetherWith fadeOut(routeFadeSpec)
                 },
                 label = "rootRoute",
             ) { currentRoute ->

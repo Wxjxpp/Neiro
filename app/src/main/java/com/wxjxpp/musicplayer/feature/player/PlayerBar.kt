@@ -95,7 +95,7 @@ fun SharedTransitionScope.PlayerBar(
                 progress = { state.progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = dimens.spaceMd, top = dimens.spaceSm),
+                    .padding(start = dimens.spaceMd, end = dimens.spaceMd, top = dimens.spaceSm),
             )
             Row(
                 modifier = Modifier
