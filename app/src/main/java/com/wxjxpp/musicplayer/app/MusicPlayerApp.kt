@@ -18,7 +18,12 @@ import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,6 +71,27 @@ fun MusicPlayerApp(container: AppContainer) {
     // motionScheme 是 @Composable 取值，不能在 transitionSpec lambda 里读，先在这里取出
     val routeFadeSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
+    // 运行时权限：Android 13+ 请求 READ_MEDIA_AUDIO，更低版本回退到读外部存储。
+    val context = LocalContext.current
+    var hasMediaPermission by remember { mutableStateOf(PermissionController.hasMediaPermission(context)) }
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        hasMediaPermission = result.values.all { it }
+        if (hasMediaPermission) viewModel.refresh()
+    }
+    val requestPermission: () -> Unit = {
+        permissionLauncher.launch(PermissionController.requiredMediaPermissions())
+    }
+    val scanLibrary: () -> Unit = {
+        if (hasMediaPermission) viewModel.refresh() else requestPermission()
+    }
+
+    // 已有权限且曲库为空时自动扫描一次，避免用户必须手动点。
+    LaunchedEffect(hasMediaPermission) {
+        if (hasMediaPermission && uiState.songs.isEmpty()) viewModel.refresh()
+    }
+
     BackHandler(enabled = route != Destination.Home.route || drawerState.isOpen) { if (drawerState.isOpen) scope.launch { drawerState.close() } else route = Destination.Home.route }
 
     ModalNavigationDrawer(
@@ -108,6 +134,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                 SongsTopBar(
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
                                     onSearch = { route = Destination.Search.route },
+                                    onScan = scanLibrary,
                                 )
                             }
                         },
@@ -130,6 +157,9 @@ fun MusicPlayerApp(container: AppContainer) {
                                 route = currentRoute,
                                 viewModel = viewModel,
                                 uiState = uiState,
+                                hasMediaPermission = hasMediaPermission,
+                                onRequestPermission = requestPermission,
+                                onScan = scanLibrary,
                                 contentPadding = PaddingValues(
                                     top = padding.calculateTopPadding(),
                                     bottom = padding.calculateBottomPadding() +
@@ -173,11 +203,22 @@ private fun RouteContent(
     route: String,
     viewModel: AppViewModel,
     uiState: ShellUiState,
+    hasMediaPermission: Boolean,
+    onRequestPermission: () -> Unit,
+    onScan: () -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     when (route) {
-        Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) EmptySongsScreen() else HomeScreen(
+        Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) {
+            EmptySongsScreen(
+                hasPermission = hasMediaPermission,
+                isScanning = uiState.isRefreshing,
+                onRequestPermission = onRequestPermission,
+                onScan = onScan,
+                modifier = modifier,
+            )
+        } else HomeScreen(
             songs = uiState.songs,
             isRefreshing = uiState.isRefreshing,
             onRefresh = viewModel::refresh,

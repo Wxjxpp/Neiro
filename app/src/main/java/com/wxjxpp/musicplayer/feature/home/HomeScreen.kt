@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -33,7 +34,7 @@ import com.wxjxpp.musicplayer.core.model.Song
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
-/** 歌曲主页：设置项不放这里，只展示歌曲与主页搜索入口。 */
+/** 歌曲主页：只展示歌曲；下拉即触发本地扫描。 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
@@ -95,12 +96,13 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
     }
 }
 
-/** 主页面唯一的搜索入口；不再把搜索复制到侧边菜单。 */
+/** 歌曲页顶栏：扫描 + 搜索，两个入口都只在这里出现。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongsTopBar(
     onOpenDrawer: () -> Unit,
     onSearch: () -> Unit,
+    onScan: () -> Unit,
 ) {
     TopAppBar(
         title = {
@@ -119,6 +121,9 @@ fun SongsTopBar(
             }
         },
         actions = {
+            IconButton(onClick = onScan) {
+                Icon(Icons.Filled.Refresh, contentDescription = "扫描本地音乐")
+            }
             IconButton(onClick = onSearch) {
                 Icon(Icons.Filled.Search, contentDescription = "搜索歌曲")
             }
