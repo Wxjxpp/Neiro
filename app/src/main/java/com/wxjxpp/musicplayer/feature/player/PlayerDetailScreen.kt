@@ -29,6 +29,8 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -119,6 +121,18 @@ fun SharedTransitionScope.PlayerDetailScreen(
             // TODO 歌词面板插入点：LyricsPane(lyrics, positionMs)
 
             Spacer(Modifier.height(dimens.spaceXl))
+            // 与播放栏一致：播放中 Wave，暂停时静态直线。
+            if (state.isPlaying) {
+                LinearWavyProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
             Slider(
                 value = state.progress,
                 onValueChange = onSeekFraction,

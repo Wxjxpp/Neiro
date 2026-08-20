@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -29,8 +30,9 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wxjxpp.musicplayer.app.navigation.AppDrawerSheet
 import com.wxjxpp.musicplayer.app.navigation.Destination
 import com.wxjxpp.musicplayer.feature.home.HomeScreen
-import com.wxjxpp.musicplayer.feature.home.HomeTopBar
+import com.wxjxpp.musicplayer.feature.home.SongsTopBar
 import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
+import com.wxjxpp.musicplayer.feature.settings.SettingsScreen
 import com.wxjxpp.musicplayer.feature.player.PlayerBar
 import com.wxjxpp.musicplayer.feature.player.PlayerDetailScreen
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
@@ -61,6 +63,8 @@ fun MusicPlayerApp(container: AppContainer) {
     val dimens = AppTheme.dimens
     // motionScheme 是 @Composable 取值，不能在 transitionSpec lambda 里读，先在这里取出
     val routeFadeSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+
+    BackHandler(enabled = route != Destination.Home.route) { route = Destination.Home.route }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -97,7 +101,7 @@ fun MusicPlayerApp(container: AppContainer) {
 
                     else -> Scaffold(
                         topBar = {
-                            HomeTopBar(
+                            SongsTopBar(
                                 onOpenDrawer = { scope.launch { drawerState.open() } },
                                 onSearch = { route = Destination.Search.route },
                             )
@@ -171,16 +175,15 @@ private fun RouteContent(
         Destination.Home.route, Destination.Library.route -> HomeScreen(
             songs = uiState.songs,
             isRefreshing = uiState.isRefreshing,
-            floatingBar = uiState.floatingPlayerBar,
             onRefresh = viewModel::refresh,
-            onToggleFloatingBar = viewModel::setFloatingPlayerBar,
             onSongClick = viewModel::play,
             contentPadding = contentPadding,
         )
 
+        // 搜索由歌曲页入口进入；页面顶部不再重复显示老式标题。
         Destination.Search.route -> PlaceholderScreen(
-            title = "搜索",
-            description = "接入 MusicSource.search 后在此展示多音源聚合结果",
+            title = "",
+            description = "搜索功能接入 MusicSource.search 后展示多音源聚合结果",
             modifier = modifier,
         )
 
@@ -208,9 +211,9 @@ private fun RouteContent(
             modifier = modifier,
         )
 
-        Destination.Settings.route -> PlaceholderScreen(
-            title = "设置",
-            description = "SettingsRepository 已就绪，接入 DataStore 后在此配置",
+        Destination.Settings.route -> SettingsScreen(
+            floatingPlayerBar = uiState.floatingPlayerBar,
+            onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
             modifier = modifier,
         )
 

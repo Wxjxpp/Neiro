@@ -20,6 +20,7 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -35,14 +36,6 @@ import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
-/**
- * 底部播放栏。
- *
- * 常规态与悬浮态是同一份布局，靠 [floating] 驱动 token 插值，
- * 不存在两套实现，因此两种状态行为必然一致。
- *
- * 动效时长取自 MaterialTheme.motionScheme（Expressive），组件内不写死 duration。
- */
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SharedTransitionScope.PlayerBar(
@@ -58,51 +51,32 @@ fun SharedTransitionScope.PlayerBar(
     val song = state.current ?: return
     val dimens = AppTheme.dimens
     val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Dp>()
-
-    val horizontalMargin by animateDpAsState(
-        targetValue = if (floating) dimens.floatingBarMargin else 0.dp,
-        animationSpec = spatial,
-        label = "barHorizontalMargin",
-    )
-    val bottomMargin by animateDpAsState(
-        targetValue = if (floating) dimens.floatingBarBottomMargin else 0.dp,
-        animationSpec = spatial,
-        label = "barBottomMargin",
-    )
-    val corner by animateDpAsState(
-        targetValue = if (floating) dimens.floatingBarRadius else 0.dp,
-        animationSpec = spatial,
-        label = "barCorner",
-    )
-    val elevation by animateDpAsState(
-        targetValue = if (floating) dimens.floatingBarElevation else 0.dp,
-        animationSpec = spatial,
-        label = "barElevation",
-    )
+    val horizontalMargin by animateDpAsState(if (floating) dimens.floatingBarMargin else 0.dp, spatial, label = "barHorizontalMargin")
+    val bottomMargin by animateDpAsState(if (floating) dimens.floatingBarBottomMargin else 0.dp, spatial, label = "barBottomMargin")
+    val corner by animateDpAsState(if (floating) dimens.floatingBarRadius else 0.dp, spatial, label = "barCorner")
+    val elevation by animateDpAsState(if (floating) dimens.floatingBarElevation else 0.dp, spatial, label = "barElevation")
 
     Surface(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(horizontal = horizontalMargin)
-            .padding(bottom = bottomMargin),
+        modifier = modifier.fillMaxWidth().padding(horizontal = horizontalMargin).padding(bottom = bottomMargin),
         shape = RoundedCornerShape(corner),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = elevation,
     ) {
         Column {
-            // Expressive 波形进度条
-            LinearWavyProgressIndicator(
-                progress = { state.progress },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = dimens.spaceMd, end = dimens.spaceMd, top = dimens.spaceSm),
-            )
+            // 正在播放才用 Expressive Wave；暂停时退化为静态直线，避免视觉暗示仍在播放。
+            if (state.isPlaying) {
+                LinearWavyProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth().padding(start = dimens.spaceMd, end = dimens.spaceMd, top = dimens.spaceSm),
+                )
+            } else {
+                LinearProgressIndicator(
+                    progress = { state.progress },
+                    modifier = Modifier.fillMaxWidth().height(dimens.spaceXs),
+                )
+            }
             Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(dimens.playerBarHeight)
-                    .clickable(onClick = onExpand)
-                    .padding(horizontal = dimens.spaceMd),
+                modifier = Modifier.fillMaxWidth().height(dimens.playerBarHeight).clickable(onClick = onExpand).padding(horizontal = dimens.spaceMd),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
             ) {
@@ -116,38 +90,19 @@ fun SharedTransitionScope.PlayerBar(
                     ),
                 )
                 Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = song.title,
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
-                    Text(
-                        text = song.artistName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                    )
+                    Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(song.artistName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
                 IconButton(onClick = onTogglePlay) {
-                    Icon(
-                        imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = null,
-                    )
+                    Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null)
                 }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = null)
-                }
-                IconButton(onClick = onOpenQueue) {
-                    Icon(Icons.Filled.QueueMusic, contentDescription = null)
-                }
+                IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, contentDescription = null) }
+                IconButton(onClick = onOpenQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = null) }
             }
         }
     }
 }
 
-/** 共享元素 key。新增跨页共享元素时在这里登记，避免字符串散落各处。 */
 object PlayerSharedKeys {
     const val Cover = "player-cover"
     const val Title = "player-title"

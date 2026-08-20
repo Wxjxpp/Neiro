@@ -13,13 +13,13 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -33,26 +33,18 @@ import com.wxjxpp.musicplayer.core.model.Song
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
-/**
- * 首页曲库列表。
- *
- * 下拉刷新用 M3 Expressive 的 [PullToRefreshDefaults.LoadingIndicator]
- * （形状会 morph 的指示器），不是旧版圆形箭头 spinner。
- */
+/** 歌曲主页：设置项不放这里，只展示歌曲与主页搜索入口。 */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun HomeScreen(
     songs: List<Song>,
     isRefreshing: Boolean,
-    floatingBar: Boolean,
     onRefresh: () -> Unit,
-    onToggleFloatingBar: (Boolean) -> Unit,
     onSongClick: (Song) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val refreshState = rememberPullToRefreshState()
-
     PullToRefreshBox(
         isRefreshing = isRefreshing,
         onRefresh = onRefresh,
@@ -70,37 +62,10 @@ fun HomeScreen(
             modifier = Modifier.fillMaxSize(),
             contentPadding = contentPadding,
         ) {
-            item {
-                FloatingBarToggle(checked = floatingBar, onCheckedChange = onToggleFloatingBar)
-            }
             items(songs, key = { it.id }) { song ->
                 SongRow(song = song, onClick = { onSongClick(song) })
             }
         }
-    }
-}
-
-@Composable
-private fun FloatingBarToggle(
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-) {
-    val dimens = AppTheme.dimens
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text("悬浮播放栏", style = MaterialTheme.typography.titleMedium)
-            Text(
-                text = "切换底部播放栏与悬浮卡片样式",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-        Switch(checked = checked, onCheckedChange = onCheckedChange)
     }
 }
 
@@ -116,18 +81,9 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
     ) {
-        SongCover(
-            song = song,
-            size = dimens.listCoverSize,
-            radius = dimens.playerBarCoverRadius,
-        )
+        SongCover(song = song, size = dimens.listCoverSize, radius = dimens.playerBarCoverRadius)
         Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = song.title,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
                 text = "${song.artistName} · ${song.albumTitle}",
                 style = MaterialTheme.typography.bodySmall,
@@ -139,22 +95,32 @@ private fun SongRow(song: Song, onClick: () -> Unit) {
     }
 }
 
+/** 主页面唯一的搜索入口；不再把搜索复制到侧边菜单。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeTopBar(
+fun SongsTopBar(
     onOpenDrawer: () -> Unit,
     onSearch: () -> Unit,
 ) {
     TopAppBar(
-        title = { Text("Music Player") },
+        title = {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Filled.MusicNote, contentDescription = null)
+                Text(
+                    text = "歌曲",
+                    style = MaterialTheme.typography.labelLarge,
+                    modifier = Modifier.padding(start = AppTheme.dimens.spaceSm),
+                )
+            }
+        },
         navigationIcon = {
             IconButton(onClick = onOpenDrawer) {
-                Icon(Icons.Filled.Menu, contentDescription = "打开菜单")
+                Icon(Icons.Filled.Menu, contentDescription = "打开导航")
             }
         },
         actions = {
             IconButton(onClick = onSearch) {
-                Icon(Icons.Filled.Search, contentDescription = "搜索")
+                Icon(Icons.Filled.Search, contentDescription = "搜索歌曲")
             }
         },
     )
