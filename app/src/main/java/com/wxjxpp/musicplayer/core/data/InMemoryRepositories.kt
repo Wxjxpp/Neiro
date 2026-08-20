@@ -10,7 +10,6 @@ import com.wxjxpp.musicplayer.core.model.MediaLocation
 import com.wxjxpp.musicplayer.core.model.PlayEvent
 import com.wxjxpp.musicplayer.core.model.Playlist
 import com.wxjxpp.musicplayer.core.model.Song
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -23,9 +22,12 @@ import kotlinx.coroutines.flow.update
  * 每个类都可以被同名接口的真实实现替换，替换点只有依赖装配处。
  */
 
-class InMemorySongRepository : SongRepository {
+class InMemorySongRepository(
+    private val scanner: com.wxjxpp.musicplayer.core.scanner.MediaScanner? = null,
+    private val metadataReader: com.wxjxpp.musicplayer.core.scanner.MetadataReader? = null,
+) : SongRepository {
 
-    // 主线不再注入占位歌曲；真实歌曲由 dev 分支的扫描器写入。
+    // 主线不再注入占位歌曲；真实歌曲由扫描器写入。
     private val songs = MutableStateFlow<List<Song>>(emptyList())
 
     override fun observeSongs(): Flow<List<Song>> = songs.asStateFlow()
@@ -45,8 +47,18 @@ class InMemorySongRepository : SongRepository {
     }
 
     override suspend fun rescanLocal() {
-        // 主线尚未接入扫描器：刷新只保留当前曲库，不再回填示例歌曲。
-        delay(300)
+        val scanner = scanner ?: return
+        val found = mutableListOf<Song>()
+        scanner.scan().collect { progress ->
+            if (progress is com.wxjxpp.musicplayer.core.scanner.ScanProgress.Found) {
+                found += progress.song
+            }
+        }
+        // 扫描先建索引；元数据（封面/码率/时长校正）随后补齐，避免阻塞列表出现。
+        songs.value = found
+        val reader = metadataReader ?: return
+        val enriched = found.map { reader.readMetadata(it) }
+        songs.value = enriched
     }
 }
 

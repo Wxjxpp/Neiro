@@ -17,6 +17,10 @@ import com.wxjxpp.musicplayer.core.lyrics.LyricsParserRegistry
 import com.wxjxpp.musicplayer.core.lyrics.defaultLyricsParserRegistry
 import com.wxjxpp.musicplayer.core.player.InMemoryPlayerController
 import com.wxjxpp.musicplayer.core.player.PlayerController
+import com.wxjxpp.musicplayer.core.scanner.AndroidMediaScanner
+import com.wxjxpp.musicplayer.core.scanner.AndroidMetadataReader
+import com.wxjxpp.musicplayer.core.scanner.MediaScanner
+import com.wxjxpp.musicplayer.core.scanner.MetadataReader
 import com.wxjxpp.musicplayer.core.source.DefaultMusicSourceRegistry
 import com.wxjxpp.musicplayer.core.source.MusicSourceRegistry
 import com.wxjxpp.musicplayer.core.together.NoopTogetherTransport
@@ -46,17 +50,23 @@ interface AppContainer {
     val sourceRegistry: MusicSourceRegistry
     val lyricsParsers: LyricsParserRegistry
     val togetherTransport: TogetherTransport
+    val mediaScanner: MediaScanner
+    val metadataReader: MetadataReader
 }
 
 class DefaultAppContainer(
-    @Suppress("unused") private val application: Application,
+    private val application: Application,
 ) : AppContainer {
 
     override val appScope = CoroutineScope(SupervisorJob())
 
+    // === 扫描与元数据 ===
+    override val mediaScanner: MediaScanner = AndroidMediaScanner(application.contentResolver)
+    override val metadataReader: MetadataReader = AndroidMetadataReader()
+
     // === 数据层 ===
     // TODO 接入 Room 后替换为 RoomSongRepository 等实现
-    override val songRepository: SongRepository = InMemorySongRepository()
+    override val songRepository: SongRepository = InMemorySongRepository(mediaScanner, metadataReader)
     override val playlistRepository: PlaylistRepository = InMemoryPlaylistRepository()
     override val lyricsRepository: LyricsRepository = InMemoryLyricsRepository()
     override val statsRepository: StatsRepository = InMemoryStatsRepository()
