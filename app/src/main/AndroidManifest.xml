@@ -3,6 +3,7 @@
 
     <!-- 本地扫描：Android 13+ 用细分媒体权限，13 以下回退到读外部存储 -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
