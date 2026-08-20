@@ -2,11 +2,12 @@ package com.wxjxpp.musicplayer.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Material 3 baseline seed colors. 换配色只改这里。
-val Purple80 = Color(0xFFD0BCFF)
-val PurpleGrey80 = Color(0xFFCCC2DC)
-val Pink80 = Color(0xFFEFB8C8)
+// 品牌种子色。仅在关闭动态取色（Android 11 及以下，或 dynamicColor=false）时生效。
+// 想换品牌色只改这 6 个值。
+val SeedPrimaryLight = Color(0xFF4F5B92)
+val SeedSecondaryLight = Color(0xFF5B5D72)
+val SeedTertiaryLight = Color(0xFF76546D)
 
-val Purple40 = Color(0xFF6650A4)
-val PurpleGrey40 = Color(0xFF625B71)
-val Pink40 = Color(0xFF7D5260)
+val SeedPrimaryDark = Color(0xFFB9C3FF)
+val SeedSecondaryDark = Color(0xFFC3C5DD)
+val SeedTertiaryDark = Color(0xFFE5BAD8)

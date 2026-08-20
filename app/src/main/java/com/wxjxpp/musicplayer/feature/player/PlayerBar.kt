@@ -1,11 +1,9 @@
 package com.wxjxpp.musicplayer.feature.player
 
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -13,14 +11,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.SkipNext
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
+import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -29,8 +29,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
 import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
@@ -38,10 +38,12 @@ import com.wxjxpp.musicplayer.ui.theme.AppTheme
 /**
  * 底部播放栏。
  *
- * 常规态与悬浮态共用同一份布局，通过 token 动画插值切换，
- * 避免两套实现导致的行为不一致。
+ * 常规态与悬浮态是同一份布局，靠 [floating] 驱动 token 插值，
+ * 不存在两套实现，因此两种状态行为必然一致。
+ *
+ * 动效时长取自 MaterialTheme.motionScheme（Expressive），组件内不写死 duration。
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SharedTransitionScope.PlayerBar(
     state: PlaybackState,
@@ -55,32 +57,27 @@ fun SharedTransitionScope.PlayerBar(
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
-    val motion = AppTheme.motion
+    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Dp>()
 
     val horizontalMargin by animateDpAsState(
         targetValue = if (floating) dimens.floatingBarMargin else 0.dp,
-        animationSpec = tween(motion.medium),
+        animationSpec = spatial,
         label = "barHorizontalMargin",
     )
     val bottomMargin by animateDpAsState(
         targetValue = if (floating) dimens.floatingBarBottomMargin else 0.dp,
-        animationSpec = tween(motion.medium),
+        animationSpec = spatial,
         label = "barBottomMargin",
     )
     val corner by animateDpAsState(
         targetValue = if (floating) dimens.floatingBarRadius else 0.dp,
-        animationSpec = tween(motion.medium),
+        animationSpec = spatial,
         label = "barCorner",
     )
     val elevation by animateDpAsState(
         targetValue = if (floating) dimens.floatingBarElevation else 0.dp,
-        animationSpec = tween(motion.medium),
+        animationSpec = spatial,
         label = "barElevation",
-    )
-    val tonal by animateFloatAsState(
-        targetValue = if (floating) 3f else 2f,
-        animationSpec = tween(motion.medium),
-        label = "barTonal",
     )
 
     Surface(
@@ -90,15 +87,15 @@ fun SharedTransitionScope.PlayerBar(
             .padding(bottom = bottomMargin),
         shape = RoundedCornerShape(corner),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = tonal.dp,
         shadowElevation = elevation,
     ) {
         Column {
-            LinearProgressIndicator(
+            // Expressive 波形进度条
+            LinearWavyProgressIndicator(
                 progress = { state.progress },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(2.dp),
+                    .padding(horizontal = dimens.spaceMd, top = dimens.spaceSm),
             )
             Row(
                 modifier = Modifier
@@ -110,11 +107,11 @@ fun SharedTransitionScope.PlayerBar(
                 horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
             ) {
                 SongCover(
-                    seed = song.coverSeed,
+                    song = song,
                     size = dimens.playerBarCoverSize,
                     radius = dimens.playerBarCoverRadius,
                     modifier = Modifier.sharedElement(
-                        rememberSharedContentState(key = PlayerSharedKeys.Cover),
+                        sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
                         animatedVisibilityScope = animatedVisibilityScope,
                     ),
                 )
@@ -126,7 +123,7 @@ fun SharedTransitionScope.PlayerBar(
                         overflow = TextOverflow.Ellipsis,
                     )
                     Text(
-                        text = song.artist,
+                        text = song.artistName,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         maxLines = 1,
@@ -150,6 +147,7 @@ fun SharedTransitionScope.PlayerBar(
     }
 }
 
+/** 共享元素 key。新增跨页共享元素时在这里登记，避免字符串散落各处。 */
 object PlayerSharedKeys {
     const val Cover = "player-cover"
     const val Title = "player-title"

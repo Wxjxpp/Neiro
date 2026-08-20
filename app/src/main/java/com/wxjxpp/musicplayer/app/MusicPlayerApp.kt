@@ -3,7 +3,6 @@ package com.wxjxpp.musicplayer.app
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -11,112 +10,213 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.wxjxpp.musicplayer.app.navigation.AppDrawerSheet
+import com.wxjxpp.musicplayer.app.navigation.Destination
 import com.wxjxpp.musicplayer.feature.home.HomeScreen
 import com.wxjxpp.musicplayer.feature.home.HomeTopBar
+import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
 import com.wxjxpp.musicplayer.feature.player.PlayerBar
 import com.wxjxpp.musicplayer.feature.player.PlayerDetailScreen
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
-
-private enum class Route { Home, PlayerDetail }
+import kotlinx.coroutines.launch
 
 /**
- * 应用根组件。
+ * 应用外壳。
  *
- * 使用 SharedTransitionLayout + AnimatedContent，
- * 展开与收起共用同一条共享元素路径，保证动画对称。
+ * 结构：ModalNavigationDrawer（侧滑菜单）
+ *      └ SharedTransitionLayout
+ *        └ AnimatedContent（路由切换 + 共享元素）
+ *          ├ 内容区（首页 / 各功能页）
+ *          └ 播放栏（常规 or 悬浮）
+ *
+ * 播放栏放在壳层而非各页面内，保证跨页面时它是同一个实例，
+ * 共享元素动画才能连续。
  */
-@OptIn(ExperimentalSharedTransitionApi::class)
+@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun MusicPlayerApp(viewModel: AppViewModel = viewModel()) {
+fun MusicPlayerApp(container: AppContainer) {
+    val viewModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
     val uiState by viewModel.uiState.collectAsState()
     val playback by viewModel.playbackState.collectAsState()
-    var route by rememberSaveable { mutableStateOf(Route.Home) }
-    val motion = AppTheme.motion
+
+    var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
+    val drawerState = rememberDrawerState(DrawerValue.Closed)
+    val scope = rememberCoroutineScope()
     val dimens = AppTheme.dimens
 
-    SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
-        AnimatedContent(
-            targetState = route,
-            transitionSpec = {
-                fadeIn(tween(motion.medium)) togetherWith fadeOut(tween(motion.medium))
-            },
-            label = "rootRoute",
-        ) { current ->
-            when (current) {
-                Route.Home -> Scaffold(
-                    topBar = { HomeTopBar(onSearch = {}) },
-                    bottomBar = {
-                        if (!uiState.floatingBar) {
-                            PlayerBar(
-                                state = playback,
-                                floating = false,
-                                animatedVisibilityScope = this@AnimatedContent,
-                                onExpand = { route = Route.PlayerDetail },
-                                onTogglePlay = viewModel::togglePlay,
-                                onNext = viewModel::next,
-                                onOpenQueue = {},
+    ModalNavigationDrawer(
+        drawerState = drawerState,
+        drawerContent = {
+            AppDrawerSheet(
+                currentRoute = route,
+                onNavigate = { destination ->
+                    route = destination.route
+                    scope.launch { drawerState.close() }
+                },
+            )
+        },
+    ) {
+        SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+            AnimatedContent(
+                targetState = route,
+                transitionSpec = {
+                    val spec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+                    fadeIn(spec) togetherWith fadeOut(spec)
+                },
+                label = "rootRoute",
+            ) { currentRoute ->
+                when (currentRoute) {
+                    Destination.PlayerDetail.route -> PlayerDetailScreen(
+                        state = playback,
+                        animatedVisibilityScope = this@AnimatedContent,
+                        onBack = { route = Destination.Home.route },
+                        onTogglePlay = viewModel::togglePlay,
+                        onNext = viewModel::next,
+                        onPrevious = viewModel::previous,
+                        onSeekFraction = viewModel::seekToFraction,
+                        onToggleShuffle = viewModel::toggleShuffle,
+                        onCycleRepeat = viewModel::cycleRepeat,
+                    )
+
+                    else -> Scaffold(
+                        topBar = {
+                            HomeTopBar(
+                                onOpenDrawer = { scope.launch { drawerState.open() } },
+                                onSearch = { route = Destination.Search.route },
                             )
-                        }
-                    },
-                ) { padding ->
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        HomeScreen(
-                            songs = uiState.songs,
-                            isRefreshing = uiState.isRefreshing,
-                            floatingBar = uiState.floatingBar,
-                            onRefresh = viewModel::refresh,
-                            onToggleFloatingBar = viewModel::setFloatingBar,
-                            onSongClick = viewModel::play,
-                            contentPadding = PaddingValues(
-                                top = padding.calculateTopPadding(),
-                                bottom = padding.calculateBottomPadding() +
-                                    dimens.playerBarHeight +
-                                    dimens.spaceXl,
-                            ),
-                        )
-                        if (uiState.floatingBar) {
-                            Box(
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .padding(padding),
-                                contentAlignment = Alignment.BottomCenter,
-                            ) {
+                        },
+                        bottomBar = {
+                            if (!uiState.floatingPlayerBar) {
                                 PlayerBar(
                                     state = playback,
-                                    floating = true,
+                                    floating = false,
                                     animatedVisibilityScope = this@AnimatedContent,
-                                    onExpand = { route = Route.PlayerDetail },
+                                    onExpand = { route = Destination.PlayerDetail.route },
                                     onTogglePlay = viewModel::togglePlay,
                                     onNext = viewModel::next,
                                     onOpenQueue = {},
                                 )
                             }
+                        },
+                    ) { padding ->
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            RouteContent(
+                                route = currentRoute,
+                                viewModel = viewModel,
+                                uiState = uiState,
+                                contentPadding = PaddingValues(
+                                    top = padding.calculateTopPadding(),
+                                    bottom = padding.calculateBottomPadding() +
+                                        dimens.playerBarHeight +
+                                        dimens.spaceXl,
+                                ),
+                            )
+                            if (uiState.floatingPlayerBar) {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .padding(padding),
+                                    contentAlignment = Alignment.BottomCenter,
+                                ) {
+                                    PlayerBar(
+                                        state = playback,
+                                        floating = true,
+                                        animatedVisibilityScope = this@AnimatedContent,
+                                        onExpand = { route = Destination.PlayerDetail.route },
+                                        onTogglePlay = viewModel::togglePlay,
+                                        onNext = viewModel::next,
+                                        onOpenQueue = {},
+                                    )
+                                }
+                            }
                         }
                     }
                 }
-
-                Route.PlayerDetail -> PlayerDetailScreen(
-                    state = playback,
-                    animatedVisibilityScope = this@AnimatedContent,
-                    onBack = { route = Route.Home },
-                    onTogglePlay = viewModel::togglePlay,
-                    onNext = viewModel::next,
-                    onPrevious = viewModel::previous,
-                    onSeek = viewModel::seekTo,
-                    onToggleShuffle = viewModel::toggleShuffle,
-                    onCycleRepeat = viewModel::cycleRepeat,
-                )
             }
         }
+    }
+}
+
+/**
+ * 路由内容分发。
+ *
+ * 新增页面在这里加一个分支即可；占位页保证导航链路先跑通。
+ */
+@Composable
+private fun RouteContent(
+    route: String,
+    viewModel: AppViewModel,
+    uiState: ShellUiState,
+    contentPadding: PaddingValues,
+    modifier: Modifier = Modifier,
+) {
+    when (route) {
+        Destination.Home.route, Destination.Library.route -> HomeScreen(
+            songs = uiState.songs,
+            isRefreshing = uiState.isRefreshing,
+            floatingBar = uiState.floatingPlayerBar,
+            onRefresh = viewModel::refresh,
+            onToggleFloatingBar = viewModel::setFloatingPlayerBar,
+            onSongClick = viewModel::play,
+            contentPadding = contentPadding,
+        )
+
+        Destination.Search.route -> PlaceholderScreen(
+            title = "搜索",
+            description = "接入 MusicSource.search 后在此展示多音源聚合结果",
+            modifier = modifier,
+        )
+
+        Destination.Playlists.route -> PlaceholderScreen(
+            title = "歌单",
+            description = "PlaylistRepository 已就绪，接入后展示歌单列表与详情",
+            modifier = modifier,
+        )
+
+        Destination.Diary.route -> PlaceholderScreen(
+            title = "听歌日记",
+            description = "DiaryRepository 已就绪，接入后按日期展示听歌记录与随笔",
+            modifier = modifier,
+        )
+
+        Destination.Together.route -> PlaceholderScreen(
+            title = "一起听",
+            description = "实现 TogetherTransport 后在此创建 / 加入房间",
+            modifier = modifier,
+        )
+
+        Destination.Report.route -> PlaceholderScreen(
+            title = "年度报告",
+            description = "StatsRepository.report 已就绪，接入后生成可视化报告",
+            modifier = modifier,
+        )
+
+        Destination.Settings.route -> PlaceholderScreen(
+            title = "设置",
+            description = "SettingsRepository 已就绪，接入 DataStore 后在此配置",
+            modifier = modifier,
+        )
+
+        else -> PlaceholderScreen(
+            title = "未实现",
+            description = "路由 $route 尚未接入页面",
+            modifier = modifier,
+        )
     }
 }
