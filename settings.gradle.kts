@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "在现有musicplayerApp"
+rootProject.name = "music-player"
 include(":app")
