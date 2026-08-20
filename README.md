@@ -143,3 +143,6 @@ push 到 `main` / `dev` 或手动 `workflow_dispatch` 触发，
 - 曲库是内存示例数据（`InMemoryRepositories.kt` 里的 `SampleLibrary`）
 - 抽屉中除首页外均为占位页
 - 封面是渐变色块，接入 Coil 时只改 `ui/components/SongCover.kt`
+
+---
+本项目使用MIT协议开源
