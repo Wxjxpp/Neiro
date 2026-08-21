@@ -18,6 +18,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -81,6 +82,7 @@ fun SearchScreen(
                     SegmentedButton(
                         selected = currentOnlinePlatform == platform.id,
                         onClick = { onOnlinePlatformChange(platform.id) },
+                        shape = SegmentedButtonDefaults.itemShape(onlinePlatforms.indexOf(platform), onlinePlatforms.size),
                         label = { Text(platform.displayName, style = MaterialTheme.typography.labelMedium) },
                     )
                 }
@@ -115,6 +117,7 @@ fun SearchScreen(
                                     SegmentedButton(
                                         selected = active == i,
                                         onClick = { active = i; showLocal = i == 1 },
+                                        shape = SegmentedButtonDefaults.itemShape(i, labels.size),
                                         label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                                     )
                                 }
@@ -128,7 +131,9 @@ fun SearchScreen(
                             }
                         }
                     }
-                    Divider(modifier = Modifier.padding(horizontal = dimens.spaceLg))
+                    item {
+                        Divider(modifier = Modifier.padding(horizontal = dimens.spaceLg))
+                    }
                 }
 
                 // 在线结果

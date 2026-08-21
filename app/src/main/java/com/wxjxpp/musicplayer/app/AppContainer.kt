@@ -232,8 +232,7 @@ class DefaultAppContainer(
         when (action) {
             is UserApiAction.Request -> userApiHttpClient.handle(action)
 
-            is UserApiAction.CancelRequest -> userApiHttpClient.cancel(action.requestKey)
-
+            
             is UserApiAction.Init -> {
                 val id = activatingId
                 if (action.status) {
