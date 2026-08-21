@@ -14,8 +14,8 @@ android {
         applicationId = "com.wxjxpp.musicplayer"
         minSdk = 24
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0"
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     buildTypes {
@@ -87,6 +87,10 @@ dependencies {
 
     // 封面加载
     implementation(libs.coil.compose)
+
+    // AMLL 风格逐字歌词渲染（音节级卡拉 OK）
+    implementation(libs.accompanist.lyrics.core)
+    implementation(libs.accompanist.lyrics.ui)
 
     debugImplementation(libs.androidx.ui.tooling)
 }

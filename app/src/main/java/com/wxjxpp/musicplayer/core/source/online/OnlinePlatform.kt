@@ -38,7 +38,7 @@ interface OnlinePlatform {
  * 字段命名沿用 LX 协议，方便与脚本返回值走同一条解析路径。
  */
 data class PlatformLyrics(
-    /** 主歌词（LRC）。 */
+    /** 主歌词（LRC 或 TTML）。 */
     val lyric: String,
     /** 翻译。 */
     val tlyric: String? = null,
@@ -46,6 +46,8 @@ data class PlatformLyrics(
     val rlyric: String? = null,
     /** 逐字歌词（增强型 LRC）。 */
     val lxlyric: String? = null,
+    /** [lyric] 是否为 TTML（含逐字时间轴），供上层选择解析器。 */
+    val isTtml: Boolean = false,
 )
 
 /** 音质档位 → 各平台 / LX 脚本约定的音质字符串。 */

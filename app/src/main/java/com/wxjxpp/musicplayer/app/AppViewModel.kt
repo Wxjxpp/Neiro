@@ -54,6 +54,9 @@ data class ShellUiState(
 
     /** 音源引擎状态。 */
     val userApiStatus: com.wxjxpp.musicplayer.core.userapi.UserApiStatus? = null,
+
+    /** 网易云 Cookie（设置页编辑）。 */
+    val neteaseCookie: String = "",
 )
 
 class AppViewModel(
@@ -102,6 +105,14 @@ class AppViewModel(
             .onEach { list -> _uiState.update { state -> state.copy(userApis = list) } }
             .launchIn(viewModelScope)
 
+        container.userApiEngine.status
+            .onEach { status -> _uiState.update { it.copy(userApiStatus = status) } }
+            .launchIn(viewModelScope)
+
+        // 网易云 Cookie
+        container.appSettings.observeNeteaseCookie()
+            .onEach { cookie -> _uiState.update { it.copy(neteaseCookie = cookie) } }
+            .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
             .onEach { state -> onSongChanged(state.current) }
@@ -265,6 +276,10 @@ class AppViewModel(
         _uiState.update { it.copy(onlineSearchPlatform = id) }
         viewModelScope.launch { container.appSettings.setOnlineSearchPlatform(id) }
         triggerOnlineSearch()
+    }
+
+    fun setNeteaseCookie(cookie: String) {
+        viewModelScope.launch { container.appSettings.setNeteaseCookie(cookie) }
     }
 
     private var onlineSearchJob: kotlinx.coroutines.Job? = null

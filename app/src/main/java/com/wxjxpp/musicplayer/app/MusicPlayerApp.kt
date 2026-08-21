@@ -346,9 +346,11 @@ private fun RouteContent(
             floatingPlayerBar = uiState.floatingPlayerBar,
             showTranslation = uiState.showTranslation,
             shuffleMode = uiState.shuffleMode,
+            neteaseCookie = uiState.neteaseCookie,
             onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
             onShowTranslationChange = viewModel::setShowTranslation,
             onShuffleModeChange = viewModel::setShuffleMode,
+            onNeteaseCookieChange = viewModel::setNeteaseCookie,
             contentPadding = contentPadding,
             modifier = modifier,
         )

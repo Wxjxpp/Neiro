@@ -14,7 +14,8 @@ import org.json.JSONObject
  *
  * 职责切分清楚，避免把两类失败混在一起：
  * - **搜索 / 歌词 / 封面**：走 [platform] 的公开接口，不需要用户导入任何脚本
- * - **播放地址**：走 [userApiClient]（LX 协议 `musicUrl`），必须有已启用的自定义音源脚本
+ * - **播放地址**：优先平台官方接口（目前仅网易云 weapi，免费歌免登录），
+ *   失败再走 [userApiClient]（LX 协议 `musicUrl`，需已启用的自定义音源脚本）
  *
  * 因此"能搜到但放不了"是正常状态，此时 [resolvePlayUrlDetailed] 会给出
  * 明确原因（没有音源 / 脚本不支持该平台 / 脚本报错），由 UI 提示用户。
@@ -25,6 +26,11 @@ class OnlineMusicSource(
     /** 当前启用脚本声明支持的平台 → 动作，用于提前判断能否取流。 */
     private val supportedActions: () -> Map<String, List<String>>,
 ) : MusicSource {
+
+    /** 网易云官方取流入口（weapi）。其它平台为 null，直接走脚本。 */
+    private val neteaseStream: (suspend (String, String) -> String?)? =
+        (platform as? com.wxjxpp.musicplayer.core.source.online.NeteasePlatform)
+            ?.let { n -> { songId: String, quality: String -> n.streamUrl(songId, quality) } }
 
     override val id: String = platform.id
     override val displayName: String = platform.displayName
@@ -51,10 +57,20 @@ class OnlineMusicSource(
     suspend fun resolvePlayUrlDetailed(song: Song, quality: Quality): PlayUrlResult {
         val remote = song.location as? MediaLocation.Remote
             ?: return PlayUrlResult.Failure("这不是在线歌曲")
+
+        // 1. 平台官方接口优先（网易云 weapi：免费歌免登录，带 Cookie 解锁 VIP）
+        if (neteaseStream != null) {
+            val official = runCatching { neteaseStream.invoke(remote.songId, quality.toScriptQuality()) }
+                .getOrNull()
+            if (official != null) return PlayUrlResult.Success(official)
+        }
+
+        // 2. 音源脚本兜底
         val actions = supportedActions()
         if (actions.isEmpty()) {
             return PlayUrlResult.Failure(
-                "在线播放需要自定义音源：请在「自定义音源」页导入并启用一个 LX 格式脚本"
+                "官方接口取流失败（VIP 或无版权歌曲）。可在「自定义音源」导入 LX 脚本解锁，" +
+                    "或在设置中填写网易云 Cookie"
             )
         }
         val platformActions = actions[platform.id]
@@ -86,7 +102,7 @@ class OnlineMusicSource(
             ?.let { lyrics ->
                 return RawLyrics(
                     content = lyrics.lyric,
-                    declaredFormat = "lrc",
+                    declaredFormat = if (lyrics.isTtml) "ttml" else "lrc",
                     translationContent = lyrics.tlyric,
                     romanizationContent = lyrics.rlyric,
                     wordByWordContent = lyrics.lxlyric,

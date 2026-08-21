@@ -35,6 +35,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val ActiveUserApiId = stringPreferencesKey("active_user_api_id")
         val PreferredQuality = stringPreferencesKey("preferred_quality")
         val OnlineSearchPlatform = stringPreferencesKey("online_search_platform")
+        val NeteaseCookie = stringPreferencesKey("netease_cookie")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -111,5 +112,13 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
 
     suspend fun setOnlineSearchPlatform(id: String) {
         store.edit { it[Keys.OnlineSearchPlatform] = id }
+    }
+
+    /** 网易云 Cookie（`MUSIC_U=xxx`），用于解锁 VIP / 无版权歌曲取流。 */
+    fun observeNeteaseCookie(): Flow<String> =
+        store.data.map { it[Keys.NeteaseCookie].orEmpty() }
+
+    suspend fun setNeteaseCookie(cookie: String) {
+        store.edit { it[Keys.NeteaseCookie] = cookie.trim() }
     }
 }

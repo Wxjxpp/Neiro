@@ -167,12 +167,16 @@ class DefaultAppContainer(
     @Volatile
     private var activeCapabilities: Map<String, List<String>> = emptyMap()
 
-    /** 正在启用的脚本 id，用于把 init 结果落回存储。 */
+        /** 正在启用的脚本 id，用于把 init 结果落回存储。 */
     @Volatile
     private var activatingId: String? = null
 
+    /** 网易云 Cookie 缓存（设置变化时刷新）。 */
+    @Volatile
+    private var neteaseCookie: String = ""
+
     // === 音源注册表 ===
-    private val onlineSources = defaultOnlinePlatforms(httpClient).map { platform ->
+    private val onlineSources = defaultOnlinePlatforms(httpClient) { neteaseCookie }.map { platform ->
         OnlineMusicSource(
             platform = platform,
             userApiClient = userApiClient,
@@ -209,6 +213,10 @@ class DefaultAppContainer(
                     activateUserApi(id)
                 }
             }
+        }
+        // 网易云 Cookie 跟随设置
+        appScope.launch {
+            appSettings.observeNeteaseCookie().collect { neteaseCookie = it }
         }
     }
 

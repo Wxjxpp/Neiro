@@ -137,6 +137,11 @@ class LyricsLocator(
     private suspend fun fetchFrom(source: MusicSource, song: Song): Lyrics? {
         runCatching { source.fetchLyrics(song) }.getOrNull()?.takeIf { !it.isEmpty }?.let { return it }
         val raw = runCatching { source.fetchLyricsRaw(song) }.getOrNull() ?: return null
+        // TTML（AMLL 逐字库）直接走 TTML 解析器；LRC 走 parseRemote（含翻译/逐字合并）
+        if (raw.declaredFormat == "ttml" || raw.content.contains("<tt", ignoreCase = true)) {
+            val ttml = parsers.parse(raw.content, LyricsHints.TTML)
+            if (!ttml.isEmpty) return ttml
+        }
         val parsed = parsers.parseRemote(
             lyric = raw.content,
             translation = raw.translationContent,

@@ -10,12 +10,17 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import com.wxjxpp.musicplayer.core.model.ShuffleMode
@@ -27,9 +32,11 @@ fun SettingsScreen(
     floatingPlayerBar: Boolean,
     showTranslation: Boolean,
     shuffleMode: ShuffleMode,
+    neteaseCookie: String = "",
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,
     onShuffleModeChange: (ShuffleMode) -> Unit,
+    onNeteaseCookieChange: (String) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -78,6 +85,28 @@ fun SettingsScreen(
                 )
             }
         }
+
+        HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
+
+        SectionTitle("在线播放")
+        Text(
+            text = "网易云 Cookie（可选）。填入网页版登录后的 MUSIC_U 值可解锁 VIP / 无版权歌曲，" +
+                "格式：MUSIC_U=xxxxxxxx。免费歌曲无需 Cookie。",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(bottom = dimens.spaceSm),
+        )
+        var cookieText by remember(neteaseCookie) { mutableStateOf(neteaseCookie) }
+        OutlinedTextField(
+            value = cookieText,
+            onValueChange = {
+                cookieText = it
+                onNeteaseCookieChange(it)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            singleLine = true,
+            placeholder = { Text("MUSIC_U=...") },
+        )
     }
 }
 

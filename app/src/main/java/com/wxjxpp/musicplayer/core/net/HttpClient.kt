@@ -48,6 +48,26 @@ class HttpClient(
         headers = headers + ("Content-Type" to "application/json"),
     )
 
+    /** application/x-www-form-urlencoded 表单提交（网易云 weapi/eapi 用）。 */
+    suspend fun postForm(
+        url: String,
+        form: Map<String, String>,
+        headers: Map<String, String> = emptyMap(),
+    ): Response {
+        val body = form.entries.joinToString("&") { (k, v) ->
+            "${urlEncode(k)}=${urlEncode(v)}"
+        }
+        return execute(
+            url = url,
+            method = "POST",
+            body = body.toByteArray(Charsets.UTF_8),
+            headers = headers + ("Content-Type" to "application/x-www-form-urlencoded"),
+        )
+    }
+
+    private fun urlEncode(value: String): String =
+        java.net.URLEncoder.encode(value, "UTF-8")
+
     suspend fun execute(
         url: String,
         method: String = "GET",

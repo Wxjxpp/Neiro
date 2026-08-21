@@ -35,6 +35,9 @@ datastore = "1.2.1"
 quickjs = "3.2.3"
 # 封面图片加载
 coil = "2.7.0"
+# AMLL 风格逐字歌词渲染（KaraokeLine 音节级）
+accompanistLyricsUi = "1.0.16"
+accompanistLyricsCore = "0.4.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -77,6 +80,10 @@ quickjs-wrapper = { group = "wang.harlon.quickjs", name = "wrapper-android", ver
 
 # Coil：专辑封面加载
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+
+# AMLL 风格逐字歌词：core 是数据模型（SyncedLyrics/KaraokeLine），ui 是渲染组件
+accompanist-lyrics-core = { group = "com.mocharealm.accompanist", name = "lyrics-core", version.ref = "accompanistLyricsCore" }
+accompanist-lyrics-ui = { group = "com.mocharealm.accompanist", name = "lyrics-ui", version.ref = "accompanistLyricsUi" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

@@ -81,12 +81,16 @@ internal class MiguPlatform(http: HttpClient) : BasePlatform(http) {
  * 默认在线平台集合。
  *
  * 顺序决定聚合搜索的展示顺序，也决定本地歌曲反查歌词的尝试顺序。
- * 每个平台都只用公开接口，不含任何取流逻辑。
+ * 每个平台都只用公开接口，不含任何取流逻辑（网易云的 weapi 取流除外，
+ * 它是官方 Web 播放器同款接口，见 [NeteasePlatform.streamUrl]）。
  */
-internal fun defaultOnlinePlatforms(http: HttpClient): List<OnlinePlatform> = listOf(
+internal fun defaultOnlinePlatforms(
+    http: HttpClient,
+    neteaseCookieProvider: () -> String = { "" },
+): List<OnlinePlatform> = listOf(
     KuwoPlatform(http),
     QQMusicPlatform(http),
-    NeteasePlatform(http),
+    NeteasePlatform(http, neteaseCookieProvider),
     KugouPlatform(http),
     MiguPlatform(http),
 )

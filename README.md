@@ -20,7 +20,7 @@ Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 | LRC | 标准 `[mm:ss.xx]`，一行多时间戳、`[offset:]`、同时间戳双行视为翻译 |
 | 增强型 LRC | `<mm:ss.xx>`（A2 扩展）与 `<毫秒,时长>`（LX / KRC）两种写法 |
 | QRC / KRC | `[毫秒,时长]` 行时间戳 + `(毫秒,时长)` 逐字 |
-| TTML | Apple Music 风格，含 `x-translation` / `x-roman` 角色 span、嵌套 span |
+| TTML | Apple Music / AMLL 风格，含 `x-translation` / `x-roman` 角色 span、嵌套 span |
 | SRT / VTT | 字幕式歌词，双语字幕第二行自动作为译文 |
 | 纯文本 | 无时间轴兜底 |
 
@@ -28,7 +28,11 @@ Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 → **同名外挂文件**（`.lrc/.ttml/.srt/.qrc/.krc/.vtt/.txt`，支持 `歌名.zh.lrc` 翻译文件与 GBK 编码）
 → **在线音源**（平台公开接口或音源脚本）。
 
-带逐字时间轴的歌词在播放页以卡拉 OK 渐变填充渲染。
+带逐字时间轴的歌词由 **accompanist-lyrics-ui**（AMLL 风格）以音节级卡拉 OK 渲染：
+真逐字填充、间奏呼吸点、非焦点行渐隐。普通行时间轴歌词自动退化为整行高亮。
+
+在线歌词优先从 **amll-ttml-db** 逐字库（jsDelivr CDN）按平台歌曲 ID 直取 TTML，
+命中即为完整逐字 + 翻译，无需登录；未命中时回退平台官方 LRC / 翻译。
 
 ### 在线
 - **聚合搜索**：酷我 / QQ 音乐 / 网易云 / 酷狗 / 咪咕 五平台并发搜索，交错展示；也可切单平台
@@ -59,6 +63,7 @@ Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 | media3 | 1.11.0 |
 | room | 2.7.2 |
 | quickjs-wrapper | 3.2.3 |
+| accompanist-lyrics-ui / core | 1.0.16 / 0.4.2 |
 
 > material3 不走 compose-bom，单独锁 `1.5.0-alphaXX`。
 > 版本上限受 AGP 约束：AGP 8.13.2 最高支持 compileSdk 36，
