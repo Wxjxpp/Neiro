@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
 
     <!-- 本地扫描：Android 13+ 用细分媒体权限，13 以下回退到读外部存储 -->
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
@@ -17,6 +18,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
+    <!-- lyrics-ui 声明 minSdk 29 是因为可选的模糊效果（RenderEffect 需 31）。
+         本应用已显式关闭 useBlurEffect，低版本仅缺少模糊，功能不受影响。 -->
+    <uses-sdk tools:overrideLibrary="com.mocharealm.accompanist.lyrics.ui" />
 
     <application
         android:name=".app.MusicPlayerApplication"
