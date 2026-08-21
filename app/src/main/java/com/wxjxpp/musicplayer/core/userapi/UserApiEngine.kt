@@ -104,7 +104,7 @@ class UserApiEngine(private val context: Context) {
                     JSONObject().apply {
                         put("statusCode", statusCode)
                         put("statusMessage", statusMessage)
-                        put("headers", JSONObject(headers.toMap<String, Any?>()))
+                        put("headers", JSONObject(headers))
                         // 脚本侧多数用 JSON.parse 兜底，这里尽量给出对象形态
                         put("body", body?.toJsonValue() ?: JSONObject.NULL)
                     }
@@ -144,7 +144,7 @@ class UserApiEngine(private val context: Context) {
     fun destroy() {
         handler.post {
             cancelInitTimeout()
-            runCatching { jsContext?.destroy() }
+            runCatching { jsContext?.close() }
             jsContext = null
             initialized = false
             currentId = ""
@@ -160,7 +160,7 @@ class UserApiEngine(private val context: Context) {
             QuickJSLoader.init()
             loaderInited = true
         }
-        runCatching { jsContext?.destroy() }
+        runCatching { jsContext?.close() }
         key = UUID.randomUUID().toString()
 
         val ctx = QuickJSContext.create()

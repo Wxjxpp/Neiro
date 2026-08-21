@@ -280,3 +280,4 @@ class UserApiStore(
         val LX_MARKERS = listOf("lx.on(", "lx.send(", "EVENT_NAMES", "globalThis.lx")
     }
 }
+}

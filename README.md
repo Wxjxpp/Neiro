@@ -1,9 +1,49 @@
 # music-player
 
-Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器模板。
+Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 
-当前是一个**可编译、可运行的骨架**：UI 壳层、导航、播放栏动画、下拉刷新全部跑通，
-业务能力以接口 + 内存实现的形式预留，后续按需替换。
+本地曲库 + 在线搜索播放双轨并行：本地功能（扫描 / 歌单 / 统计）开箱即用，
+在线功能（聚合搜索 / 歌词 / 自定义音源取流）无需任何配置即可搜索，接入 LX 格式音源脚本后可播放在线歌曲。
+
+## 功能
+
+### 本地
+- MediaStore 扫描曲库，元数据（标签 / 封面 / 时长 / 码率）异步补齐
+- 歌单（增删改 / 排序 / 多选加入）、播放队列、真随机 / 伪随机、单曲 / 列表循环
+- 播放统计（收听时长流水）与 24 小时分布，年度报告数据已就绪
+
+### 歌词
+统一歌词模型 `Lyrics`（原文 / 翻译 / 罗马音 / 逐字音节），支持格式：
+
+| 格式 | 说明 |
+|---|---|
+| LRC | 标准 `[mm:ss.xx]`，一行多时间戳、`[offset:]`、同时间戳双行视为翻译 |
+| 增强型 LRC | `<mm:ss.xx>`（A2 扩展）与 `<毫秒,时长>`（LX / KRC）两种写法 |
+| QRC / KRC | `[毫秒,时长]` 行时间戳 + `(毫秒,时长)` 逐字 |
+| TTML | Apple Music 风格，含 `x-translation` / `x-roman` 角色 span、嵌套 span |
+| SRT / VTT | 字幕式歌词，双语字幕第二行自动作为译文 |
+| 纯文本 | 无时间轴兜底 |
+
+歌词来源优先级：**文件内嵌**（ID3v2 USLT/SYLT、FLAC VorbisComment、MP4 ©lyr、OGG/Opus tags）
+→ **同名外挂文件**（`.lrc/.ttml/.srt/.qrc/.krc/.vtt/.txt`，支持 `歌名.zh.lrc` 翻译文件与 GBK 编码）
+→ **在线音源**（平台公开接口或音源脚本）。
+
+带逐字时间轴的歌词在播放页以卡拉 OK 渐变填充渲染。
+
+### 在线
+- **聚合搜索**：酷我 / QQ 音乐 / 网易云 / 酷狗 / 咪咕 五平台并发搜索，交错展示；也可切单平台
+- **在线歌词**：搜索结果自动匹配平台歌词（含翻译 / 罗马音 / 逐字）
+- **自定义音源**（LX 协议，QuickJS 沙箱）：
+  - 兼容 LX Music 用户脚本，本地 `.js` 或 URL 导入
+  - 导入前静态校验：空内容 / 网页直链 / 非 LX 协议脚本会被拦截并给出原因
+  - URL 导入失败逐层提示（域名解析 / 超时 / HTTP 状态码 / Content-Type）
+  - 初始化超时保护（20 秒），脚本不响应不会卡死
+  - 脚本能力表（支持平台 / 音质）落库展示，URL 导入的脚本可一键更新
+- **播放链路**：搜索 → 点击 → 按音质向音源脚本请求临时播放地址 → ExoPlayer 播放；
+  失败时以明确原因提示（未导入音源 / 脚本不支持该平台 / 脚本报错）
+
+> 在线搜索与歌词使用平台公开接口，**不需要**音源脚本；
+> 音源脚本仅负责解析各平台的加密取流接口。
 
 ## 技术栈
 
@@ -16,16 +56,13 @@ Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器模板。
 | minSdk | 24 |
 | compose ui/foundation/animation | 1.11.4 |
 | material3 | 1.5.0-alpha18（Expressive API 所在版本） |
+| media3 | 1.11.0 |
+| room | 2.7.2 |
+| quickjs-wrapper | 3.2.3 |
 
 > material3 不走 compose-bom，单独锁 `1.5.0-alphaXX`。
-> `MaterialExpressiveTheme` / `MotionScheme` / `LoadingIndicator` /
-> `WavyProgressIndicator` / `MaterialShapes` / `ButtonGroup` 只在 1.5.0-alpha 提供，
-> 稳定版 1.4.x 用不了。
->
 > 版本上限受 AGP 约束：AGP 8.13.2 最高支持 compileSdk 36，
-> 而 material3 1.5.0-alpha19+ / compose ui 1.12.0+ / lifecycle 2.11.0+ / core-ktx 1.19.0+
-> 都要求 compileSdk 37 + AGP 9.1.0，会在 checkDebugAarMetadata 直接失败。
-> 因此依赖刻意停在 AGP 8.x 可用的最新版本，等 AGP 9 稳定后整体上抬。
+> material3 1.5.0-alpha19+ / compose ui 1.12.0+ 等要求 compileSdk 37 + AGP 9.1.0。
 
 ## 目录结构
 
@@ -34,102 +71,49 @@ app/src/main/java/com/wxjxpp/musicplayer/
 ├── MainActivity.kt
 ├── app/                         应用壳层
 │   ├── AppContainer.kt          依赖装配（唯一的实现绑定点）
-│   ├── AppViewModel.kt          壳层状态
-│   ├── MusicPlayerApp.kt        抽屉 + 共享元素动画 + 路由分发
+│   ├── AppViewModel.kt          壳层状态（曲库 / 搜索 / 歌词 / 音源）
+│   ├── MusicPlayerApp.kt        抽屉 + 共享元素动画 + 路由分发 + 全局提示
 │   └── navigation/
-│       ├── Destination.kt       路由表
-│       └── AppDrawer.kt         侧滑菜单（数据驱动）
 ├── core/                        与 UI 无关的能力层
-│   ├── model/                   领域模型
-│   │   ├── Media.kt             Song / Album / Artist / MediaLocation / ReplayGain
-│   │   ├── Playback.kt          PlaybackState / RepeatMode
-│   │   ├── Lyrics.kt            统一歌词模型（含逐字音节）
-│   │   ├── Stats.kt             听歌记录 / 日记 / 年度报告
-│   │   └── Together.kt          一起听房间与同步事件
-│   ├── data/                    仓库契约 + 内存实现
-│   ├── player/                  PlayerController 契约 + 内存实现
-│   ├── source/                  MusicSource 插件契约 + 注册表
-│   ├── lyrics/                  歌词解析器契约 + LRC 实现
-│   └── scanner/                 扫描与元数据读取契约
+│   ├── model/                   领域模型（Song / Lyrics / PlaybackState ...）
+│   ├── data/                    Room + DataStore 仓库实现
+│   ├── db/                      Room 实体 / DAO / 映射
+│   ├── player/                  Media3 播放控制器（含在线取流回调）
+│   ├── source/                  音源契约 + 本地 / 在线音源实现
+│   │   └── online/              五平台适配（搜索 + 歌词，公开接口）
+│   ├── lyrics/                  歌词解析器（LRC/ELRC/TTML/SRT/QRC）+ 内嵌读取 + 定位
+│   ├── search/                  本地匹配 + 在线聚合搜索
+│   ├── userapi/                 QuickJS 音源引擎 / 脚本存储 / 调用客户端
+│   ├── net/                     轻量 HTTP 客户端（gzip / 超时 / 错误流）
+│   ├── crypto/                  脚本可用的 AES / RSA 工具
+│   ├── scanner/                 MediaStore 扫描与元数据读取
+│   └── together/                一起听传输层抽象
 ├── feature/                     页面
-│   ├── home/                    首页（M3E 下拉刷新）
-│   ├── player/                  播放栏 + 播放详情页
-│   └── placeholder/             未实现功能占位页
-└── ui/
-    ├── theme/                   MaterialExpressiveTheme + 设计 token
-    └── components/              可复用组件
+│   ├── home/ player/ playlist/  本地功能页面
+│   ├── search/                  搜索页（本地 + 在线聚合）
+│   ├── userapi/                 自定义音源管理页
+│   └── settings/
+└── ui/                          主题 token 与可复用组件
 ```
 
-## 已规划的扩展点
+## 架构约定
 
-下面每一项都已有接口就位，实现时**只碰一个文件 + 一处装配**，不动 UI。
-
-### 扫描本地歌曲 / 读取元数据
-
-- `core/scanner/MediaScanner.kt` — `MediaScanner`、`MetadataReader`
-- 元数据模型已含封面、时长、艺术家、`ReplayGain`、`AudioFormat`（采样率 / 位深 / 码率）
-- 实现建议：MediaStore 建索引 → `MetadataReader` 异步补齐标签
-  （需要更全的标签支持时把底层从 `MediaMetadataRetriever` 换成 jaudiotagger / taglib）
-
-### 多种歌词格式
-
-- `core/lyrics/LyricsParser.kt` — 契约 + `LyricsParserRegistry`
-- `LrcParser` 已实现：标准 LRC、一行多时间戳、增强型逐字 `<mm:ss.xx>`、`[offset:]`、同时间戳双行视为翻译
-- `TtmlParser` / `SrtParser` 为骨架，`canParse` 已就绪，填 `parse` 即可
-- 统一模型 `Lyrics` 同时承载原文 / 翻译 / 罗马音 / 逐字音节，渲染层不需要区分格式
-
-### 在线播放（WebDAV / 云盘 / API 源）
-
-- `core/source/MusicSource.kt` — 每个音源一个实现类
-- `MediaLocation` 已区分 `Local` / `WebDav` / `Remote`
-- `SourceCapability` 声明能力，UI 据此显示入口，不写 `if (source == "xxx")`
-- 新增音源：实现接口 → 在 `AppContainer` 的 `DefaultMusicSourceRegistry` 注册
-
-### 歌单 / 听歌日记 / 年度报告
-
-- `core/data/Repositories.kt` — `PlaylistRepository`、`DiaryRepository`、`StatsRepository`
-- 年度报告基于 `PlayEvent` 流水表统计，`ListeningReport` 已含 topSongs / topArtists / 小时分布
-- 抽屉入口和路由已接好，指向占位页
-
-### 一起听
-
-- `core/together/TogetherTransport.kt` — 传输层抽象
-- `TogetherEvent` 定义 Play / Pause / Seek / QueueChanged / Chat
-- `serverTimeOffsetMs` 放在传输层，因为不同方案（内网穿透 / 自建后端 / 局域网）对时方式不同
-- 远端事件最终翻译成 `PlayerController` 调用，不绕过播放层
-
-### 侧滑功能菜单
-
-- `app/navigation/AppDrawer.kt` — 往 `drawerItems` 加一条就出现新入口
-- 路由字符串集中在 `Destination.kt`，不散落
-
-### 接入 Media3
-
-- `core/player/PlayerController.kt` 是唯一契约，UI 只依赖它
-- 新增 `Media3PlayerController : PlayerController`，在 `AppContainer` 替换 `InMemoryPlayerController`
-- `AndroidManifest.xml` 已预留 `MediaSessionService` 声明与前台服务权限（注释状态）
-
-## UI 可维护性约定
-
-这几条是为了避免"改一个地方波及一片"：
-
-1. **不在页面里写死 dp 和颜色**。尺寸走 `AppTheme.dimens`（`ui/theme/Tokens.kt`），
-   颜色走 `MaterialTheme.colorScheme`。改视觉只改 token 文件。
-2. **不在组件里写死动画时长**。统一用 `MaterialTheme.motionScheme`
-   （由 `MaterialExpressiveTheme` 下发），需要更克制的动效就在
-   `MusicPlayerTheme` 传 `MotionScheme.standard()`。
-3. **播放栏只有一份实现**。常规态与悬浮态是同一个 `PlayerBar`，
-   由 `floating: Boolean` 驱动 token 插值，不存在两套代码导致行为不一致。
-4. **展开与收起共用同一条动画路径**。封面在播放栏和详情页使用同一个
-   `sharedElement` key（`PlayerSharedKeys.Cover`），返回时自然缩回，
-   不需要单独写反向动画。
-5. **播放栏挂在壳层**，不在各页面内部，保证跨页时是同一实例。
+1. **音源即插件**：`MusicSource` 接口 + `SourceCapability` 能力声明，
+   UI 按能力显示入口，不写 `if (source == "xxx")`。新增平台 = 新增一个
+   `OnlinePlatform` 实现加进 `defaultOnlinePlatforms`。
+2. **歌词格式即插件**：`LyricsParser` + 注册表按特征嗅探自动选择，
+   新增格式不影响渲染层。
+3. **脚本协议兼容 LX**：`assets/script/user-api-preload.js` 与 LX Music 一致，
+   现有用户脚本可直接使用；脚本只提供 `musicUrl` / `lyric` / `pic`，
+   搜索由宿主原生实现（这也是 LX 协议的设计）。
+4. **UI token 化**：尺寸走 `AppTheme.dimens`，颜色走 `colorScheme`，
+   动画走 `MaterialTheme.motionScheme`。
 
 ## 构建
 
-GitHub Actions（`.github/workflows/android-debug.yml`）：
-push 到 `main` / `dev` 或手动 `workflow_dispatch` 触发，
-产物在 Actions 页面的 `music-player-debug`。
+GitHub Actions（`.github/workflows/`）：
+- push 到 `dev` / `main` 触发 Debug 构建与 Release 构建
+- Release 构建自动发布到 GitHub Releases（非 main 分支为预发行）
 
 本地：
 
@@ -137,12 +121,6 @@ push 到 `main` / `dev` 或手动 `workflow_dispatch` 触发，
 ./gradlew assembleDebug
 ```
 
-## 当前状态
+## License
 
-- 播放是 `InMemoryPlayerController`：按真实时间推进进度、支持队列 / 随机 / 循环，但不解码音频
-- 曲库是内存示例数据（`InMemoryRepositories.kt` 里的 `SampleLibrary`）
-- 抽屉中除首页外均为占位页
-- 封面是渐变色块，接入 Coil 时只改 `ui/components/SongCover.kt`
-
----
-本项目使用MIT协议开源
+见 [LICENSE](LICENSE)。

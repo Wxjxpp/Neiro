@@ -40,10 +40,20 @@ data class ShellUiState(
     val searchQuery: String = "",
     val searchResults: List<Song> = emptyList(),
 
+    /** 在线搜索。 */
+    val onlineSearchPlatform: String = "all",
+    val onlineResults: List<Song> = emptyList(),
+    val onlineFailedPlatforms: List<String> = emptyList(),
+    val isSearchingOnline: Boolean = false,
+    val onlinePlatforms: List<com.wxjxpp.musicplayer.core.search.OnlineSearchRepository.PlatformOption> = emptyList(),
+
     /** 当前歌曲的歌词。 */
     val lyrics: Lyrics = Lyrics.Empty,
 
     val userApis: List<UserApiInfo> = emptyList(),
+
+    /** 音源引擎状态。 */
+    val userApiStatus: com.wxjxpp.musicplayer.core.userapi.UserApiStatus? = null,
 )
 
 class AppViewModel(
@@ -245,6 +255,45 @@ class AppViewModel(
             state.songs.searchSongs(state.searchQuery)
         }
         _uiState.update { it.copy(searchResults = results) }
+        // 关键词非空时触发在线搜索
+        triggerOnlineSearch()
+    }
+
+    /** 切换在线搜索平台并重新搜索。 */
+    fun setOnlineSearchPlatform(id: String) {
+        if (id == _uiState.value.onlineSearchPlatform) return
+        _uiState.update { it.copy(onlineSearchPlatform = id) }
+        viewModelScope.launch { container.appSettings.setOnlineSearchPlatform(id) }
+        triggerOnlineSearch()
+    }
+
+    private var onlineSearchJob: kotlinx.coroutines.Job? = null
+
+    /** 防抖触发在线搜索：输入停顿 400ms 后执行。 */
+    private fun triggerOnlineSearch() {
+        onlineSearchJob?.cancel()
+        val state = _uiState.value
+        val query = state.searchQuery.trim()
+        if (query.isEmpty()) {
+            _uiState.update {
+                it.copy(onlineResults = emptyList(), onlineFailedPlatforms = emptyList(), isSearchingOnline = false)
+            }
+            return
+        }
+        onlineSearchJob = viewModelScope.launch {
+            kotlinx.coroutines.delay(400)
+            _uiState.update { it.copy(isSearchingOnline = true) }
+            val result = runCatching {
+                container.onlineSearch.search(query, state.onlineSearchPlatform)
+            }.getOrElse { com.wxjxpp.musicplayer.core.search.OnlineSearchRepository.Result() }
+            _uiState.update {
+                it.copy(
+                    onlineResults = result.songs,
+                    onlineFailedPlatforms = result.failedPlatforms,
+                    isSearchingOnline = false,
+                )
+            }
+        }
     }
 
     // ---- 自定义音源 ----
@@ -253,6 +302,7 @@ class AppViewModel(
         viewModelScope.launch {
             runCatching { container.userApiStore.import(script) }
                 .onSuccess { info -> container.activateUserApi(info.id) }
+                .onFailure { error -> container.notify(error.message ?: "导入失败") }
         }
     }
 
@@ -261,6 +311,7 @@ class AppViewModel(
         viewModelScope.launch {
             runCatching { container.userApiStore.importFromUrl(url) }
                 .onSuccess { info -> container.activateUserApi(info.id) }
+                .onFailure { error -> container.notify(error.message ?: "导入失败") }
         }
     }
 
@@ -269,6 +320,16 @@ class AppViewModel(
     }
 
     fun activateUserApi(id: String) = container.activateUserApi(id)
+
+    fun deactivateUserApi() = container.deactivateUserApi()
+
+    fun updateUserApi(id: String) {
+        viewModelScope.launch {
+            runCatching { container.userApiStore.update(id) }
+                .onSuccess { info -> container.activateUserApi(info.id) }
+                .onFailure { error -> container.notify(error.message ?: "更新失败") }
+        }
+    }
 
     // ---- 内部 ----
 

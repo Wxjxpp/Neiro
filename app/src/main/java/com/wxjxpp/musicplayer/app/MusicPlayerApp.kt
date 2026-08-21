@@ -70,6 +70,12 @@ fun MusicPlayerApp(container: AppContainer) {
     val playback by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
 
+    // 全局一次性提示（音源导入失败、取流失败等）
+    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        container.messages.collect { message -> snackbarHostState.showSnackbar(message) }
+    }
+
     var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
@@ -121,7 +127,10 @@ fun MusicPlayerApp(container: AppContainer) {
             )
         },
     ) {
-        SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
+        androidx.compose.material3.Scaffold(
+            snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
+        ) { _ ->
+            SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = route,
                 transitionSpec = { fadeIn(routeFadeSpec) togetherWith fadeOut(routeFadeSpec) },
@@ -221,6 +230,7 @@ fun MusicPlayerApp(container: AppContainer) {
                 }
             }
         }
+        }
     }
 
     if (showPlaylistPicker) {
@@ -293,9 +303,15 @@ private fun RouteContent(
 
         Destination.Search.route -> SearchScreen(
             query = uiState.searchQuery,
-            results = uiState.searchResults,
+            localResults = uiState.searchResults,
+            onlineResults = uiState.onlineResults,
+            onlineFailed = uiState.onlineFailedPlatforms,
+            onlinePlatforms = uiState.onlinePlatforms,
+            currentOnlinePlatform = uiState.onlineSearchPlatform,
+            isLoadingOnline = uiState.isSearchingOnline,
             onQueryChange = viewModel::updateSearchQuery,
             onSongClick = viewModel::play,
+            onOnlinePlatformChange = viewModel::setOnlineSearchPlatform,
             contentPadding = contentPadding,
             modifier = modifier,
         )
@@ -315,9 +331,12 @@ private fun RouteContent(
 
         Destination.MusicSources.route -> UserApiScreen(
             apis = uiState.userApis,
+            engineStatus = uiState.userApiStatus,
             onImportScript = viewModel::importUserApi,
             onImportUrl = viewModel::importUserApiFromUrl,
             onActivate = viewModel::activateUserApi,
+            onDeactivate = viewModel::deactivateUserApi,
+            onUpdate = viewModel::updateUserApi,
             onRemove = viewModel::removeUserApi,
             contentPadding = contentPadding,
             modifier = modifier,
