@@ -14,9 +14,14 @@ import kotlinx.coroutines.flow.StateFlow
  * "一起听"也走这一层：远端指令最终翻译成这里的调用。
  */
 interface PlayerController {
-
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<List<Song>>
+
+    /** 拔出耳机（含蓝牙断开）时是否自动暂停。 */
+    var pauseOnHeadphoneDisconnect: Boolean
+    /** 其他应用抢占音频焦点时是否暂停。 */
+    var pauseOnAudioFocusLoss: Boolean
+
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, autoPlay: Boolean = false)
     fun play(song: Song)
