@@ -6,6 +6,7 @@ import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -20,7 +21,6 @@ import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.LinearWavyProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -36,6 +36,12 @@ import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
+/**
+ * 底部播放栏。
+ *
+ * 常规态与悬浮态是同一份布局，靠 [floating] 驱动 token 插值切换。
+ * 进度条固定高度容器 + 波幅归零，播放/暂停切换不改变整栏高度。
+ */
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SharedTransitionScope.PlayerBar(
@@ -57,31 +63,35 @@ fun SharedTransitionScope.PlayerBar(
     val elevation by animateDpAsState(if (floating) dimens.floatingBarElevation else 0.dp, spatial, label = "barElevation")
 
     Surface(
-        modifier = modifier.fillMaxWidth().padding(horizontal = horizontalMargin).padding(bottom = bottomMargin),
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = horizontalMargin)
+            .padding(bottom = bottomMargin),
         shape = RoundedCornerShape(corner),
         color = MaterialTheme.colorScheme.surfaceContainer,
         shadowElevation = elevation,
     ) {
         Column {
-            // 固定高度容器：状态切换不会改变播放栏总高度。
-            androidx.compose.foundation.layout.Box(
-                modifier = Modifier.fillMaxWidth().height(dimens.spaceMd),
+            // 固定高度容器：播放/暂停切换不改变播放栏总高度；
+            // 暂停时波幅归零，平滑退化为直线（不是替换成另一个组件）。
+            Box(
+                modifier = Modifier.fillMaxWidth().height(dimens.spaceLg),
                 contentAlignment = Alignment.Center,
             ) {
-                if (state.isPlaying) {
-                    LinearWavyProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = dimens.spaceMd),
-                    )
-                } else {
-                    LinearProgressIndicator(
-                        progress = { state.progress },
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                }
+                LinearWavyProgressIndicator(
+                    progress = { state.progress },
+                    amplitude = { if (state.isPlaying) 1f else 0f },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = dimens.spaceMd),
+                )
             }
             Row(
-                modifier = Modifier.fillMaxWidth().height(dimens.playerBarHeight).clickable(onClick = onExpand).padding(horizontal = dimens.spaceMd),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(dimens.playerBarHeight)
+                    .clickable(onClick = onExpand)
+                    .padding(horizontal = dimens.spaceMd),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
             ) {
@@ -96,18 +106,32 @@ fun SharedTransitionScope.PlayerBar(
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(song.artistName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(
+                        song.artistName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
                 }
                 IconButton(onClick = onTogglePlay) {
-                    Icon(if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow, contentDescription = null)
+                    Icon(
+                        if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                        contentDescription = if (state.isPlaying) "暂停" else "播放",
+                    )
                 }
-                IconButton(onClick = onNext) { Icon(Icons.Filled.SkipNext, contentDescription = null) }
-                IconButton(onClick = onOpenQueue) { Icon(Icons.Filled.QueueMusic, contentDescription = null) }
+                IconButton(onClick = onNext) {
+                    Icon(Icons.Filled.SkipNext, contentDescription = "下一首")
+                }
+                IconButton(onClick = onOpenQueue) {
+                    Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
+                }
             }
         }
     }
 }
 
+/** 共享元素 key。新增跨页共享元素时在这里登记。 */
 object PlayerSharedKeys {
     const val Cover = "player-cover"
     const val Title = "player-title"

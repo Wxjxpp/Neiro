@@ -65,6 +65,23 @@ class UserApiStore(context: Context) {
         _apis.value = list
     }
 
+    /** 从 URL 下载脚本再导入。脚本可代表用户联网，因此只应从可信来源导入。 */
+    suspend fun importFromUrl(url: String): UserApiInfo = withContext(Dispatchers.IO) {
+        val connection = (java.net.URL(url).openConnection() as java.net.HttpURLConnection).apply {
+            requestMethod = "GET"
+            connectTimeout = 15_000
+            readTimeout = 15_000
+            instanceFollowRedirects = true
+        }
+        val script = try {
+            connection.inputStream.bufferedReader().use { it.readText() }
+        } finally {
+            connection.disconnect()
+        }
+        require(script.isNotBlank()) { "脚本内容为空" }
+        import(script)
+    }
+
     /** 解析脚本头部的 `// @key value` 注释块。 */
     private fun parseHeader(script: String): Map<String, String> {
         val result = mutableMapOf<String, String>()

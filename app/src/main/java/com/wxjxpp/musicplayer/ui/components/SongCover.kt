@@ -10,15 +10,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
+import coil.compose.SubcomposeAsyncImage
+import coil.request.ImageRequest
 import com.wxjxpp.musicplayer.core.model.Song
 
 /**
  * 歌曲封面。
  *
- * 当前用渐变占位；接入图片加载后，把内部实现换成
- * Coil 的 AsyncImage(model = song.coverUri, ...)，
- * 所有调用点都不需要改动 —— 这就是把它单独抽成组件的原因。
+ * 有 coverUri 时用 Coil 加载真实封面（MediaStore albumart 是 content URI，Coil 可直接读）；
+ * 加载中或失败时回落到按专辑散列的渐变占位，避免闪空白。
  */
 @Composable
 fun SongCover(
@@ -27,6 +30,7 @@ fun SongCover(
     radius: Dp,
     modifier: Modifier = Modifier,
 ) = SongCover(
+    coverUri = song.coverUri,
     seedColor = song.coverSeedColor,
     size = size,
     radius = radius,
@@ -35,24 +39,45 @@ fun SongCover(
 
 @Composable
 fun SongCover(
+    coverUri: String?,
     seedColor: Long,
     size: Dp,
     radius: Dp,
     modifier: Modifier = Modifier,
 ) {
+    val shaped = modifier.size(size).clip(RoundedCornerShape(radius))
+
+    if (coverUri.isNullOrBlank()) {
+        GradientPlaceholder(seedColor, shaped)
+        return
+    }
+
+    val context = LocalContext.current
+    SubcomposeAsyncImage(
+        model = ImageRequest.Builder(context)
+            .data(coverUri)
+            .crossfade(true)
+            .build(),
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = shaped,
+        loading = { GradientPlaceholder(seedColor, Modifier.size(size)) },
+        error = { GradientPlaceholder(seedColor, Modifier.size(size)) },
+    )
+}
+
+@Composable
+private fun GradientPlaceholder(seedColor: Long, modifier: Modifier) {
     val seed = Color(seedColor)
     Box(
-        modifier = modifier
-            .size(size)
-            .clip(RoundedCornerShape(radius))
-            .background(
-                Brush.linearGradient(
-                    listOf(
-                        seed.copy(alpha = 0.95f),
-                        seed.copy(alpha = 0.55f),
-                        MaterialTheme.colorScheme.surfaceVariant,
-                    )
+        modifier = modifier.background(
+            Brush.linearGradient(
+                listOf(
+                    seed.copy(alpha = 0.95f),
+                    seed.copy(alpha = 0.55f),
+                    MaterialTheme.colorScheme.surfaceVariant,
                 )
             )
+        )
     )
 }

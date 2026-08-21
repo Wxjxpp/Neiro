@@ -4,6 +4,7 @@ import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -14,8 +15,10 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Repeat
 import androidx.compose.material.icons.filled.RepeatOne
 import androidx.compose.material.icons.filled.Shuffle
@@ -29,11 +32,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.LinearWavyProgressIndicator
-import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
@@ -48,17 +49,15 @@ import androidx.compose.ui.unit.dp
 import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.core.model.RepeatMode
+import com.wxjxpp.musicplayer.core.model.Song
 import com.wxjxpp.musicplayer.ui.components.SongCover
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
 /**
  * 播放详情页。
  *
- * 封面与播放栏共用同一个 sharedElement key，
- * 展开与收起走同一条动画路径，因此返回时封面会缩回播放栏，
- * 不需要额外写一份反向动画。
- *
- * 歌词面板留空，接入时在进度条上方插入 LyricsPane 即可。
+ * 封面与播放栏共用同一个 sharedElement key，展开与收起走同一条动画路径。
+ * 顶部按钮可在「封面」与「歌词」之间切换主区域。
  */
 @OptIn(
     ExperimentalSharedTransitionApi::class,
@@ -70,6 +69,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
     state: PlaybackState,
     lyrics: Lyrics,
     showTranslation: Boolean,
+    queue: List<Song>,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -78,18 +78,48 @@ fun SharedTransitionScope.PlayerDetailScreen(
     onSeekFraction: (Float) -> Unit,
     onToggleShuffle: () -> Unit,
     onCycleRepeat: () -> Unit,
+    onPickQueueItem: (Int) -> Unit,
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
     var dragging by remember { mutableStateOf(false) }
+    var showLyrics by remember { mutableStateOf(false) }
+    var showQueue by remember { mutableStateOf(false) }
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
-                title = { Text(song.albumTitle, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.background,
+                ),
+                title = {
+                    Text(
+                        text = song.albumTitle,
+                        style = MaterialTheme.typography.labelLarge,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = null)
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showLyrics = !showLyrics }) {
+                        Icon(
+                            Icons.Filled.Lyrics,
+                            contentDescription = if (showLyrics) "显示封面" else "显示歌词",
+                            tint = if (showLyrics) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(onClick = { showQueue = true }) {
+                        Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
                     }
                 },
             )
@@ -102,17 +132,39 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 .padding(horizontal = dimens.spaceXl),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Spacer(Modifier.height(dimens.spaceXl))
-            SongCover(
-                song = song,
-                size = dimens.detailCoverSize,
-                radius = dimens.detailCoverRadius,
-                modifier = Modifier.sharedElement(
-                    sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
-                    animatedVisibilityScope = animatedVisibilityScope,
-                ),
-            )
-            Spacer(Modifier.height(dimens.spaceXl))
+            // 主区域：封面 / 歌词二选一，两者都占满剩余空间
+            Box(
+                modifier = Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (showLyrics) {
+                    if (lyrics.isEmpty) {
+                        Text(
+                            text = "没有找到歌词",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    } else {
+                        LyricsPane(
+                            lyrics = lyrics,
+                            positionMs = state.positionMs,
+                            showTranslation = showTranslation,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                } else {
+                    SongCover(
+                        song = song,
+                        size = dimens.detailCoverSize,
+                        radius = dimens.detailCoverRadius,
+                        modifier = Modifier.sharedElement(
+                            sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
+                            animatedVisibilityScope = animatedVisibilityScope,
+                        ),
+                    )
+                }
+            }
+
             Text(
                 text = song.title,
                 style = MaterialTheme.typography.headlineSmall,
@@ -126,26 +178,19 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-// 歌词面板：占据剩余空间，自动滚动并逐字高亮
-            LyricsPane(
-                lyrics = lyrics,
-                positionMs = state.positionMs,
-                showTranslation = showTranslation,
-                modifier = Modifier.weight(1f, fill = false),
-            )
 
-            Spacer(Modifier.height(dimens.spaceXl))
-            // 唯一的进度控制：拖动时只更新临时值，松手后才 seek，避免拖到末尾连续跳歌。
+            Spacer(Modifier.height(dimens.spaceLg))
+
+            // 只有一条进度控件：Expressive 波形滑杆
             var draggingProgress by remember(song.id) { mutableFloatStateOf(state.progress) }
             val shownProgress = if (dragging) draggingProgress else state.progress
-            if (state.isPlaying) {
-                LinearWavyProgressIndicator(progress = { shownProgress }, modifier = Modifier.fillMaxWidth())
-            } else {
-                LinearProgressIndicator(progress = { shownProgress }, modifier = Modifier.fillMaxWidth())
-            }
-            Slider(
-                value = shownProgress,
-                onValueChange = { draggingProgress = it; dragging = true },
+            WavySeekBar(
+                progress = shownProgress,
+                animated = state.isPlaying && !dragging,
+                onValueChange = {
+                    draggingProgress = it
+                    dragging = true
+                },
                 onValueChangeFinished = {
                     onSeekFraction(draggingProgress)
                     dragging = false
@@ -157,7 +202,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 Text(
-                    text = formatDuration(state.positionMs),
+                    text = formatDuration(if (dragging) (state.durationMs * shownProgress).toLong() else state.positionMs),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -167,6 +212,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
+
             Spacer(Modifier.height(dimens.spaceLg))
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -176,7 +222,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 IconButton(onClick = onToggleShuffle) {
                     Icon(
                         Icons.Filled.Shuffle,
-                        contentDescription = null,
+                        contentDescription = "随机播放",
                         tint = if (state.shuffle) {
                             MaterialTheme.colorScheme.primary
                         } else {
@@ -185,9 +231,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     )
                 }
                 IconButton(onClick = onPrevious) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = null)
+                    Icon(Icons.Filled.SkipPrevious, contentDescription = "上一首")
                 }
-                // Expressive 主按钮：按压时形状会变化
                 FilledIconButton(
                     onClick = onTogglePlay,
                     modifier = Modifier.size(72.dp),
@@ -195,12 +240,12 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 ) {
                     Icon(
                         imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = null,
+                        contentDescription = if (state.isPlaying) "暂停" else "播放",
                         modifier = Modifier.size(32.dp),
                     )
                 }
                 IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = null)
+                    Icon(Icons.Filled.SkipNext, contentDescription = "下一首")
                 }
                 IconButton(onClick = onCycleRepeat) {
                     Icon(
@@ -209,7 +254,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         } else {
                             Icons.Filled.Repeat
                         },
-                        contentDescription = null,
+                        contentDescription = "循环模式",
                         tint = if (state.repeatMode == RepeatMode.Off) {
                             MaterialTheme.colorScheme.onSurfaceVariant
                         } else {
@@ -218,7 +263,20 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     )
                 }
             }
+            Spacer(Modifier.height(dimens.spaceLg))
         }
+    }
+
+    if (showQueue) {
+        QueueSheet(
+            queue = queue,
+            currentSongId = song.id,
+            onDismiss = { showQueue = false },
+            onPick = { index ->
+                onPickQueueItem(index)
+                showQueue = false
+            },
+        )
     }
 }
 

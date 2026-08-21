@@ -42,6 +42,7 @@ import com.wxjxpp.musicplayer.feature.home.SongsTopBar
 import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
 import com.wxjxpp.musicplayer.feature.player.PlayerBar
 import com.wxjxpp.musicplayer.feature.player.PlayerDetailScreen
+import com.wxjxpp.musicplayer.feature.player.QueueSheet
 import com.wxjxpp.musicplayer.feature.playlist.PickPlaylistDialog
 import com.wxjxpp.musicplayer.feature.playlist.PlaylistsScreen
 import com.wxjxpp.musicplayer.feature.search.SearchScreen
@@ -67,9 +68,11 @@ fun MusicPlayerApp(container: AppContainer) {
     val viewModel: AppViewModel = viewModel(factory = AppViewModel.factory(container))
     val uiState by viewModel.uiState.collectAsState()
     val playback by viewModel.playbackState.collectAsState()
+    val queue by viewModel.queue.collectAsState()
 
     var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
     var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showQueueSheet by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val dimens = AppTheme.dimens
@@ -129,6 +132,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         state = playback,
                         lyrics = uiState.lyrics,
                         showTranslation = uiState.showTranslation,
+                        queue = queue,
                         animatedVisibilityScope = this@AnimatedContent,
                         onBack = { route = Destination.Home.route },
                         onTogglePlay = viewModel::togglePlay,
@@ -137,6 +141,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onSeekFraction = viewModel::seekToFraction,
                         onToggleShuffle = viewModel::toggleShuffle,
                         onCycleRepeat = viewModel::cycleRepeat,
+                        onPickQueueItem = viewModel::playQueueItem,
                     )
 
                     else -> Scaffold(
@@ -169,7 +174,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                     onExpand = { route = Destination.PlayerDetail.route },
                                     onTogglePlay = viewModel::togglePlay,
                                     onNext = viewModel::next,
-                                    onOpenQueue = {},
+                                    onOpenQueue = { showQueueSheet = true },
                                 )
                             }
                         },
@@ -207,7 +212,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                         onExpand = { route = Destination.PlayerDetail.route },
                                         onTogglePlay = viewModel::togglePlay,
                                         onNext = viewModel::next,
-                                        onOpenQueue = {},
+                                        onOpenQueue = { showQueueSheet = true },
                                     )
                                 }
                             }
@@ -229,6 +234,18 @@ fun MusicPlayerApp(container: AppContainer) {
             onCreateNew = { name ->
                 viewModel.createPlaylistWithSelected(name)
                 showPlaylistPicker = false
+            },
+        )
+    }
+
+    if (showQueueSheet) {
+        QueueSheet(
+            queue = queue,
+            currentSongId = playback.current?.id,
+            onDismiss = { showQueueSheet = false },
+            onPick = { index ->
+                viewModel.playQueueItem(index)
+                showQueueSheet = false
             },
         )
     }
@@ -285,17 +302,21 @@ private fun RouteContent(
 
         Destination.Playlists.route -> PlaylistsScreen(
             playlists = uiState.playlists,
+            songsById = remember(uiState.songs) { uiState.songs.associateBy { it.id } },
             onCreate = viewModel::createPlaylist,
             onDelete = viewModel::deletePlaylist,
             onRename = viewModel::renamePlaylist,
             onPlay = viewModel::playPlaylist,
+            onPlaySongInPlaylist = viewModel::playPlaylistAt,
+            onRemoveSongs = viewModel::removeSongsFromPlaylist,
             contentPadding = contentPadding,
             modifier = modifier,
         )
 
         Destination.MusicSources.route -> UserApiScreen(
             apis = uiState.userApis,
-            onImport = viewModel::importUserApi,
+            onImportScript = viewModel::importUserApi,
+            onImportUrl = viewModel::importUserApiFromUrl,
             onActivate = viewModel::activateUserApi,
             onRemove = viewModel::removeUserApi,
             contentPadding = contentPadding,

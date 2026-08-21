@@ -1,11 +1,14 @@
 package com.wxjxpp.musicplayer.core.player
 
 import android.content.Context
+import android.net.Uri
+import android.os.Looper
 import androidx.annotation.OptIn
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
+import androidx.media3.common.PlaybackException
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
@@ -15,6 +18,7 @@ import com.wxjxpp.musicplayer.core.model.RepeatMode
 import com.wxjxpp.musicplayer.core.model.ShuffleMode
 import com.wxjxpp.musicplayer.core.model.Song
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -28,21 +32,44 @@ import kotlin.random.Random
 /**
  * Media3 播放控制器。
  *
- * 关键设计：
- * - 队列顺序由本类维护（[queue]），ExoPlayer 只负责单曲解码，
- *   这样"真随机 / 伪随机"两种策略可以完全由我们控制，
- *   不受 ExoPlayer 内部 shuffle 实现的限制。
- * - 真随机：每次下一首都重新掷骰子，可能连续重复。
- * - 伪随机：预生成一轮洗牌顺序，一轮播完再重新洗，不会重复。
+ * 两个关键约束：
+ * 1. ExoPlayer 的所有 API 必须在创建它的线程（这里是主线程）调用，
+ *    否则会抛 IllegalStateException 直接崩溃。因此对外方法一律经 [onPlayer] 派发。
+ * 2. 队列顺序由本类维护，ExoPlayer 只负责单曲解码，
+ *    这样真随机 / 伪随机策略完全可控。
  */
 @OptIn(UnstableApi::class)
 class Media3PlayerController(
-    context: Context,
+    private val context: Context,
     private val scope: CoroutineScope,
     private val progressIntervalMs: Long = 250L,
 ) : PlayerController {
 
-    private val player: ExoPlayer = ExoPlayer.Builder(context)
+    /** 懒初始化：必须在主线程创建。 */
+    private var player: ExoPlayer? = null
+
+    private val _state = MutableStateFlow(PlaybackState())
+    override val state: StateFlow<PlaybackState> = _state.asStateFlow()
+
+    private val _queue = MutableStateFlow<List<Song>>(emptyList())
+    override val queue: StateFlow<List<Song>> = _queue.asStateFlow()
+
+    private var shuffleOrder: List<Int> = emptyList()
+    private var shuffleCursor: Int = 0
+    private var progressJob: Job? = null
+
+    /** 在主线程执行播放器操作；已在主线程则直接跑，避免多余调度。 */
+    private fun onPlayer(block: (ExoPlayer) -> Unit) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            block(ensurePlayer())
+        } else {
+            scope.launch(Dispatchers.Main.immediate) { block(ensurePlayer()) }
+        }
+    }
+
+    private fun ensurePlayer(): ExoPlayer = player ?: createPlayer().also { player = it }
+
+    private fun createPlayer(): ExoPlayer = ExoPlayer.Builder(context)
         .setAudioAttributes(
             AudioAttributes.Builder()
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
@@ -52,34 +79,27 @@ class Media3PlayerController(
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
-
-    private val _state = MutableStateFlow(PlaybackState())
-    override val state: StateFlow<PlaybackState> = _state.asStateFlow()
-
-    private val _queue = MutableStateFlow<List<Song>>(emptyList())
-    override val queue: StateFlow<List<Song>> = _queue.asStateFlow()
-
-    /** 伪随机使用的预洗牌顺序（存的是 queue 下标）。 */
-    private var shuffleOrder: List<Int> = emptyList()
-    private var shuffleCursor: Int = 0
-
-    private var progressJob: Job? = null
-
-    init {
-        player.addListener(object : Player.Listener {
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _state.update { it.copy(isPlaying = isPlaying) }
-                if (isPlaying) startProgressTicker() else stopProgressTicker()
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    _state.update { it.copy(durationMs = player.duration.coerceAtLeast(0L)) }
+        .apply {
+            addListener(object : Player.Listener {
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    _state.update { it.copy(isPlaying = isPlaying) }
+                    if (isPlaying) startProgressTicker() else stopProgressTicker()
                 }
-                if (playbackState == Player.STATE_ENDED) onTrackFinished()
-            }
-        })
-    }
+
+                override fun onPlaybackStateChanged(playbackState: Int) {
+                    if (playbackState == Player.STATE_READY) {
+                        _state.update { it.copy(durationMs = duration.coerceAtLeast(0L)) }
+                    }
+                    if (playbackState == Player.STATE_ENDED) onTrackFinished()
+                }
+
+                /** 单曲解码失败不能让整个应用崩，直接跳下一首。 */
+                override fun onPlayerError(error: PlaybackException) {
+                    _state.update { it.copy(isPlaying = false) }
+                    advance(forward = true, userTriggered = false)
+                }
+            })
+        }
 
     override fun setQueue(songs: List<Song>, startIndex: Int, autoPlay: Boolean) {
         _queue.value = songs
@@ -102,15 +122,22 @@ class Media3PlayerController(
         prepare(song, playWhenReady = true)
     }
 
-    override fun togglePlay() {
-        if (_state.value.current == null) return
-        if (player.isPlaying) player.pause() else player.play()
+    /** 从队列里指定索引开始播放（播放列表面板点击用）。 */
+    fun playAt(index: Int) {
+        val song = _queue.value.getOrNull(index) ?: return
+        play(song)
     }
 
-    override fun pause() = player.pause()
+    override fun togglePlay() {
+        if (_state.value.current == null) return
+        onPlayer { p -> if (p.isPlaying) p.pause() else p.play() }
+    }
+
+    override fun pause() = onPlayer { it.pause() }
 
     override fun resume() {
-        if (_state.value.current != null) player.play()
+        if (_state.value.current == null) return
+        onPlayer { it.play() }
     }
 
     override fun next() = advance(forward = true, userTriggered = true)
@@ -120,8 +147,8 @@ class Media3PlayerController(
     override fun seekTo(positionMs: Long) {
         val duration = _state.value.durationMs
         val target = positionMs.coerceIn(0L, if (duration > 0) duration else Long.MAX_VALUE)
-        player.seekTo(target)
         _state.update { it.copy(positionMs = target) }
+        onPlayer { it.seekTo(target) }
     }
 
     override fun toggleShuffle() {
@@ -129,7 +156,6 @@ class Media3PlayerController(
         rebuildShuffleOrder()
     }
 
-    /** 真随机 / 伪随机切换。 */
     fun setShuffleMode(mode: ShuffleMode) {
         _state.update { it.copy(shuffleMode = mode) }
         rebuildShuffleOrder()
@@ -149,14 +175,14 @@ class Media3PlayerController(
 
     override fun setSpeed(speed: Float) {
         val clamped = speed.coerceIn(0.25f, 4f)
-        player.setPlaybackSpeed(clamped)
         _state.update { it.copy(speed = clamped) }
+        onPlayer { it.setPlaybackSpeed(clamped) }
     }
 
     override fun setVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
-        player.volume = clamped
         _state.update { it.copy(volume = clamped) }
+        onPlayer { it.volume = clamped }
     }
 
     override fun addToQueue(songs: List<Song>) {
@@ -178,16 +204,18 @@ class Media3PlayerController(
     }
 
     override fun clearQueue() {
-        player.stop()
-        player.clearMediaItems()
         _queue.value = emptyList()
         _state.value = PlaybackState()
         stopProgressTicker()
+        onPlayer { p ->
+            p.stop()
+            p.clearMediaItems()
+        }
     }
 
     override fun release() {
         stopProgressTicker()
-        player.release()
+        onPlayer { it.release() }
     }
 
     // ---- 内部实现 ----
@@ -196,36 +224,35 @@ class Media3PlayerController(
         val uri = when (val loc = song.location) {
             is MediaLocation.Local -> loc.uri
             is MediaLocation.WebDav -> loc.remotePath
-            is MediaLocation.Remote -> return // 在线源需先解析播放地址，交由上层处理
+            // 在线源需要先解析播放地址，交由上层处理
+            is MediaLocation.Remote -> return
         }
         val item = MediaItem.Builder()
-            .setUri(uri)
+            .setUri(Uri.parse(uri))
             .setMediaId(song.id)
             .setMediaMetadata(
                 MediaMetadata.Builder()
                     .setTitle(song.title)
                     .setArtist(song.artistName)
                     .setAlbumTitle(song.albumTitle)
+                    .apply { song.coverUri?.let { setArtworkUri(Uri.parse(it)) } }
                     .build()
             )
             .build()
-        player.setMediaItem(item)
-        player.prepare()
-        player.playWhenReady = playWhenReady
+        onPlayer { p ->
+            p.setMediaItem(item)
+            p.prepare()
+            p.playWhenReady = playWhenReady
+        }
     }
 
-    /**
-     * 推进到下一首。
-     *
-     * [userTriggered] 为 false 表示是自然播完，此时单曲循环要原地重播。
-     */
     private fun advance(forward: Boolean, userTriggered: Boolean) {
         val list = _queue.value
         if (list.isEmpty()) return
 
         if (!userTriggered && _state.value.repeatMode == RepeatMode.One) {
             seekTo(0L)
-            player.play()
+            onPlayer { it.play() }
             return
         }
 
@@ -254,7 +281,6 @@ class Media3PlayerController(
                 } else {
                     (shuffleCursor - 1 + shuffleOrder.size) % shuffleOrder.size
                 }
-                // 一轮走完重新洗牌，避免长期固定顺序
                 if (shuffleCursor == 0 && forward) rebuildShuffleOrder()
                 shuffleOrder.getOrElse(shuffleCursor) { currentIndex }
             }
@@ -271,7 +297,7 @@ class Media3PlayerController(
         when (_state.value.repeatMode) {
             RepeatMode.One -> {
                 seekTo(0L)
-                player.play()
+                onPlayer { it.play() }
             }
 
             RepeatMode.All -> advance(forward = true, userTriggered = false)
@@ -291,13 +317,16 @@ class Media3PlayerController(
 
     private fun startProgressTicker() {
         stopProgressTicker()
-        progressJob = scope.launch {
+        progressJob = scope.launch(Dispatchers.Main.immediate) {
             while (isActive) {
-                _state.update {
-                    it.copy(
-                        positionMs = player.currentPosition.coerceAtLeast(0L),
-                        durationMs = player.duration.takeIf { d -> d > 0 } ?: it.durationMs,
-                    )
+                val p = player
+                if (p != null) {
+                    _state.update {
+                        it.copy(
+                            positionMs = p.currentPosition.coerceAtLeast(0L),
+                            durationMs = p.duration.takeIf { d -> d > 0 } ?: it.durationMs,
+                        )
+                    }
                 }
                 delay(progressIntervalMs)
             }

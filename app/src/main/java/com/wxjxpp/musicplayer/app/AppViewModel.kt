@@ -211,6 +211,25 @@ class AppViewModel(
         if (songs.isNotEmpty()) container.playerController.setQueue(songs, autoPlay = true)
     }
 
+    /** 从歌单的指定位置开始播放。 */
+    fun playPlaylistAt(playlist: Playlist, index: Int) {
+        val byId = _uiState.value.songs.associateBy { it.id }
+        val songs = playlist.songIds.mapNotNull { byId[it] }
+        if (songs.isEmpty()) return
+        container.playerController.setQueue(songs, startIndex = index.coerceIn(songs.indices), autoPlay = true)
+    }
+
+    fun removeSongsFromPlaylist(playlistId: String, songIds: List<String>) {
+        viewModelScope.launch { container.playlistRepository.removeSongs(playlistId, songIds) }
+    }
+
+    /** 点击播放队列里的某一项。 */
+    fun playQueueItem(index: Int) {
+        (container.playerController as? com.wxjxpp.musicplayer.core.player.Media3PlayerController)
+            ?.playAt(index)
+            ?: queue.value.getOrNull(index)?.let(container.playerController::play)
+    }
+
     // ---- 搜索 ----
 
     fun updateSearchQuery(query: String) {
@@ -232,8 +251,16 @@ class AppViewModel(
 
     fun importUserApi(script: String) {
         viewModelScope.launch {
-            val info = container.userApiStore.import(script)
-            container.activateUserApi(info.id)
+            runCatching { container.userApiStore.import(script) }
+                .onSuccess { info -> container.activateUserApi(info.id) }
+        }
+    }
+
+    /** 从 URL 导入脚本。 */
+    fun importUserApiFromUrl(url: String) {
+        viewModelScope.launch {
+            runCatching { container.userApiStore.importFromUrl(url) }
+                .onSuccess { info -> container.activateUserApi(info.id) }
         }
     }
 
