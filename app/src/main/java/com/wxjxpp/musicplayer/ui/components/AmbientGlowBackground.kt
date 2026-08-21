@@ -45,16 +45,17 @@ fun AmbientGlowBackground(
 ) {
     if (!enabled) return
     val context = LocalContext.current
-    // 异步加载封面缩略图（64px 采样：天然模糊 + 极低内存）
+    // 异步加载封面缩略图（inSampleSize=48：3000px 原图缩到 ~64px，天然模糊 + 极低内存）
     val coverBitmap by produceState<ImageBitmap?>(initialValue = null, coverUri) {
         value = withContext(Dispatchers.IO) {
             runCatching {
                 val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 48 }
-                when (coverUri?.takeIf { it.isNotBlank() }) {
-                    null -> null
-                    else -> context.contentResolver.openInputStream(android.net.Uri.parse(coverUri))
+                val uri = coverUri?.takeIf { it.isNotBlank() } ?: return@runCatching null
+                if (uri.startsWith("content://")) {
+                    context.contentResolver.openInputStream(android.net.Uri.parse(uri))
                         ?.use { BitmapFactory.decodeStream(it, null, opts) }
-                        ?: BitmapFactory.decodeFile(coverUri, opts),
+                } else {
+                    BitmapFactory.decodeFile(uri, opts)
                 }?.asImageBitmap()
             }.getOrNull()
         }
