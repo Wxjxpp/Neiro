@@ -51,7 +51,7 @@ class Media3PlayerController(
 
     /** 拔出耳机自动暂停（含蓝牙断开）。默认开。 */
     @Volatile
-    var pauseOnHeadphoneDisconnect: Boolean = true
+    override var pauseOnHeadphoneDisconnect: Boolean = true
         set(value) {
             field = value
             updateNoisyReceiver()
@@ -59,7 +59,7 @@ class Media3PlayerController(
 
     /** 其他应用抢占音频焦点时暂停。默认开。 */
     @Volatile
-    var pauseOnAudioFocusLoss: Boolean = true
+    override var pauseOnAudioFocusLoss: Boolean = true
 
     /** AUDIO_BECOMING_NOISY 广播接收器：拔出耳机/断开蓝牙时系统会发此广播。 */
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
