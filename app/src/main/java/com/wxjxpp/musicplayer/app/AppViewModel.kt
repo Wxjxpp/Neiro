@@ -195,7 +195,7 @@ class AppViewModel(
             val now = System.currentTimeMillis()
             val yearAgo = now - 365L * 24 * 60 * 60 * 1000
             val days = runCatching { container.statsRepository.heatmap(yearAgo, now) }
-                .getOrDefault(emptyList())
+                .getOrDefault(emptyList<HeatmapDay>())
             _uiState.update { it.copy(heatmapDays = days, isHeatmapLoading = false) }
         }
     }

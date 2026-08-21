@@ -202,7 +202,10 @@ class RoomStatsRepository(
                 playCount = agg.plays,
                 launchCount = agg.launches,
                 listenedMs = agg.listened,
-                topTags = agg.tags.entries.sortedByDescending { it.value }.take(5).toMap(),
+                topTags = agg.tags.entries
+                    .sortedByDescending { it.value }
+                    .take(5)
+                    .associate { it.key to it.value },
             )
         }
     }

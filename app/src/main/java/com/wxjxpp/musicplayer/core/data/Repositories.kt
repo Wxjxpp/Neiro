@@ -1,6 +1,7 @@
 package com.wxjxpp.musicplayer.core.data
 
 import com.wxjxpp.musicplayer.core.model.DiaryEntry
+import com.wxjxpp.musicplayer.core.model.HeatmapDay
 import com.wxjxpp.musicplayer.core.model.ListeningReport
 import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.PlayEvent
