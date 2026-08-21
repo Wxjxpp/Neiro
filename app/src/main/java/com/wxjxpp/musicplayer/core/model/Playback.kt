@@ -16,6 +16,8 @@ enum class ShuffleMode { Pseudo, True }
 data class PlaybackState(
     val current: Song? = null,
     val isPlaying: Boolean = false,
+    /** 在线歌曲正在解析播放地址 / 缓冲中。UI 据此显示加载态。 */
+    val isBuffering: Boolean = false,
     val positionMs: Long = 0L,
     val durationMs: Long = 0L,
     val repeatMode: RepeatMode = RepeatMode.All,

@@ -1,6 +1,5 @@
 package com.wxjxpp.musicplayer.core.scanner
 
-import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.Song
 import kotlinx.coroutines.flow.Flow
 
@@ -25,8 +24,9 @@ sealed interface ScanProgress {
 /**
  * 元数据读取器契约。
  *
- * 扫描时先建轻量索引，再由它异步补齐标签、封面、ReplayGain、内嵌歌词。
- * 底层可用 MediaMetadataRetriever，或换成 jaudiotagger / taglib 以支持更多标签。
+ * 扫描时先建轻量索引，再由它异步补齐标签、封面、ReplayGain。
+ * 内嵌歌词不在这里：由 core/lyrics/EmbeddedLyricsReader 直接解标签，
+ * 结果经 LyricsLocator 汇总，避免同一份数据两处解析。
  */
 interface MetadataReader {
     /** 读取标签，返回补齐后的 Song。读取失败应返回原对象而不是抛异常。 */
@@ -34,7 +34,4 @@ interface MetadataReader {
 
     /** 取封面原始字节。没有内嵌封面时返回 null。 */
     suspend fun readArtwork(song: Song): ByteArray?
-
-    /** 取内嵌歌词（部分格式支持 USLT / LYRICS 标签）。 */
-    suspend fun readEmbeddedLyrics(song: Song): Lyrics?
 }

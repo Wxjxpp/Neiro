@@ -73,6 +73,8 @@ data class RawLyrics(
     /** 部分 API 把翻译单独给一份，这里一并带过来。 */
     val translationContent: String? = null,
     val romanizationContent: String? = null,
+    /** 逐字歌词（LX 协议的 `lxlyric`），有则优先作为主歌词。 */
+    val wordByWordContent: String? = null,
 )
 
 /**

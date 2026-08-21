@@ -7,9 +7,11 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.wxjxpp.musicplayer.core.model.Quality
 import com.wxjxpp.musicplayer.core.model.RepeatMode
 import com.wxjxpp.musicplayer.core.model.ShuffleMode
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -31,6 +33,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val RepeatMode = stringPreferencesKey("repeat_mode")
         val KaraokeLyrics = booleanPreferencesKey("karaoke_lyrics")
         val ActiveUserApiId = stringPreferencesKey("active_user_api_id")
+        val PreferredQuality = stringPreferencesKey("preferred_quality")
+        val OnlineSearchPlatform = stringPreferencesKey("online_search_platform")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -86,5 +90,26 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.edit { prefs ->
             if (id.isNullOrBlank()) prefs.remove(Keys.ActiveUserApiId) else prefs[Keys.ActiveUserApiId] = id
         }
+    }
+
+    /** 在线播放偏好音质。取流失败时上层会自动降级。 */
+    fun observePreferredQuality(): Flow<Quality> = store.data.map { prefs ->
+        runCatching { Quality.valueOf(prefs[Keys.PreferredQuality] ?: Quality.Standard.name) }
+            .getOrDefault(Quality.Standard)
+    }
+
+    suspend fun setPreferredQuality(quality: Quality) {
+        store.edit { it[Keys.PreferredQuality] = quality.name }
+    }
+
+    /** 取流时需要立即读到当前音质，不适合走 Flow。 */
+    suspend fun currentQuality(): Quality = observePreferredQuality().first()
+
+    /** 在线搜索上次选择的平台（`all` 表示聚合搜索）。 */
+    fun observeOnlineSearchPlatform(): Flow<String> =
+        store.data.map { it[Keys.OnlineSearchPlatform] ?: "all" }
+
+    suspend fun setOnlineSearchPlatform(id: String) {
+        store.edit { it[Keys.OnlineSearchPlatform] = id }
     }
 }

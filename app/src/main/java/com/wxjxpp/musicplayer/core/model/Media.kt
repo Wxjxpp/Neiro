@@ -16,8 +16,19 @@ sealed interface MediaLocation {
     /** WebDAV / 云盘。 */
     data class WebDav(val serverId: String, val remotePath: String) : MediaLocation
 
-    /** 在线 API 音源，播放地址需要按音质临时解析。 */
-    data class Remote(val sourceId: String, val songId: String) : MediaLocation
+    /**
+     * 在线 API 音源，播放地址需要按音质临时解析。
+     *
+     * [payload] 保存该平台搜索接口返回的原始 JSON。解析播放地址时要把它
+     * 整体交给自定义音源脚本（LX 协议的 `musicInfo`），脚本依赖里面的
+     * `hash` / `copyrightId` / `strMediaMid` 等平台特有字段，
+     * 只传 songId 是不够的。
+     */
+    data class Remote(
+        val sourceId: String,
+        val songId: String,
+        val payload: String? = null,
+    ) : MediaLocation
 }
 
 /** 音质档位。解析播放地址时使用。 */

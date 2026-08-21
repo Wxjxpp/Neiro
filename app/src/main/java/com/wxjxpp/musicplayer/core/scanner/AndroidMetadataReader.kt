@@ -3,11 +3,8 @@ package com.wxjxpp.musicplayer.core.scanner
 import android.media.MediaMetadataRetriever
 import com.wxjxpp.musicplayer.core.model.Album
 import com.wxjxpp.musicplayer.core.model.Artist
-import com.wxjxpp.musicplayer.core.model.AudioFormat
 import com.wxjxpp.musicplayer.core.model.MediaLocation
-import com.wxjxpp.musicplayer.core.model.ReplayGain
 import com.wxjxpp.musicplayer.core.model.Song
-import com.wxjxpp.musicplayer.core.model.Lyrics
 
 /**
  * Android 内置元数据读取器。
@@ -53,6 +50,4 @@ class AndroidMetadataReader : MetadataReader {
             retriever.embeddedPicture
         }.getOrNull().also { retriever.release() }
     }
-
-    override suspend fun readEmbeddedLyrics(song: Song): Lyrics? = null
 }

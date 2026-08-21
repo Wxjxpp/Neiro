@@ -45,6 +45,24 @@ class Media3PlayerController(
     private val progressIntervalMs: Long = 250L,
 ) : PlayerController {
 
+    /**
+     * 在线歌曲取流回调。
+     *
+     * 在线音源的播放地址是临时的，必须播放前解析。这里用回调注入而不是
+     * 直接依赖音源注册表，播放层因此不必知道"音源"这个概念。
+     * 返回 null 表示取流失败，[onPlaybackError] 会收到原因。
+     */
+    var remoteUrlResolver: (suspend (Song) -> RemoteUrl)? = null
+
+    /** 播放相关的可展示错误（取流失败、解码失败）。 */
+    var onPlaybackError: ((String) -> Unit)? = null
+
+    /** 取流结果。 */
+    sealed interface RemoteUrl {
+        data class Success(val url: String) : RemoteUrl
+        data class Failure(val reason: String) : RemoteUrl
+    }
+
     /** 懒初始化：必须在主线程创建。 */
     private var player: ExoPlayer? = null
 
@@ -57,6 +75,9 @@ class Media3PlayerController(
     private var shuffleOrder: List<Int> = emptyList()
     private var shuffleCursor: Int = 0
     private var progressJob: Job? = null
+
+    /** 正在进行的取流任务；切歌时取消，避免旧结果覆盖新歌。 */
+    private var resolveJob: Job? = null
 
     /** 在主线程执行播放器操作；已在主线程则直接跑，避免多余调度。 */
     private fun onPlayer(block: (ExoPlayer) -> Unit) {
@@ -87,15 +108,23 @@ class Media3PlayerController(
                 }
 
                 override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY) {
-                        _state.update { it.copy(durationMs = duration.coerceAtLeast(0L)) }
+                    when (playbackState) {
+                        Player.STATE_READY -> _state.update {
+                            it.copy(durationMs = duration.coerceAtLeast(0L), isBuffering = false)
+                        }
+
+                        Player.STATE_BUFFERING -> _state.update { it.copy(isBuffering = true) }
+                        Player.STATE_ENDED -> {
+                            _state.update { it.copy(isBuffering = false) }
+                            onTrackFinished()
+                        }
                     }
-                    if (playbackState == Player.STATE_ENDED) onTrackFinished()
                 }
 
-                /** 单曲解码失败不能让整个应用崩，直接跳下一首。 */
+                /** 单曲解码失败不能让整个应用崩，跳下一首并上报原因。 */
                 override fun onPlayerError(error: PlaybackException) {
-                    _state.update { it.copy(isPlaying = false) }
+                    _state.update { it.copy(isPlaying = false, isBuffering = false) }
+                    onPlaybackError?.invoke("播放失败：${error.errorCodeName}")
                     advance(forward = true, userTriggered = false)
                 }
             })
@@ -221,12 +250,41 @@ class Media3PlayerController(
     // ---- 内部实现 ----
 
     private fun prepare(song: Song, playWhenReady: Boolean) {
-        val uri = when (val loc = song.location) {
-            is MediaLocation.Local -> loc.uri
-            is MediaLocation.WebDav -> loc.remotePath
-            // 在线源需要先解析播放地址，交由上层处理
-            is MediaLocation.Remote -> return
+        resolveJob?.cancel()
+        when (val loc = song.location) {
+            is MediaLocation.Local -> playUri(song, loc.uri, playWhenReady)
+            is MediaLocation.WebDav -> playUri(song, loc.remotePath, playWhenReady)
+            // 在线源要先换取临时播放地址
+            is MediaLocation.Remote -> resolveAndPlay(song, playWhenReady)
         }
+    }
+
+    /** 在线歌曲：异步取流后再交给 ExoPlayer。 */
+    private fun resolveAndPlay(song: Song, playWhenReady: Boolean) {
+        val resolver = remoteUrlResolver
+        if (resolver == null) {
+            onPlaybackError?.invoke("未配置在线取流能力")
+            return
+        }
+        _state.update { it.copy(isBuffering = true) }
+        resolveJob = scope.launch {
+            val result = runCatching { resolver(song) }.getOrElse { error ->
+                RemoteUrl.Failure(error.message ?: "取流失败")
+            }
+            // 期间用户可能已经切歌，过期结果直接丢弃
+            if (_state.value.current?.id != song.id) return@launch
+            _state.update { it.copy(isBuffering = false) }
+            when (result) {
+                is RemoteUrl.Success -> playUri(song, result.url, playWhenReady)
+                is RemoteUrl.Failure -> {
+                    _state.update { it.copy(isPlaying = false) }
+                    onPlaybackError?.invoke(result.reason)
+                }
+            }
+        }
+    }
+
+    private fun playUri(song: Song, uri: String, playWhenReady: Boolean) {
         val item = MediaItem.Builder()
             .setUri(Uri.parse(uri))
             .setMediaId(song.id)

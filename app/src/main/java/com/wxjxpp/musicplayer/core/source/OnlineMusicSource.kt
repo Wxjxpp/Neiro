@@ -1,0 +1,140 @@
+package com.wxjxpp.musicplayer.core.source
+
+import com.wxjxpp.musicplayer.core.model.Lyrics
+import com.wxjxpp.musicplayer.core.model.MediaLocation
+import com.wxjxpp.musicplayer.core.model.Quality
+import com.wxjxpp.musicplayer.core.model.Song
+import com.wxjxpp.musicplayer.core.source.online.OnlinePlatform
+import com.wxjxpp.musicplayer.core.source.online.toScriptQuality
+import com.wxjxpp.musicplayer.core.userapi.UserApiClient
+import org.json.JSONObject
+
+/**
+ * 在线音源。
+ *
+ * 职责切分清楚，避免把两类失败混在一起：
+ * - **搜索 / 歌词 / 封面**：走 [platform] 的公开接口，不需要用户导入任何脚本
+ * - **播放地址**：走 [userApiClient]（LX 协议 `musicUrl`），必须有已启用的自定义音源脚本
+ *
+ * 因此"能搜到但放不了"是正常状态，此时 [resolvePlayUrlDetailed] 会给出
+ * 明确原因（没有音源 / 脚本不支持该平台 / 脚本报错），由 UI 提示用户。
+ */
+class OnlineMusicSource(
+    private val platform: OnlinePlatform,
+    private val userApiClient: UserApiClient,
+    /** 当前启用脚本声明支持的平台 → 动作，用于提前判断能否取流。 */
+    private val supportedActions: () -> Map<String, List<String>>,
+) : MusicSource {
+
+    override val id: String = platform.id
+    override val displayName: String = platform.displayName
+
+    override val capabilities: Set<SourceCapability> = buildSet {
+        add(SourceCapability.Search)
+        add(SourceCapability.QualitySelection)
+        if (platform.supportsLyrics) add(SourceCapability.Lyrics)
+    }
+
+    /** 取流结果，带失败原因。 */
+    sealed interface PlayUrlResult {
+        data class Success(val url: String) : PlayUrlResult
+        data class Failure(val reason: String) : PlayUrlResult
+    }
+
+    override suspend fun search(query: String, page: Int, pageSize: Int): List<Song> =
+        runCatching { platform.search(query, page, pageSize) }.getOrDefault(emptyList())
+
+    override suspend fun resolvePlayUrl(song: Song, quality: Quality): String? =
+        (resolvePlayUrlDetailed(song, quality) as? PlayUrlResult.Success)?.url
+
+    /** 与 [resolvePlayUrl] 相同，但失败时返回原因而不是 null。 */
+    suspend fun resolvePlayUrlDetailed(song: Song, quality: Quality): PlayUrlResult {
+        val remote = song.location as? MediaLocation.Remote
+            ?: return PlayUrlResult.Failure("这不是在线歌曲")
+        val actions = supportedActions()
+        if (actions.isEmpty()) {
+            return PlayUrlResult.Failure(
+                "在线播放需要自定义音源：请在「自定义音源」页导入并启用一个 LX 格式脚本"
+            )
+        }
+        val platformActions = actions[platform.id]
+        if (platformActions == null || "musicUrl" !in platformActions) {
+            return PlayUrlResult.Failure("当前音源脚本不支持${platform.displayName}，请换一个脚本或搜索其他平台")
+        }
+
+        val musicInfo = remote.musicInfo(song)
+        val result = userApiClient.musicUrl(
+            source = platform.id,
+            quality = quality.toScriptQuality(),
+            musicInfo = musicInfo,
+        )
+        return when (result) {
+            is UserApiClient.Result.Success ->
+                result.dataJson?.let { PlayUrlResult.Success(it) }
+                    ?: PlayUrlResult.Failure("音源脚本返回了空地址")
+
+            is UserApiClient.Result.Failure -> PlayUrlResult.Failure(result.reason)
+        }
+    }
+
+    override suspend fun fetchLyricsRaw(song: Song): RawLyrics? {
+        val remote = song.location as? MediaLocation.Remote ?: return null
+
+        // 先用平台公开接口；拿不到再退回脚本
+        platform.takeIf { it.supportsLyrics }
+            ?.let { runCatching { it.lyrics(remote.songId, remote.payload) }.getOrNull() }
+            ?.let { lyrics ->
+                return RawLyrics(
+                    content = lyrics.lyric,
+                    declaredFormat = "lrc",
+                    translationContent = lyrics.tlyric,
+                    romanizationContent = lyrics.rlyric,
+                    wordByWordContent = lyrics.lxlyric,
+                )
+            }
+
+        if (supportedActions()[platform.id]?.contains("lyric") != true) return null
+        val result = userApiClient.lyric(platform.id, remote.musicInfo(song))
+        val json = (result as? UserApiClient.Result.Success)?.dataJson
+            ?.let { runCatching { JSONObject(it) }.getOrNull() }
+            ?: return null
+        val lyric = json.optString("lyric").takeIf { it.isNotBlank() } ?: return null
+        return RawLyrics(
+            content = lyric,
+            declaredFormat = "lrc",
+            translationContent = json.optString("tlyric").takeIf { it.isNotBlank() },
+            romanizationContent = json.optString("rlyric").takeIf { it.isNotBlank() },
+            wordByWordContent = json.optString("lxlyric").takeIf { it.isNotBlank() },
+        )
+    }
+
+    override suspend fun fetchLyrics(song: Song): Lyrics? = null
+
+    /**
+     * 构造交给脚本的 musicInfo。
+     *
+     * 优先原样使用搜索时保存的平台 JSON —— 脚本依赖 `hash`、`copyrightId`、
+     * `strMediaMid` 这些平台特有字段。payload 缺失时退化成最小可用结构。
+     */
+    private fun MediaLocation.Remote.musicInfo(song: Song): JSONObject {
+        payload?.let { raw ->
+            runCatching { JSONObject(raw) }.getOrNull()?.let { json ->
+                // 补齐 LX 脚本习惯读取的通用字段
+                if (!json.has("songmid")) json.put("songmid", songId)
+                if (!json.has("source")) json.put("source", sourceId)
+                if (!json.has("name")) json.put("name", song.title)
+                if (!json.has("singer")) json.put("singer", song.artistName)
+                if (!json.has("albumName")) json.put("albumName", song.albumTitle)
+                return json
+            }
+        }
+        return JSONObject().apply {
+            put("songmid", songId)
+            put("source", sourceId)
+            put("name", song.title)
+            put("singer", song.artistName)
+            put("albumName", song.albumTitle)
+            put("interval", song.durationMs / 1000)
+        }
+    }
+}
