@@ -45,6 +45,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.core.model.RepeatMode
 import com.wxjxpp.musicplayer.ui.components.SongCover
@@ -67,6 +68,8 @@ import com.wxjxpp.musicplayer.ui.theme.AppTheme
 @Composable
 fun SharedTransitionScope.PlayerDetailScreen(
     state: PlaybackState,
+    lyrics: Lyrics,
+    showTranslation: Boolean,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -123,8 +126,13 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-
-            // TODO 歌词面板插入点：LyricsPane(lyrics, positionMs)
+// 歌词面板：占据剩余空间，自动滚动并逐字高亮
+            LyricsPane(
+                lyrics = lyrics,
+                positionMs = state.positionMs,
+                showTranslation = showTranslation,
+                modifier = Modifier.weight(1f, fill = false),
+            )
 
             Spacer(Modifier.height(dimens.spaceXl))
             // 唯一的进度控制：拖动时只更新临时值，松手后才 seek，避免拖到末尾连续跳歌。

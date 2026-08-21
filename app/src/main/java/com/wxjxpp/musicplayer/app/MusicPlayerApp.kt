@@ -1,61 +1,65 @@
 package com.wxjxpp.musicplayer.app
 
+import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionLayout
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.background
 import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalNavigationDrawer
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.rememberDrawerState
-import androidx.activity.compose.BackHandler
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.wxjxpp.musicplayer.app.navigation.AppDrawerSheet
 import com.wxjxpp.musicplayer.app.navigation.Destination
-import com.wxjxpp.musicplayer.feature.home.HomeScreen
 import com.wxjxpp.musicplayer.feature.home.EmptySongsScreen
+import com.wxjxpp.musicplayer.feature.home.HomeScreen
+import com.wxjxpp.musicplayer.feature.home.SelectionTopBar
 import com.wxjxpp.musicplayer.feature.home.SongsTopBar
 import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
-import com.wxjxpp.musicplayer.feature.settings.SettingsScreen
 import com.wxjxpp.musicplayer.feature.player.PlayerBar
 import com.wxjxpp.musicplayer.feature.player.PlayerDetailScreen
+import com.wxjxpp.musicplayer.feature.playlist.PickPlaylistDialog
+import com.wxjxpp.musicplayer.feature.playlist.PlaylistsScreen
+import com.wxjxpp.musicplayer.feature.search.SearchScreen
+import com.wxjxpp.musicplayer.feature.settings.SettingsScreen
+import com.wxjxpp.musicplayer.feature.userapi.UserApiScreen
 import com.wxjxpp.musicplayer.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 
 /**
  * 应用外壳。
  *
- * 结构：ModalNavigationDrawer（侧滑菜单）
- *      └ SharedTransitionLayout
- *        └ AnimatedContent（路由切换 + 共享元素）
- *          ├ 内容区（首页 / 各功能页）
- *          └ 播放栏（常规 or 悬浮）
+ * ModalNavigationDrawer（侧滑导航）
+ *   └ SharedTransitionLayout
+ *     └ AnimatedContent（路由切换 + 共享元素）
+ *       ├ 内容区
+ *       └ 播放栏（常规 or 悬浮）
  *
- * 播放栏放在壳层而非各页面内，保证跨页面时它是同一个实例，
- * 共享元素动画才能连续。
+ * 播放栏放在壳层而非页面内，保证跨页时是同一实例，共享元素动画才连续。
  */
 @OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
@@ -65,10 +69,10 @@ fun MusicPlayerApp(container: AppContainer) {
     val playback by viewModel.playbackState.collectAsState()
 
     var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
+    var showPlaylistPicker by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val scope = rememberCoroutineScope()
     val dimens = AppTheme.dimens
-    // motionScheme 是 @Composable 取值，不能在 transitionSpec lambda 里读，先在这里取出
     val routeFadeSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
 
     // 运行时权限：Android 13+ 请求 READ_MEDIA_AUDIO，更低版本回退到读外部存储。
@@ -87,12 +91,20 @@ fun MusicPlayerApp(container: AppContainer) {
         if (hasMediaPermission) viewModel.refresh() else requestPermission()
     }
 
-    // 已有权限且曲库为空时自动扫描一次，避免用户必须手动点。
     LaunchedEffect(hasMediaPermission) {
         if (hasMediaPermission && uiState.songs.isEmpty()) viewModel.refresh()
     }
 
-    BackHandler(enabled = route != Destination.Home.route || drawerState.isOpen) { if (drawerState.isOpen) scope.launch { drawerState.close() } else route = Destination.Home.route }
+    val inSelectionMode = uiState.selectedSongIds.isNotEmpty()
+
+    // 返回优先级：多选态 → 抽屉 → 回歌曲页
+    BackHandler(enabled = inSelectionMode || drawerState.isOpen || route != Destination.Home.route) {
+        when {
+            inSelectionMode -> viewModel.clearSelection()
+            drawerState.isOpen -> scope.launch { drawerState.close() }
+            else -> route = Destination.Home.route
+        }
+    }
 
     ModalNavigationDrawer(
         drawerState = drawerState,
@@ -109,14 +121,14 @@ fun MusicPlayerApp(container: AppContainer) {
         SharedTransitionLayout(modifier = Modifier.fillMaxSize()) {
             AnimatedContent(
                 targetState = route,
-                transitionSpec = {
-                    fadeIn(routeFadeSpec) togetherWith fadeOut(routeFadeSpec)
-                },
+                transitionSpec = { fadeIn(routeFadeSpec) togetherWith fadeOut(routeFadeSpec) },
                 label = "rootRoute",
             ) { currentRoute ->
                 when (currentRoute) {
                     Destination.PlayerDetail.route -> PlayerDetailScreen(
                         state = playback,
+                        lyrics = uiState.lyrics,
+                        showTranslation = uiState.showTranslation,
                         animatedVisibilityScope = this@AnimatedContent,
                         onBack = { route = Destination.Home.route },
                         onTogglePlay = viewModel::togglePlay,
@@ -130,8 +142,18 @@ fun MusicPlayerApp(container: AppContainer) {
                     else -> Scaffold(
                         containerColor = MaterialTheme.colorScheme.background,
                         topBar = {
-                            if (currentRoute == Destination.Home.route || currentRoute == Destination.Library.route) {
-                                SongsTopBar(
+                            val isSongsPage = currentRoute == Destination.Home.route ||
+                                currentRoute == Destination.Library.route
+                            when {
+                                isSongsPage && inSelectionMode -> SelectionTopBar(
+                                    selectedCount = uiState.selectedSongIds.size,
+                                    onClose = viewModel::clearSelection,
+                                    onSelectAll = viewModel::selectAll,
+                                    onDelete = viewModel::deleteSelected,
+                                    onAddToPlaylist = { showPlaylistPicker = true },
+                                )
+
+                                isSongsPage -> SongsTopBar(
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
                                     onSearch = { route = Destination.Search.route },
                                     onScan = scanLibrary,
@@ -152,7 +174,11 @@ fun MusicPlayerApp(container: AppContainer) {
                             }
                         },
                     ) { padding ->
-                        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                        ) {
                             RouteContent(
                                 route = currentRoute,
                                 viewModel = viewModel,
@@ -191,13 +217,24 @@ fun MusicPlayerApp(container: AppContainer) {
             }
         }
     }
+
+    if (showPlaylistPicker) {
+        PickPlaylistDialog(
+            playlists = uiState.playlists,
+            onDismiss = { showPlaylistPicker = false },
+            onPick = { playlistId ->
+                viewModel.addSelectedToPlaylist(playlistId)
+                showPlaylistPicker = false
+            },
+            onCreateNew = { name ->
+                viewModel.createPlaylistWithSelected(name)
+                showPlaylistPicker = false
+            },
+        )
+    }
 }
 
-/**
- * 路由内容分发。
- *
- * 新增页面在这里加一个分支即可；占位页保证导航链路先跑通。
- */
+/** 路由内容分发。新增页面在这里加分支。 */
 @Composable
 private fun RouteContent(
     route: String,
@@ -218,53 +255,84 @@ private fun RouteContent(
                 onScan = onScan,
                 modifier = modifier,
             )
-        } else HomeScreen(
-            songs = uiState.songs,
-            isRefreshing = uiState.isRefreshing,
-            onRefresh = viewModel::refresh,
+        } else {
+            HomeScreen(
+                songs = uiState.songs,
+                isRefreshing = uiState.isRefreshing,
+                selectedIds = uiState.selectedSongIds,
+                onRefresh = viewModel::refresh,
+                onSongClick = { song ->
+                    // 多选态下点击是切换选中，避免误触播放
+                    if (uiState.selectedSongIds.isNotEmpty()) {
+                        viewModel.toggleSelection(song.id)
+                    } else {
+                        viewModel.play(song)
+                    }
+                },
+                onSongLongPress = { song -> viewModel.toggleSelection(song.id) },
+                contentPadding = contentPadding,
+            )
+        }
+
+        Destination.Search.route -> SearchScreen(
+            query = uiState.searchQuery,
+            results = uiState.searchResults,
+            onQueryChange = viewModel::updateSearchQuery,
             onSongClick = viewModel::play,
             contentPadding = contentPadding,
-        )
-
-        // 搜索由歌曲页入口进入；页面顶部不再重复显示老式标题。
-        Destination.Search.route -> PlaceholderScreen(
-            title = "",
-            description = "搜索功能接入 MusicSource.search 后展示多音源聚合结果",
             modifier = modifier,
         )
 
-        Destination.Playlists.route -> PlaceholderScreen(
-            title = "歌单",
-            description = "PlaylistRepository 已就绪，接入后展示歌单列表与详情",
+        Destination.Playlists.route -> PlaylistsScreen(
+            playlists = uiState.playlists,
+            onCreate = viewModel::createPlaylist,
+            onDelete = viewModel::deletePlaylist,
+            onRename = viewModel::renamePlaylist,
+            onPlay = viewModel::playPlaylist,
+            contentPadding = contentPadding,
             modifier = modifier,
         )
 
-        Destination.Diary.route -> PlaceholderScreen(
-            title = "听歌日记",
-            description = "DiaryRepository 已就绪，接入后按日期展示听歌记录与随笔",
-            modifier = modifier,
-        )
-
-        Destination.Together.route -> PlaceholderScreen(
-            title = "一起听",
-            description = "实现 TogetherTransport 后在此创建 / 加入房间",
-            modifier = modifier,
-        )
-
-        Destination.Report.route -> PlaceholderScreen(
-            title = "年度报告",
-            description = "StatsRepository.report 已就绪，接入后生成可视化报告",
+        Destination.MusicSources.route -> UserApiScreen(
+            apis = uiState.userApis,
+            onImport = viewModel::importUserApi,
+            onActivate = viewModel::activateUserApi,
+            onRemove = viewModel::removeUserApi,
+            contentPadding = contentPadding,
             modifier = modifier,
         )
 
         Destination.Settings.route -> SettingsScreen(
             floatingPlayerBar = uiState.floatingPlayerBar,
+            showTranslation = uiState.showTranslation,
+            shuffleMode = uiState.shuffleMode,
             onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
+            onShowTranslationChange = viewModel::setShowTranslation,
+            onShuffleModeChange = viewModel::setShuffleMode,
+            contentPadding = contentPadding,
+            modifier = modifier,
+        )
+
+        Destination.Diary.route -> PlaceholderScreen(
+            title = "",
+            description = "听歌日记：DiaryRepository 已落库，界面待接入",
+            modifier = modifier,
+        )
+
+        Destination.Together.route -> PlaceholderScreen(
+            title = "",
+            description = "一起听：实现 TogetherTransport 后可创建 / 加入房间",
+            modifier = modifier,
+        )
+
+        Destination.Report.route -> PlaceholderScreen(
+            title = "",
+            description = "年度报告：统计已就绪（含 24 小时分布），可视化待接入",
             modifier = modifier,
         )
 
         else -> PlaceholderScreen(
-            title = "未实现",
+            title = "",
             description = "路由 $route 尚未接入页面",
             modifier = modifier,
         )

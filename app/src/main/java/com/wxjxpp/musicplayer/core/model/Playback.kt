@@ -6,6 +6,13 @@ package com.wxjxpp.musicplayer.core.model
 
 enum class RepeatMode { Off, All, One }
 
+/**
+ * 随机策略。
+ * True   = 真随机，每次独立掷骰，可能连续重复同一首
+ * Pseudo = 伪随机，一轮内不重复，播完一轮再洗牌
+ */
+enum class ShuffleMode { Pseudo, True }
+
 data class PlaybackState(
     val current: Song? = null,
     val isPlaying: Boolean = false,
@@ -13,6 +20,7 @@ data class PlaybackState(
     val durationMs: Long = 0L,
     val repeatMode: RepeatMode = RepeatMode.All,
     val shuffle: Boolean = false,
+    val shuffleMode: ShuffleMode = ShuffleMode.Pseudo,
     val speed: Float = 1f,
     val volume: Float = 1f,
 ) {

@@ -8,6 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Book
+import androidx.compose.material.icons.filled.Extension
 import androidx.compose.material.icons.filled.Groups
 import androidx.compose.material.icons.filled.Insights
 import androidx.compose.material.icons.filled.LibraryMusic
@@ -46,6 +47,7 @@ fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildLis
     add(DrawerItem(Destination.Home, "歌曲", Icons.Filled.MusicNote, DrawerGroup.Library))
     add(DrawerItem(Destination.Library, "本地曲库", Icons.Filled.LibraryMusic, DrawerGroup.Library))
     add(DrawerItem(Destination.Playlists, "歌单", Icons.Filled.QueueMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.MusicSources, "自定义音源", Icons.Filled.Extension, DrawerGroup.Library))
     add(DrawerItem(Destination.Diary, "听歌日记", Icons.Filled.Book, DrawerGroup.Personal))
     add(DrawerItem(Destination.Together, "一起听", Icons.Filled.Groups, DrawerGroup.Personal))
     if (isAnnualReportAvailable(today)) {

@@ -76,6 +76,12 @@ data class Song(
     val location: MediaLocation,
     val format: AudioFormat = AudioFormat(),
     val replayGain: ReplayGain = ReplayGain(),
+    /** 发行日期，搜索可命中。 */
+    val releaseDate: String? = null,
+    /** 描述/备注，搜索可命中。 */
+    val description: String? = null,
+    /** 标签，搜索可命中。 */
+    val tags: List<String> = emptyList(),
     /** 元数据是否已完整读取。扫描时可先建索引，再异步补齐。 */
     val metadataComplete: Boolean = false,
 ) {

@@ -12,6 +12,7 @@ sealed class Destination(val route: String) {
     data object Search : Destination("search")
     data object Library : Destination("library")
     data object Playlists : Destination("playlists")
+    data object MusicSources : Destination("music_sources")
     data object PlayerDetail : Destination("player")
     data object Diary : Destination("diary")
     data object Together : Destination("together")

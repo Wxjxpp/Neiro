@@ -1,0 +1,90 @@
+package com.wxjxpp.musicplayer.core.data
+
+import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import com.wxjxpp.musicplayer.core.model.RepeatMode
+import com.wxjxpp.musicplayer.core.model.ShuffleMode
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
+
+private val Context.settingsDataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
+
+/**
+ * DataStore 设置持久化。
+ *
+ * 新增设置项：在 Keys 里加一个 key，再补一对 observe/set 方法。
+ */
+class DataStoreSettingsRepository(context: Context) : SettingsRepository {
+
+    private val store = context.settingsDataStore
+
+    private object Keys {
+        val FloatingPlayerBar = booleanPreferencesKey("floating_player_bar")
+        val ReplayGain = booleanPreferencesKey("replay_gain")
+        val ShowTranslation = booleanPreferencesKey("show_translation")
+        val ShuffleMode = stringPreferencesKey("shuffle_mode")
+        val RepeatMode = stringPreferencesKey("repeat_mode")
+        val KaraokeLyrics = booleanPreferencesKey("karaoke_lyrics")
+        val ActiveUserApiId = stringPreferencesKey("active_user_api_id")
+    }
+
+    override fun observeFloatingPlayerBar(): Flow<Boolean> =
+        store.data.map { it[Keys.FloatingPlayerBar] ?: true }
+
+    override suspend fun setFloatingPlayerBar(enabled: Boolean) {
+        store.edit { it[Keys.FloatingPlayerBar] = enabled }
+    }
+
+    override fun observeReplayGainEnabled(): Flow<Boolean> =
+        store.data.map { it[Keys.ReplayGain] ?: false }
+
+    override suspend fun setReplayGainEnabled(enabled: Boolean) {
+        store.edit { it[Keys.ReplayGain] = enabled }
+    }
+
+    override fun observeShowTranslation(): Flow<Boolean> =
+        store.data.map { it[Keys.ShowTranslation] ?: true }
+
+    override suspend fun setShowTranslation(enabled: Boolean) {
+        store.edit { it[Keys.ShowTranslation] = enabled }
+    }
+
+    fun observeShuffleMode(): Flow<ShuffleMode> = store.data.map { prefs ->
+        runCatching { ShuffleMode.valueOf(prefs[Keys.ShuffleMode] ?: ShuffleMode.Pseudo.name) }
+            .getOrDefault(ShuffleMode.Pseudo)
+    }
+
+    suspend fun setShuffleMode(mode: ShuffleMode) {
+        store.edit { it[Keys.ShuffleMode] = mode.name }
+    }
+
+    fun observeRepeatMode(): Flow<RepeatMode> = store.data.map { prefs ->
+        runCatching { RepeatMode.valueOf(prefs[Keys.RepeatMode] ?: RepeatMode.All.name) }
+            .getOrDefault(RepeatMode.All)
+    }
+
+    suspend fun setRepeatMode(mode: RepeatMode) {
+        store.edit { it[Keys.RepeatMode] = mode.name }
+    }
+
+    fun observeKaraokeLyrics(): Flow<Boolean> =
+        store.data.map { it[Keys.KaraokeLyrics] ?: true }
+
+    suspend fun setKaraokeLyrics(enabled: Boolean) {
+        store.edit { it[Keys.KaraokeLyrics] = enabled }
+    }
+
+    fun observeActiveUserApiId(): Flow<String?> =
+        store.data.map { it[Keys.ActiveUserApiId]?.takeIf { id -> id.isNotBlank() } }
+
+    suspend fun setActiveUserApiId(id: String?) {
+        store.edit { prefs ->
+            if (id.isNullOrBlank()) prefs.remove(Keys.ActiveUserApiId) else prefs[Keys.ActiveUserApiId] = id
+        }
+    }
+}
