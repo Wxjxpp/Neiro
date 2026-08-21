@@ -145,7 +145,7 @@ class DefaultAppContainer(
     override val lyricsRepository: LyricsRepository =
         RoomLyricsRepository(database.lyricsDao(), lyricsLocator)
     override val statsRepository: StatsRepository =
-        RoomStatsRepository(database.playEventDao(), database.songDao())
+        RoomStatsRepository(database.playEventDao(), database.songDao(), database.appLaunchDao())
     override val diaryRepository: DiaryRepository =
         RoomDiaryRepository(database.diaryDao())
     override val appSettings = DataStoreSettingsRepository(application)
@@ -194,6 +194,8 @@ class DefaultAppContainer(
     override val togetherTransport: TogetherTransport = NoopTogetherTransport()
 
     init {
+        // 记录一次应用启动（听歌热力图的"启动次数"维度）
+        appScope.launch { runCatching { statsRepository.recordAppLaunch() } }
         // 在线歌曲取流：交给对应平台的音源
         media3Controller.remoteUrlResolver = { song -> resolveRemoteUrl(song) }
         media3Controller.onPlaybackError = { message -> notify(message) }

@@ -1,5 +1,7 @@
 package com.wxjxpp.musicplayer.core.data
 
+import com.wxjxpp.musicplayer.core.db.AppLaunchDao
+import com.wxjxpp.musicplayer.core.db.AppLaunchEntity
 import com.wxjxpp.musicplayer.core.db.DiaryDao
 import com.wxjxpp.musicplayer.core.db.LyricsDao
 import com.wxjxpp.musicplayer.core.db.PlayEventDao
@@ -9,6 +11,7 @@ import com.wxjxpp.musicplayer.core.db.toDomain
 import com.wxjxpp.musicplayer.core.db.toEntity
 import com.wxjxpp.musicplayer.core.lyrics.LyricsLocator
 import com.wxjxpp.musicplayer.core.model.DiaryEntry
+import com.wxjxpp.musicplayer.core.model.HeatmapDay
 import com.wxjxpp.musicplayer.core.model.ListeningReport
 import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.PlayEvent
@@ -122,12 +125,18 @@ class RoomLyricsRepository(
 class RoomStatsRepository(
     private val dao: PlayEventDao,
     private val songDao: SongDao,
+    private val launchDao: AppLaunchDao,
 ) : StatsRepository {
 
     override suspend fun record(event: PlayEvent) = dao.insert(event.toEntity())
 
     override fun observeRecent(limit: Int): Flow<List<PlayEvent>> =
         dao.observeRecent(limit).map { list -> list.map { it.toDomain() } }
+
+    override suspend fun recordAppLaunch() {
+        val now = System.currentTimeMillis()
+        launchDao.insert(AppLaunchEntity(id = "launch_$now", launchedAtMs = now))
+    }
 
     override suspend fun report(fromMs: Long, toMs: Long, label: String): ListeningReport {
         val events = dao.inRange(fromMs, toMs)
@@ -146,7 +155,7 @@ class RoomStatsRepository(
             histogram[calendar.get(Calendar.HOUR_OF_DAY)]++
         }
 
-        return ListeningReport(
+                return ListeningReport(
             periodLabel = label,
             totalSongs = byCount.size,
             totalDurationMs = events.sumOf { it.listenedMs },
@@ -155,6 +164,47 @@ class RoomStatsRepository(
             topAlbums = topSongs.mapNotNull { it.album }.distinctBy { it.title }.take(10),
             hourHistogram = histogram.toList(),
         )
+    }
+
+    override suspend fun heatmap(fromMs: Long, toMs: Long): List<HeatmapDay> {
+        val events = dao.inRange(fromMs, toMs)
+        val launches = launchDao.inRange(fromMs, toMs)
+        // 涉及到的歌曲一次查全，用于取标签
+        val songIds = events.map { it.songId }.distinct()
+        val tagOfSong = if (songIds.isEmpty()) emptyMap() else songDao.findByIds(songIds)
+            .associate { it.id to (it.tags?.split(",")?.mapNotNull { t -> t.trim().takeIf { s -> s.isNotEmpty() } }.orEmpty()) }
+        // 按自然日聚合（当天 0 点为 key）
+        val calendar = Calendar.getInstance()
+        fun dayKey(ms: Long): Long {
+            calendar.timeInMillis = ms
+            calendar.set(Calendar.HOUR_OF_DAY, 0)
+            calendar.set(Calendar.MINUTE, 0)
+            calendar.set(Calendar.SECOND, 0)
+            calendar.set(Calendar.MILLISECOND, 0)
+            return calendar.timeInMillis
+        }
+        data class Agg(var plays: Int = 0, var launches: Int = 0, var listened: Long = 0L) {
+            val tags = mutableMapOf<String, Int>()
+        }
+        val byDay = LinkedHashMap<Long, Agg>()
+        events.forEach { e ->
+            val agg = byDay.getOrPut(dayKey(e.startedAtMs)) { Agg() }
+            agg.plays++
+            agg.listened += e.listenedMs
+            tagOfSong[e.songId]?.forEach { tag -> agg.tags.merge(tag, 1, Int::plus) }
+        }
+        launches.forEach { l ->
+            byDay.getOrPut(dayKey(l.launchedAtMs)) { Agg() }.launches++
+        }
+        return byDay.map { (day, agg) ->
+            HeatmapDay(
+                dateMs = day,
+                playCount = agg.plays,
+                launchCount = agg.launches,
+                listenedMs = agg.listened,
+                topTags = agg.tags.entries.sortedByDescending { it.value }.take(5).toMap(),
+            )
+        }
     }
 }
 

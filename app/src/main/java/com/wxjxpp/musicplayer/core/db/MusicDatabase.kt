@@ -118,9 +118,15 @@ interface LyricsDao {
 
     @Upsert
     suspend fun upsert(entity: LyricsCacheEntity)
-
     @Delete
     suspend fun delete(entity: LyricsCacheEntity)
+}
+@Dao
+interface AppLaunchDao {
+    @Insert
+    suspend fun insert(launch: AppLaunchEntity)
+    @Query("SELECT * FROM app_launches WHERE launched_at_ms BETWEEN :fromMs AND :toMs")
+    suspend fun inRange(fromMs: Long, toMs: Long): List<AppLaunchEntity>
 }
 
 @Database(
@@ -131,16 +137,18 @@ interface LyricsDao {
         PlayEventEntity::class,
         DiaryEntryEntity::class,
         LyricsCacheEntity::class,
+        AppLaunchEntity::class,
     ],
-    version = 1,
+    version = 2,
     exportSchema = false,
 )
 abstract class MusicDatabase : RoomDatabase() {
-    abstract fun songDao(): SongDao
+abstract fun songDao(): SongDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playEventDao(): PlayEventDao
     abstract fun diaryDao(): DiaryDao
     abstract fun lyricsDao(): LyricsDao
+    abstract fun appLaunchDao(): AppLaunchDao
 
     companion object {
         const val NAME = "music_player.db"

@@ -75,6 +75,7 @@ fun SongEntity.toDomain(): Song = Song(
     description = description,
     tags = tags?.split(",")?.map { it.trim() }?.filter { it.isNotEmpty() }.orEmpty(),
     metadataComplete = metadataComplete,
+    addedAt = addedAt,
 )
 
 fun Playlist.toEntity(): PlaylistEntity = PlaylistEntity(

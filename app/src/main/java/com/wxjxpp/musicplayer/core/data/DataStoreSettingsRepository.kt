@@ -10,6 +10,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.wxjxpp.musicplayer.core.model.Quality
 import com.wxjxpp.musicplayer.core.model.RepeatMode
 import com.wxjxpp.musicplayer.core.model.ShuffleMode
+import com.wxjxpp.musicplayer.core.model.SongSortField
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -36,6 +37,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val PreferredQuality = stringPreferencesKey("preferred_quality")
         val OnlineSearchPlatform = stringPreferencesKey("online_search_platform")
         val NeteaseCookie = stringPreferencesKey("netease_cookie")
+        val SongSortField = stringPreferencesKey("song_sort_field")
+        val SongSortDescending = booleanPreferencesKey("song_sort_descending")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -117,8 +120,22 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     /** 网易云 Cookie（`MUSIC_U=xxx`），用于解锁 VIP / 无版权歌曲取流。 */
     fun observeNeteaseCookie(): Flow<String> =
         store.data.map { it[Keys.NeteaseCookie].orEmpty() }
-
     suspend fun setNeteaseCookie(cookie: String) {
         store.edit { it[Keys.NeteaseCookie] = cookie.trim() }
+    }
+
+    /** 歌曲列表排序字段。 */
+    fun observeSongSortField(): Flow<SongSortField> = store.data.map { prefs ->
+        runCatching { SongSortField.valueOf(prefs[Keys.SongSortField] ?: SongSortField.Title.name) }
+            .getOrDefault(SongSortField.Title)
+    }
+    suspend fun setSongSortField(field: SongSortField) {
+        store.edit { it[Keys.SongSortField] = field.name }
+    }
+    /** 歌曲列表排序方向（true = 倒序）。 */
+    fun observeSongSortDescending(): Flow<Boolean> =
+        store.data.map { it[Keys.SongSortDescending] ?: false }
+    suspend fun setSongSortDescending(descending: Boolean) {
+        store.edit { it[Keys.SongSortDescending] = descending }
     }
 }

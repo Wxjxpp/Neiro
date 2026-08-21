@@ -42,6 +42,7 @@ import com.wxjxpp.musicplayer.feature.home.SongsTopBar
 import com.wxjxpp.musicplayer.feature.placeholder.PlaceholderScreen
 import com.wxjxpp.musicplayer.feature.player.PlayerBar
 import com.wxjxpp.musicplayer.feature.player.PlayerDetailScreen
+import com.wxjxpp.musicplayer.feature.diary.DiaryScreen
 import com.wxjxpp.musicplayer.feature.player.QueueSheet
 import com.wxjxpp.musicplayer.feature.playlist.PickPlaylistDialog
 import com.wxjxpp.musicplayer.feature.playlist.PlaylistsScreen
@@ -112,11 +113,21 @@ fun MusicPlayerApp(container: AppContainer) {
         if (hasMediaPermission) viewModel.refresh() else requestPermission()
     }
 
+    // 曲库已持久化到 Room：启动时只读数据库展示，不自动重扫。
+    // 仅当用户在主页手动下拉刷新 / 点扫描按钮时才重新扫描。
+    // 首次启动（数据库为空）时自动扫一次，否则用户会面对空列表无从下手。
     LaunchedEffect(hasMediaPermission) {
-        if (hasMediaPermission && uiState.songs.isEmpty()) viewModel.refresh()
+        if (hasMediaPermission && uiState.songs.isEmpty() && !viewModel.hasScannedOnce) {
+            viewModel.hasScannedOnce = true
+            viewModel.refresh()
+        }
     }
 
     val inSelectionMode = uiState.selectedSongIds.isNotEmpty()
+    // 进入听歌日记页时加载热力图数据
+    LaunchedEffect(route) {
+        if (route == Destination.Diary.route) viewModel.loadHeatmap()
+    }
 
     // 返回优先级：多选态 → 抽屉 → 回歌曲页
     BackHandler(enabled = inSelectionMode || drawerState.isOpen || route != Destination.Home.route) {
@@ -184,6 +195,10 @@ fun MusicPlayerApp(container: AppContainer) {
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
                                     onSearch = { route = Destination.Search.route },
                                     onScan = scanLibrary,
+                                    sortField = uiState.songSortField,
+                                    sortDescending = uiState.songSortDescending,
+                                    onSortFieldChange = viewModel::setSongSortField,
+                                    onSortDirectionToggle = { viewModel.setSongSortDescending(!uiState.songSortDescending) },
                                 )
                             }
                         },
@@ -368,9 +383,10 @@ private fun RouteContent(
             modifier = modifier,
         )
 
-        Destination.Diary.route -> PlaceholderScreen(
-            title = "",
-            description = "听歌日记：DiaryRepository 已落库，界面待接入",
+        Destination.Diary.route -> DiaryScreen(
+            days = uiState.heatmapDays,
+            isLoading = uiState.isHeatmapLoading,
+            contentPadding = contentPadding,
             modifier = modifier,
         )
 

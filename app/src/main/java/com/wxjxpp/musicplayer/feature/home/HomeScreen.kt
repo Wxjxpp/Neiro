@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowDownward
+import androidx.compose.material.icons.filled.ArrowUpward
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Delete
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.SelectAll
+import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -35,6 +38,10 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -144,14 +151,19 @@ private fun SongRow(
     }
 }
 
-/** 歌曲页顶栏：扫描 + 搜索。 */
+/** 歌曲页顶栏：扫描 + 搜索 + 排序。 */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SongsTopBar(
     onOpenDrawer: () -> Unit,
     onSearch: () -> Unit,
     onScan: () -> Unit,
+    sortField: com.wxjxpp.musicplayer.core.model.SongSortField = com.wxjxpp.musicplayer.core.model.SongSortField.Title,
+    sortDescending: Boolean = false,
+    onSortFieldChange: (com.wxjxpp.musicplayer.core.model.SongSortField) -> Unit = {},
+    onSortDirectionToggle: () -> Unit = {},
 ) {
+    var showSortMenu by remember { mutableStateOf(false) }
     TopAppBar(
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -169,6 +181,47 @@ fun SongsTopBar(
             }
         },
         actions = {
+            // 排序：字段菜单 + 方向切换
+            Box {
+                IconButton(onClick = { showSortMenu = !showSortMenu }) {
+                    Icon(Icons.Filled.Sort, contentDescription = "排序方式")
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = showSortMenu,
+                    onDismissRequest = { showSortMenu = false },
+                ) {
+                    com.wxjxpp.musicplayer.core.model.SongSortField.entries.forEach { field ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = {
+                                Text(
+                                    text = if (sortField == field) "✓ ${field.displayName}" else field.displayName,
+                                    style = MaterialTheme.typography.bodyMedium,
+                                )
+                            },
+                            onClick = {
+                                onSortFieldChange(field)
+                                showSortMenu = false
+                            },
+                        )
+                    }
+                    androidx.compose.material3.HorizontalDivider()
+                    androidx.compose.material3.DropdownMenuItem(
+                        text = {
+                            Text(
+                                text = if (sortDescending) "当前：倒序" else "当前：正序",
+                                style = MaterialTheme.typography.bodyMedium,
+                            )
+                        },
+                        leadingIcon = {
+                            Icon(
+                                if (sortDescending) Icons.Filled.ArrowUpward else Icons.Filled.ArrowDownward,
+                                contentDescription = null,
+                            )
+                        },
+                        onClick = onSortDirectionToggle,
+                    )
+                }
+            }
             IconButton(onClick = onScan) {
                 Icon(Icons.Filled.Refresh, contentDescription = "扫描本地音乐")
             }

@@ -4,18 +4,21 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import com.wxjxpp.musicplayer.core.data.RoomSongRepository
+import com.wxjxpp.musicplayer.core.model.HeatmapDay
 import com.wxjxpp.musicplayer.core.model.Lyrics
 import com.wxjxpp.musicplayer.core.model.PlayEvent
 import com.wxjxpp.musicplayer.core.model.PlaybackState
 import com.wxjxpp.musicplayer.core.model.Playlist
 import com.wxjxpp.musicplayer.core.model.ShuffleMode
 import com.wxjxpp.musicplayer.core.model.Song
+import com.wxjxpp.musicplayer.core.model.SongSortField
 import com.wxjxpp.musicplayer.core.search.searchSongs
 import com.wxjxpp.musicplayer.core.userapi.UserApiInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.launchIn
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -57,6 +60,14 @@ data class ShellUiState(
 
     /** 网易云 Cookie（设置页编辑）。 */
     val neteaseCookie: String = "",
+
+    /** 歌曲列表排序。 */
+    val songSortField: SongSortField = SongSortField.Title,
+    val songSortDescending: Boolean = false,
+
+    /** 听歌热力图（最近一年）。 */
+    val heatmapDays: List<HeatmapDay> = emptyList(),
+    val isHeatmapLoading: Boolean = false,
 )
 
 class AppViewModel(
@@ -72,11 +83,13 @@ class AppViewModel(
     /** 记录当前歌曲的开始时间，用于生成播放事件。 */
     private var currentSongStartedAt: Long = 0L
     private var currentSongId: String? = null
+    /** 歌曲 id → 播放次数（排序用）。 */
+    private var playCounts: Map<String, Int> = emptyMap()
 
     init {
         container.songRepository.observeSongs()
             .onEach { songs ->
-                _uiState.update { it.copy(songs = songs) }
+                _uiState.update { it.copy(songs = sortSongs(songs)) }
                 if (queue.value.isEmpty() && songs.isNotEmpty()) {
                     container.playerController.setQueue(songs, autoPlay = false)
                 }
@@ -113,6 +126,21 @@ class AppViewModel(
         container.appSettings.observeNeteaseCookie()
             .onEach { cookie -> _uiState.update { it.copy(neteaseCookie = cookie) } }
             .launchIn(viewModelScope)
+        // 歌曲排序设置
+        container.appSettings.observeSongSortField()
+            .onEach { field -> _uiState.update { it.copy(songSortField = field) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeSongSortDescending()
+            .onEach { desc -> _uiState.update { it.copy(songSortDescending = desc) } }
+            .launchIn(viewModelScope)
+        // 播放次数统计（排序用）：每次播放事件变化后重新聚合
+        container.statsRepository.observeRecent(limit = 2000)
+            .map { events -> events.groupingBy { it.songId }.eachCount() }
+            .onEach { counts ->
+                playCounts = counts
+                applySongSort()
+            }
+            .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
             .onEach { state -> onSongChanged(state.current) }
@@ -120,6 +148,9 @@ class AppViewModel(
     }
 
     // ---- 曲库 ----
+
+    /** 本次进程是否已做过首次扫描（防止空列表时反复触发）。 */
+    var hasScannedOnce = false
 
     fun refresh() {
         if (_uiState.value.isRefreshing) return
@@ -131,6 +162,43 @@ class AppViewModel(
     }
 
     // ---- 设置 ----
+
+    /** 按当前排序设置对歌曲列表排序。 */
+    private fun sortSongs(songs: List<Song>): List<Song> {
+        val state = _uiState.value
+        val sorted = when (state.songSortField) {
+            SongSortField.Title -> songs.sortedWith(compareBy(java.text.Collator.getInstance()) { it.title })
+            SongSortField.AddedTime -> songs.sortedBy { it.addedAt }
+            SongSortField.PlayCount -> songs.sortedByDescending { playCounts[it.id] ?: 0 }
+        }
+        return if (state.songSortDescending) sorted.asReversed() else sorted
+    }
+
+    /** 排序设置变化后重排当前列表。 */
+    private fun applySongSort() {
+        _uiState.update { it.copy(songs = sortSongs(it.songs)) }
+    }
+
+    fun setSongSortField(field: SongSortField) {
+        viewModelScope.launch { container.appSettings.setSongSortField(field) }
+    }
+
+    fun setSongSortDescending(descending: Boolean) {
+        viewModelScope.launch { container.appSettings.setSongSortDescending(descending) }
+    }
+
+    /** 加载听歌热力图（最近一年）。 */
+    fun loadHeatmap() {
+        if (_uiState.value.isHeatmapLoading) return
+        _uiState.update { it.copy(isHeatmapLoading = true) }
+        viewModelScope.launch {
+            val now = System.currentTimeMillis()
+            val yearAgo = now - 365L * 24 * 60 * 60 * 1000
+            val days = runCatching { container.statsRepository.heatmap(yearAgo, now) }
+                .getOrDefault(emptyList())
+            _uiState.update { it.copy(heatmapDays = days, isHeatmapLoading = false) }
+        }
+    }
 
     fun setFloatingPlayerBar(enabled: Boolean) {
         viewModelScope.launch { container.settingsRepository.setFloatingPlayerBar(enabled) }

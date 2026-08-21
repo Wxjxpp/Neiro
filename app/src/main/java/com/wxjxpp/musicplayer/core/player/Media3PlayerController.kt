@@ -266,23 +266,34 @@ class Media3PlayerController(
             onPlaybackError?.invoke("未配置在线取流能力")
             return
         }
+        // 取消上一次未完成的取流，并立即静默播放器：
+        // 否则取流期间旧歌继续出声，取流失败时界面显示 A 却一直在放 B
+        resolveJob?.cancel()
+        onPlayer { p ->
+            p.stop()
+            p.clearMediaItems()
+        }
+        val generation = ++resolveGeneration
         _state.update { it.copy(isBuffering = true) }
         resolveJob = scope.launch {
             val result = runCatching { resolver(song) }.getOrElse { error ->
                 RemoteUrl.Failure(error.message ?: "取流失败")
             }
-            // 期间用户可能已经切歌，过期结果直接丢弃
-            if (_state.value.current?.id != song.id) return@launch
+            // 期间用户已经切歌，过期结果直接丢弃
+            if (generation != resolveGeneration || _state.value.current?.id != song.id) return@launch
             _state.update { it.copy(isBuffering = false) }
             when (result) {
                 is RemoteUrl.Success -> playUri(song, result.url, playWhenReady)
                 is RemoteUrl.Failure -> {
                     _state.update { it.copy(isPlaying = false) }
-                    onPlaybackError?.invoke(result.reason)
+                    onPlaybackError?.invoke("「${song.title}」取流失败：${result.reason}")
                 }
             }
         }
     }
+
+    /** 取流代际计数：每次切歌 +1，过期回调据此丢弃。 */
+    private var resolveGeneration = 0
 
     private fun playUri(song: Song, uri: String, playWhenReady: Boolean) {
         val item = MediaItem.Builder()

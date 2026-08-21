@@ -50,6 +50,10 @@ interface StatsRepository {
     suspend fun record(event: PlayEvent)
     fun observeRecent(limit: Int = 100): Flow<List<PlayEvent>>
     suspend fun report(fromMs: Long, toMs: Long, label: String): ListeningReport
+    /** 听歌热力图：[fromMs, toMs] 范围内按天聚合（含启动次数与歌曲标签）。 */
+    suspend fun heatmap(fromMs: Long, toMs: Long): List<HeatmapDay>
+    /** 记录一次应用冷启动。 */
+    suspend fun recordAppLaunch()
 }
 
 interface DiaryRepository {

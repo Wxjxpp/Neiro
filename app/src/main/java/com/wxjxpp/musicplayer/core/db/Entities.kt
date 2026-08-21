@@ -98,3 +98,10 @@ data class LyricsCacheEntity(
     @ColumnInfo(name = "is_override") val isOverride: Boolean,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
 )
+
+/** 应用启动记录：听歌热力图的"启动次数"维度，每次冷启动一行。 */
+@Entity(tableName = "app_launches")
+data class AppLaunchEntity(
+    @PrimaryKey val id: String,
+    @ColumnInfo(name = "launched_at_ms") val launchedAtMs: Long,
+)

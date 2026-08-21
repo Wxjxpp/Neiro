@@ -95,9 +95,21 @@ data class Song(
     val tags: List<String> = emptyList(),
     /** 元数据是否已完整读取。扫描时可先建索引，再异步补齐。 */
     val metadataComplete: Boolean = false,
+    /** 加入曲库的时间（毫秒），用于"文件时间"排序。 */
+    val addedAt: Long = 0L,
 ) {
     val artistName: String get() = artists.joinToString(" / ") { it.name }.ifEmpty { "未知艺术家" }
     val albumTitle: String get() = album?.title ?: "未知专辑"
+}
+
+/** 歌曲列表排序字段。 */
+enum class SongSortField(val displayName: String) {
+    /** 首字母 / 标题排序。 */
+    Title("首字母"),
+    /** 文件加入时间（addedAt）。 */
+    AddedTime("文件时间"),
+    /** 播放次数（按播放统计）。 */
+    PlayCount("播放次数"),
 }
 
 /** 歌单。本地歌单、云端歌单、每日推荐都用它。 */
