@@ -30,7 +30,11 @@ class OnlineMusicSource(
     /** 网易云官方取流入口（weapi）。其它平台为 null，直接走脚本。 */
     private val neteaseStream: (suspend (String, String) -> String?)? =
         (platform as? com.wxjxpp.musicplayer.core.source.online.NeteasePlatform)
-            ?.let { n -> { songId: String, quality: String -> n.streamUrl(songId, quality) } }
+            ?.let { n ->
+                { songId: String, quality: String ->
+                    n.streamUrl(songId, quality)
+                }
+            }
 
     override val id: String = platform.id
     override val displayName: String = platform.displayName
@@ -59,8 +63,9 @@ class OnlineMusicSource(
             ?: return PlayUrlResult.Failure("这不是在线歌曲")
 
         // 1. 平台官方接口优先（网易云 weapi：免费歌免登录，带 Cookie 解锁 VIP）
-        if (neteaseStream != null) {
-            val official = runCatching { neteaseStream.invoke(remote.songId, quality.toScriptQuality()) }
+        val officialStream = neteaseStream
+        if (officialStream != null) {
+            val official = runCatching { officialStream(remote.songId, quality.toScriptQuality()) }
                 .getOrNull()
             if (official != null) return PlayUrlResult.Success(official)
         }

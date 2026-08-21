@@ -96,7 +96,14 @@ object NeteaseCrypto {
         val modulus = java.math.BigInteger(1, Base64.decode(PUBLIC_KEY, Base64.DEFAULT).let { derModulus(it) })
         val exponent = java.math.BigInteger("10001", 16)
         val m = java.math.BigInteger(1, input)
-        return m.modPow(exponent, modulus).toByteArray(128)
+        return padTo128(m.modPow(exponent, modulus).toByteArray())
+    }
+
+    /** BigInteger.toByteArray() 可能带符号位或长度不足，统一补齐到 128 字节。 */
+    private fun padTo128(bytes: ByteArray): ByteArray = when {
+        bytes.size == 128 -> bytes
+        bytes.size > 128 -> bytes.copyOfRange(bytes.size - 128, bytes.size)
+        else -> ByteArray(128 - bytes.size) + bytes
     }
 
     /**

@@ -11,7 +11,6 @@ import androidx.compose.ui.text.style.TextMotion
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
 import com.wxjxpp.musicplayer.core.lyrics.SyncedLyricsMapper
 import com.wxjxpp.musicplayer.core.model.Lyrics
-import com.wxjxpp.musicplayer.ui.theme.AppTheme
 
 /**
  * 歌词面板。
@@ -35,7 +34,6 @@ fun LyricsPane(
     // offset 已在映射时应用，这里直接给原始播放位置
     val synced = remember(lyrics) { SyncedLyricsMapper.map(lyrics) }
     val currentPosition = remember(synced) { { positionMs.toInt() } }
-    val dimens = AppTheme.dimens
 
     KaraokeLyricsView(
         listState = listState,
@@ -43,8 +41,6 @@ fun LyricsPane(
         currentPosition = currentPosition,
         onLineClicked = { /* 行点击：暂不做 seek，保留交互位 */ },
         onLinePressed = { },
-        showTranslation = showTranslation,
-        showPhonetic = false,
         textColor = MaterialTheme.colorScheme.primary,
         blendMode = BlendMode.SrcIn,
         useBlurEffect = false,

@@ -38,14 +38,14 @@ internal class NeteasePlatform(
     @Volatile
     private var warmedUp = false
 
-    private fun warmUp() {
+    private suspend fun ensureWarm() {
         if (warmedUp) return
         warmedUp = true
         runCatching { http.get("https://music.163.com/") }
     }
 
     override suspend fun search(keyword: String, page: Int, pageSize: Int): List<Song> {
-        warmUp()
+        ensureWarm()
         val form = NeteaseCrypto.eapi(
             "/api/search/song/list/page",
             mapOf(
@@ -97,7 +97,7 @@ internal class NeteasePlatform(
      * 返回 null 时上层会尝试音源脚本兜底。
      */
     suspend fun streamUrl(songId: String, quality: String): String? {
-        warmUp()
+        ensureWarm()
         val cookie = cookieProvider()
         val level = when (quality) {
             "128k" -> "standard"
@@ -142,7 +142,7 @@ internal class NeteasePlatform(
         }
 
         // 2. eapi 官方歌词（lrc/tlyric 免登录；yrc 逐字需 Cookie）
-        warmUp()
+        ensureWarm()
         val form = NeteaseCrypto.eapi(
             "/api/song/lyric/v1",
             mapOf(
