@@ -14,6 +14,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
 import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,10 +34,18 @@ fun SettingsScreen(
     showTranslation: Boolean,
     shuffleMode: ShuffleMode,
     neteaseCookie: String = "",
+    lyricsOffsetMs: Long = 0L,
+    pauseOnHeadphoneDisconnect: Boolean = true,
+    pauseOnAudioFocusLoss: Boolean = true,
+    ambientGlow: Boolean = true,
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,
     onShuffleModeChange: (ShuffleMode) -> Unit,
     onNeteaseCookieChange: (String) -> Unit = {},
+    onLyricsOffsetChange: (Long) -> Unit = {},
+    onPauseOnHeadphoneDisconnectChange: (Boolean) -> Unit = {},
+    onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
+    onAmbientGlowChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -65,7 +74,46 @@ fun SettingsScreen(
             checked = showTranslation,
             onCheckedChange = onShowTranslationChange,
         )
+        // 歌词偏移（滑杆，±2000ms）
+        var offsetValue by remember(lyricsOffsetMs) {
+            mutableStateOf(lyricsOffsetMs.toFloat())
+        }
+        Text(
+            text = "歌词偏移：%+d ms（正数提前 / 负数延后）".format(offsetValue.toInt()),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(top = dimens.spaceSm),
+        )
+        Slider(
+            value = offsetValue,
+            onValueChange = { offsetValue = it },
+            onValueChangeFinished = { onLyricsOffsetChange(offsetValue.toLong()) },
+            valueRange = -2000f..2000f,
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
 
+        SectionTitle("播放行为")
+        SwitchRow(
+            title = "拔出耳机自动暂停",
+            subtitle = "断开有线耳机或蓝牙音频时自动暂停播放",
+            checked = pauseOnHeadphoneDisconnect,
+            onCheckedChange = onPauseOnHeadphoneDisconnectChange,
+        )
+        SwitchRow(
+            title = "其他应用发声时暂停",
+            subtitle = "其他应用抢占音频焦点时暂停本应用播放",
+            checked = pauseOnAudioFocusLoss,
+            onCheckedChange = onPauseOnAudioFocusLossChange,
+        )
+        HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
+
+        SectionTitle("外观")
+        SwitchRow(
+            title = "动态流光背景",
+            subtitle = "播放页根据封面主色呈现流动渐变背景",
+            checked = ambientGlow,
+            onCheckedChange = onAmbientGlowChange,
+        )
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
 
         SectionTitle("随机播放")

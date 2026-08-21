@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.wxjxpp.musicplayer.core.model.Quality
@@ -39,6 +40,10 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val NeteaseCookie = stringPreferencesKey("netease_cookie")
         val SongSortField = stringPreferencesKey("song_sort_field")
         val SongSortDescending = booleanPreferencesKey("song_sort_descending")
+        val LyricsOffsetMs = longPreferencesKey("lyrics_offset_ms")
+        val PauseOnHeadphoneDisconnect = booleanPreferencesKey("pause_on_headphone_disconnect")
+        val PauseOnAudioFocusLoss = booleanPreferencesKey("pause_on_audio_focus_loss")
+        val AmbientGlow = booleanPreferencesKey("ambient_glow")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -137,5 +142,33 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.SongSortDescending] ?: false }
     suspend fun setSongSortDescending(descending: Boolean) {
         store.edit { it[Keys.SongSortDescending] = descending }
+    }
+
+    /** 歌词手动偏移（毫秒），正数 = 歌词提前。 */
+    fun observeLyricsOffset(): Flow<Long> =
+        store.data.map { it[Keys.LyricsOffsetMs] ?: 0L }
+    suspend fun setLyricsOffset(offsetMs: Long) {
+        store.edit { it[Keys.LyricsOffsetMs] = offsetMs }
+    }
+
+    /** 拔出耳机自动暂停（含蓝牙断开）。 */
+    fun observePauseOnHeadphoneDisconnect(): Flow<Boolean> =
+        store.data.map { it[Keys.PauseOnHeadphoneDisconnect] ?: true }
+    suspend fun setPauseOnHeadphoneDisconnect(enabled: Boolean) {
+        store.edit { it[Keys.PauseOnHeadphoneDisconnect] = enabled }
+    }
+
+    /** 其他应用发声时自动暂停本应用播放。 */
+    fun observePauseOnAudioFocusLoss(): Flow<Boolean> =
+        store.data.map { it[Keys.PauseOnAudioFocusLoss] ?: true }
+    suspend fun setPauseOnAudioFocusLoss(enabled: Boolean) {
+        store.edit { it[Keys.PauseOnAudioFocusLoss] = enabled }
+    }
+
+    /** 播放页动态流光背景（根据封面取色流动渐变）。 */
+    fun observeAmbientGlow(): Flow<Boolean> =
+        store.data.map { it[Keys.AmbientGlow] ?: true }
+    suspend fun setAmbientGlow(enabled: Boolean) {
+        store.edit { it[Keys.AmbientGlow] = enabled }
     }
 }

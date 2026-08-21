@@ -1,9 +1,13 @@
 package com.wxjxpp.musicplayer.core.player
-
+import android.content.BroadcastReceiver
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
+import android.media.AudioManager
 import android.net.Uri
 import android.os.Looper
 import androidx.annotation.OptIn
+import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -44,6 +48,46 @@ class Media3PlayerController(
     private val scope: CoroutineScope,
     private val progressIntervalMs: Long = 250L,
 ) : PlayerController {
+
+    /** 拔出耳机自动暂停（含蓝牙断开）。默认开。 */
+    @Volatile
+    var pauseOnHeadphoneDisconnect: Boolean = true
+        set(value) {
+            field = value
+            updateNoisyReceiver()
+        }
+
+    /** 其他应用抢占音频焦点时暂停。默认开。 */
+    @Volatile
+    var pauseOnAudioFocusLoss: Boolean = true
+
+    /** AUDIO_BECOMING_NOISY 广播接收器：拔出耳机/断开蓝牙时系统会发此广播。 */
+    private val becomingNoisyReceiver = object : BroadcastReceiver() {
+        override fun onReceive(ctx: Context?, intent: Intent?) {
+            if (intent?.action == AudioManager.ACTION_AUDIO_BECOMING_NOISY &&
+                pauseOnHeadphoneDisconnect
+            ) {
+                onPlayer { p -> p.pause() }
+            }
+        }
+    }
+    private var noisyReceiverRegistered = false
+
+    /** 按设置开关注册/注销耳机拔出广播。仅在播放中才有必要监听。 */
+    private fun updateNoisyReceiver() {
+        if (pauseOnHeadphoneDisconnect && !noisyReceiverRegistered) {
+            ContextCompat.registerReceiver(
+                context,
+                becomingNoisyReceiver,
+                IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+                ContextCompat.RECEIVER_NOT_EXPORTED,
+            )
+            noisyReceiverRegistered = true
+        } else if (!pauseOnHeadphoneDisconnect && noisyReceiverRegistered) {
+            context.unregisterReceiver(becomingNoisyReceiver)
+            noisyReceiverRegistered = false
+        }
+    }
 
     /**
      * 在线歌曲取流回调。
@@ -98,10 +142,20 @@ class Media3PlayerController(
                 .build(),
             /* handleAudioFocus = */ true,
         )
-        .setHandleAudioBecomingNoisy(true)
+        .setHandleAudioBecomingNoisy(false)
         .build()
         .apply {
             addListener(object : Player.Listener {
+                /** 系统音频焦点回调：按用户设置决定是否真的暂停。 */
+                override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+                    if (reason == Player.PLAY_WHEN_READY_CHANGE_REASON_AUDIO_FOCUS_LOSS &&
+                        !pauseOnAudioFocusLoss && playWhenReady == false
+                    ) {
+                        // 用户关闭了"他源发声暂停"：焦点丢了也继续放
+                        onPlayer { p -> p.play() }
+                    }
+                }
+
                 override fun onIsPlayingChanged(isPlaying: Boolean) {
                     _state.update { it.copy(isPlaying = isPlaying) }
                     if (isPlaying) startProgressTicker() else stopProgressTicker()
@@ -244,6 +298,10 @@ class Media3PlayerController(
 
     override fun release() {
         stopProgressTicker()
+        if (noisyReceiverRegistered) {
+            runCatching { context.unregisterReceiver(becomingNoisyReceiver) }
+            noisyReceiverRegistered = false
+        }
         onPlayer { it.release() }
     }
 

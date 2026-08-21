@@ -68,6 +68,16 @@ data class ShellUiState(
     /** 听歌热力图（最近一年）。 */
     val heatmapDays: List<HeatmapDay> = emptyList(),
     val isHeatmapLoading: Boolean = false,
+
+    /** 歌词手动偏移（毫秒），正数 = 歌词提前。 */
+    val lyricsOffsetMs: Long = 0L,
+
+    /** 拔出耳机自动暂停。 */
+    val pauseOnHeadphoneDisconnect: Boolean = true,
+    /** 他源发声自动暂停。 */
+    val pauseOnAudioFocusLoss: Boolean = true,
+    /** 播放页动态流光背景。 */
+    val ambientGlow: Boolean = true,
 )
 
 class AppViewModel(
@@ -140,6 +150,26 @@ class AppViewModel(
                 playCounts = counts
                 applySongSort()
             }
+            .launchIn(viewModelScope)
+        // 歌词偏移
+        container.appSettings.observeLyricsOffset()
+            .onEach { offset -> _uiState.update { it.copy(lyricsOffsetMs = offset) } }
+            .launchIn(viewModelScope)
+        // 耳机/焦点/流光设置，并同步到播放器
+        container.appSettings.observePauseOnHeadphoneDisconnect()
+            .onEach { enabled ->
+                _uiState.update { it.copy(pauseOnHeadphoneDisconnect = enabled) }
+                container.playerController.pauseOnHeadphoneDisconnect = enabled
+            }
+            .launchIn(viewModelScope)
+        container.appSettings.observePauseOnAudioFocusLoss()
+            .onEach { enabled ->
+                _uiState.update { it.copy(pauseOnAudioFocusLoss = enabled) }
+                container.playerController.pauseOnAudioFocusLoss = enabled
+            }
+            .launchIn(viewModelScope)
+        container.appSettings.observeAmbientGlow()
+            .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
             .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
@@ -224,6 +254,25 @@ class AppViewModel(
     fun seekToFraction(fraction: Float) {
         val duration = playbackState.value.durationMs
         container.playerController.seekTo((duration * fraction).toLong())
+    }
+
+    /** 点击歌词行跳转到指定时间。 */
+    fun seekTo(positionMs: Long) = container.playerController.seekTo(positionMs)
+
+    fun setLyricsOffset(offsetMs: Long) {
+        viewModelScope.launch { container.appSettings.setLyricsOffset(offsetMs) }
+    }
+
+    fun setPauseOnHeadphoneDisconnect(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setPauseOnHeadphoneDisconnect(enabled) }
+    }
+
+    fun setPauseOnAudioFocusLoss(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setPauseOnAudioFocusLoss(enabled) }
+    }
+
+    fun setAmbientGlow(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setAmbientGlow(enabled) }
     }
 
     /** 播放整个选中的歌曲集合。 */
