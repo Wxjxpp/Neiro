@@ -56,7 +56,10 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
-    var showLocal by remember(query, onlineResults) { mutableStateOf(localResults.isNotEmpty()) }
+    // 在线/本地 Tab 状态：仅聚合模式下有意义；默认先看在线结果。
+    // （旧实现 showLocal 初值取 localResults.isNotEmpty()，且被错误地用于控制在线列表展示，
+    //   导致"选在线显示本地、选本地显示在线"，这里重写为明确的 Tab 语义）
+    var showLocalTab by remember(query, onlineResults) { mutableStateOf(false) }
     val allLocalEmpty = localResults.isEmpty() && !isLoadingOnline && onlineResults.isEmpty()
 
     Column(modifier = modifier.fillMaxSize().padding(contentPadding)) {
@@ -107,16 +110,14 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            val toggle = "在线"
-                            Text(toggle, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            // 在线/本地切开关
-                            val labels = listOf(toggle, "本地")
-                            var active by remember { mutableStateOf(0) }
+                            // 在线/本地切换：i=0 在线，i=1 本地
+                            val labels = listOf("在线", "本地")
+                            var active by remember(query, onlineResults) { mutableStateOf(if (showLocalTab) 1 else 0) }
                             SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
                                 labels.forEachIndexed { i, label ->
                                     SegmentedButton(
                                         selected = active == i,
-                                        onClick = { active = i; showLocal = i == 1 },
+                                        onClick = { active = i; showLocalTab = (i == 1) },
                                         shape = SegmentedButtonDefaults.itemShape(i, labels.size),
                                         label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                                     )
@@ -136,27 +137,23 @@ fun SearchScreen(
                     }
                 }
 
-                // 在线结果
-                val onlineList = if (currentOnlinePlatform == OnlineSearchRepository.ALL) onlineResults
-                    else onlineResults
-                if (showLocal || currentOnlinePlatform != OnlineSearchRepository.ALL) {
+                // 聚合模式按 Tab 过滤；单平台模式始终展示在线结果
+                val showOnline = if (currentOnlinePlatform == OnlineSearchRepository.ALL) !showLocalTab else true
+                val showLocalList = if (currentOnlinePlatform == OnlineSearchRepository.ALL) showLocalTab else false
+                if (showOnline && onlineResults.isNotEmpty()) {
                     item {
-                        SectionHeader(
-                            text = if (currentOnlinePlatform == OnlineSearchRepository.ALL) "在线结果（${onlineResults.size}）"
-                                else "在线结果（${onlineResults.size}）",
-                        )
+                        SectionHeader("在线结果（${onlineResults.size}）")
                     }
-                    items(onlineList, key = { it.id }) { song ->
+                    items(onlineResults, key = { "online_${it.id}" }) { song ->
                         SearchResultRow(song = song, onClick = { onSongClick(song) })
                     }
                 }
-
                 // 本地结果
-                if (localResults.isNotEmpty()) {
+                if (showLocalList && localResults.isNotEmpty()) {
                     item {
                         SectionHeader("本地曲库（${localResults.size}）")
                     }
-                    items(localResults, key = { it.id }) { song ->
+                    items(localResults, key = { "local_${it.id}" }) { song ->
                         SearchResultRow(song = song, onClick = { onSongClick(song) })
                     }
                 }

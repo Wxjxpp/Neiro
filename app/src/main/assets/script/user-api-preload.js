@@ -349,13 +349,17 @@ globalThis.lx_setup = (key, id, name, description, version, author, homepage, ra
     try {
       for (const source of allSources) {
         const userSource = info.sources[source]
-        if (!userSource || userSource.type !== 'music') continue
+        // 容错：部分脚本省略 type 字段，只要声明了该平台就按音乐源处理
+        if (!userSource || (userSource.type && userSource.type !== 'music')) continue
+        const userActions = Array.isArray(userSource.actions) ? userSource.actions : []
+        const userQualitys = Array.isArray(userSource.qualitys) ? userSource.qualitys : []
+        if (!userActions.length) continue
         const qualitys = supportQualitys[source]
         const actions = supportActions[source]
         sourceInfo.sources[source] = {
           type: 'music',
-          actions: actions.filter((a) => userSource.actions.includes(a)),
-          qualitys: qualitys.filter((q) => userSource.qualitys.includes(q)),
+          actions: actions.filter((a) => userActions.includes(a)),
+          qualitys: qualitys.filter((q) => userQualitys.includes(q)),
         }
       }
     } catch (error) {

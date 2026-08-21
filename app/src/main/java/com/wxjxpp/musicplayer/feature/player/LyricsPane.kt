@@ -6,9 +6,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
+import androidx.compose.ui.text.font.Font
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextMotion
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
+import com.wxjxpp.musicplayer.R
 import com.wxjxpp.musicplayer.core.lyrics.SyncedLyricsMapper
 import com.wxjxpp.musicplayer.core.model.Lyrics
 
@@ -21,7 +24,14 @@ import com.wxjxpp.musicplayer.core.model.Lyrics
  * - 间奏自动显示呼吸点，非焦点行渐隐模糊
  *
  * 本组件只做一件事：把内部 [Lyrics] 模型映射为 SyncedLyrics 并传入渲染器。
+ *
+ * **字体注意**：lyrics-ui 的 NativeTextEngine 需要字体文件字节来构建 SDF 图集，
+ * 系统默认字体获取链路依赖 `SystemFonts.getAvailableFonts()`（API 29+），
+ * 在 API < 29 上拿不到字节 → 图集为空 → 整页黑块。
+ * 因此这里显式传一个打包进 APK 的字体（res/font），渲染器会通过
+ * `Resources.openRawResource()` 反射读取，全版本可用。
  */
+private val LyricsFontFamily = FontFamily(Font(R.font.noto_sans_sc_regular))
 @Composable
 fun LyricsPane(
     lyrics: Lyrics,
@@ -46,10 +56,12 @@ fun LyricsPane(
         useBlurEffect = false,
         normalLineTextStyle = MaterialTheme.typography.titleMedium.copy(
             fontWeight = FontWeight.Bold,
+            fontFamily = LyricsFontFamily,
             textMotion = TextMotion.Animated,
         ),
         accompanimentLineTextStyle = MaterialTheme.typography.bodyMedium.copy(
             fontWeight = FontWeight.Bold,
+            fontFamily = LyricsFontFamily,
             textMotion = TextMotion.Animated,
         ),
         modifier = modifier,

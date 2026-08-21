@@ -93,12 +93,45 @@ internal class NeteasePlatform(
     /**
      * 取播放地址。
      *
-     * level 映射与 LX 一致：standard/exhigh/lossless/hires/jymaster。
+     * 策略（2026-08 实测）：
+     * 1. **官方公开 API**（`/api/song/enhance/player/url`，GET，无加密）：
+     *    weapi 取流接口已被风控（返回空 body），而这个老接口仍对未登录设备放行
+     *    免费歌曲（fee=0/8）；带 `MUSIC_U` Cookie 时 VIP 歌也能直接出 URL。
+     * 2. **weapi 加密接口**兜底：部分场景下仍可用（带 Cookie 时）。
+     *
      * 返回 null 时上层会尝试音源脚本兜底。
      */
     suspend fun streamUrl(songId: String, quality: String): String? {
         ensureWarm()
         val cookie = cookieProvider()
+        val br = when (quality) {
+            "128k" -> 128000
+            "flac" -> 999000
+            "hires" -> 999000
+            else -> 320000
+        }
+        // 1) 官方公开 API（GET，无需加密；Cookie 直接透传）
+        runCatching {
+            val response = http.get(
+                "https://music.163.com/api/song/enhance/player/url" +
+                    "?id=$songId&ids=%5B$songId%5D&br=$br",
+                headers = buildMap {
+                    put("User-Agent", pcUa)
+                    put("Referer", "https://music.163.com")
+                    if (cookie.isNotBlank()) put("Cookie", cookie)
+                },
+            )
+            if (response.isSuccessful) {
+                val root = runCatching { JSONObject(response.body) }.getOrNull()
+                val url = root?.optJSONArray("data")?.optJSONObject(0)
+                    ?.optString("url")
+                    ?.takeIf { it.startsWith("http") }
+                // CDN 返回的是 http://，统一升级 https（CDN 支持），
+                // 避免 Android 9+ 明文流量限制导致 ExoPlayer 播放失败
+                if (url != null) return url.replaceFirst("http://", "https://")
+            }
+        }
+        // 2) weapi 加密接口兜底
         val level = when (quality) {
             "128k" -> "standard"
             "320k" -> "exhigh"
@@ -116,18 +149,18 @@ internal class NeteasePlatform(
                 "csrf_token" to csrf,
             ),
         )
-        val response = http.postForm(
+        val weapiResponse = http.postForm(
             "https://music.163.com/weapi/song/enhance/player/url/v1",
             form,
-            headers = mapOf(
-                "User-Agent" to pcUa,
-                "origin" to "https://music.163.com",
-                "Referer" to "https://music.163.com",
-                "Cookie" to cookie,
-            ),
+            headers = buildMap {
+                put("User-Agent", pcUa)
+                put("origin", "https://music.163.com")
+                put("Referer", "https://music.163.com")
+                if (cookie.isNotBlank()) put("Cookie", cookie)
+            },
         )
-        if (!response.isSuccessful) return null
-        val root = runCatching { JSONObject(response.body) }.getOrNull() ?: return null
+        if (!weapiResponse.isSuccessful) return null
+        val root = runCatching { JSONObject(weapiResponse.body) }.getOrNull() ?: return null
         if (root.optInt("code", -1) != 200) return null
         return root.optJSONArray("data")?.optJSONObject(0)
             ?.optString("url")

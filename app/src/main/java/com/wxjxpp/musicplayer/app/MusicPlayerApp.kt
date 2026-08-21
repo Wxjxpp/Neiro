@@ -77,6 +77,18 @@ fun MusicPlayerApp(container: AppContainer) {
     }
 
     var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
+    // 展开播放详情前的来源页面：关闭详情时回到原页面，而不是永远回首页。
+    var routeBeforePlayerDetail by rememberSaveable { mutableStateOf<String?>(null) }
+    fun expandPlayerDetail() {
+        if (route != Destination.PlayerDetail.route) {
+            routeBeforePlayerDetail = route
+            route = Destination.PlayerDetail.route
+        }
+    }
+    fun collapsePlayerDetail() {
+        route = routeBeforePlayerDetail ?: Destination.Home.route
+        routeBeforePlayerDetail = null
+    }
     var showPlaylistPicker by remember { mutableStateOf(false) }
     var showQueueSheet by remember { mutableStateOf(false) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
@@ -111,6 +123,7 @@ fun MusicPlayerApp(container: AppContainer) {
         when {
             inSelectionMode -> viewModel.clearSelection()
             drawerState.isOpen -> scope.launch { drawerState.close() }
+            route == Destination.PlayerDetail.route -> collapsePlayerDetail()
             else -> route = Destination.Home.route
         }
     }
@@ -143,7 +156,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         showTranslation = uiState.showTranslation,
                         queue = queue,
                         animatedVisibilityScope = this@AnimatedContent,
-                        onBack = { route = Destination.Home.route },
+                        onBack = { collapsePlayerDetail() },
                         onTogglePlay = viewModel::togglePlay,
                         onNext = viewModel::next,
                         onPrevious = viewModel::previous,
@@ -180,7 +193,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                     state = playback,
                                     floating = false,
                                     animatedVisibilityScope = this@AnimatedContent,
-                                    onExpand = { route = Destination.PlayerDetail.route },
+                                    onExpand = { expandPlayerDetail() },
                                     onTogglePlay = viewModel::togglePlay,
                                     onNext = viewModel::next,
                                     onOpenQueue = { showQueueSheet = true },
@@ -218,7 +231,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                         state = playback,
                                         floating = true,
                                         animatedVisibilityScope = this@AnimatedContent,
-                                        onExpand = { route = Destination.PlayerDetail.route },
+                                        onExpand = { expandPlayerDetail() },
                                         onTogglePlay = viewModel::togglePlay,
                                         onNext = viewModel::next,
                                         onOpenQueue = { showQueueSheet = true },

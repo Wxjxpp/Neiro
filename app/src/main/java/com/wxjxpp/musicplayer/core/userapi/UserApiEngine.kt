@@ -332,7 +332,18 @@ class UserApiEngine(private val context: Context) {
         }
 
         if (actionsMap.isEmpty()) {
-            failInit(currentId, "脚本没有声明任何可用平台，可能与本应用协议不兼容", alreadyMarked = true)
+            val declared = sources?.let { s ->
+                s.keys().asSequence().take(8).joinToString("、").take(120)
+            }
+            failInit(
+                currentId,
+                if (declared.isNullOrBlank()) {
+                    "脚本没有声明任何可用平台，可能与本应用协议不兼容"
+                } else {
+                    "脚本声明的平台（$declared）未被识别，可能与本应用协议不兼容"
+                },
+                alreadyMarked = true,
+            )
             return
         }
 
