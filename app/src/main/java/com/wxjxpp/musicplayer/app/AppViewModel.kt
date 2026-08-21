@@ -259,6 +259,23 @@ class AppViewModel(
     /** 点击歌词行跳转到指定时间。 */
     fun seekTo(positionMs: Long) = container.playerController.seekTo(positionMs)
 
+    /**
+     * 本地歌曲手动从网络匹配歌词。
+     * 直接走 LyricsLocator 的在线兜底（按"歌名 + 歌手"匹配），命中后写入缓存。
+     */
+    fun matchLyricsOnline() {
+        val song = playbackState.value.current ?: return
+        viewModelScope.launch {
+            val lyrics = runCatching { container.lyricsRepository.lyricsFor(song) }
+                .getOrDefault(Lyrics.Empty)
+            if (lyrics.isEmpty) {
+                container.notify("未能在网络中匹配到歌词")
+            } else {
+                _uiState.update { it.copy(lyrics = lyrics) }
+            }
+        }
+    }
+
     fun setLyricsOffset(offsetMs: Long) {
         viewModelScope.launch { container.appSettings.setLyricsOffset(offsetMs) }
     }

@@ -85,10 +85,10 @@ fun SettingsScreen(
             modifier = Modifier.padding(top = dimens.spaceSm),
         )
         Slider(
-            value = offsetValue,
+            value = offsetValue.coerceIn(-50f, 50f),
             onValueChange = { offsetValue = it },
             onValueChangeFinished = { onLyricsOffsetChange(offsetValue.toLong()) },
-            valueRange = -2000f..2000f,
+            valueRange = -50f..50f,
         )
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
 

@@ -141,6 +141,8 @@ fun MusicPlayerApp(container: AppContainer) {
 
     ModalNavigationDrawer(
         drawerState = drawerState,
+        // 播放详情页禁用抽屉手势：查看歌词左右滑动时防误触滑出侧边栏
+        gesturesEnabled = route != Destination.PlayerDetail.route,
         drawerContent = {
             AppDrawerSheet(
                 currentRoute = route,
@@ -179,6 +181,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onCycleRepeat = viewModel::cycleRepeat,
                         onPickQueueItem = viewModel::playQueueItem,
                         onLyricsOffsetChange = viewModel::setLyricsOffset,
+                        onMatchLyrics = viewModel::matchLyricsOnline,
                     )
 
                     else -> Scaffold(

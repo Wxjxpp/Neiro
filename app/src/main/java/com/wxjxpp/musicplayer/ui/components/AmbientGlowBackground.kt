@@ -1,5 +1,5 @@
 package com.wxjxpp.musicplayer.ui.components
-
+import android.graphics.BitmapFactory
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -9,79 +9,150 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.produceState
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.platform.LocalContext
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import kotlin.math.cos
+import kotlin.math.sin
 /**
- * 动态流光背景（借鉴 miuix 的"澎湃"效果思路）。
+ * 动态流光背景（澎湃壁纸风格，参考 miuix 实现）。
  *
- * 用封面主色 [baseColor] 派生出 2-3 个邻近色相的光斑，
- * 以不同速度/轨迹缓慢漂移，叠加出流动的氛围光。
- * 纯 Canvas 实现，无位图采样开销；颜色由调用方从封面 seed 色派生。
+ * 三层结构：
+ * 1. **封面位图铺底**：加载封面原图 → 缩小采样 → RenderEffect 级别的
+ *    重度模糊（用低分辨率放大替代，等效高斯模糊且零 GPU 成本），
+ *    这是"动态"的根基——颜色来自真实封面而非单色近似；
+ * 2. **两个大光斑**：从封面主色的邻近色相派生，以 20s+ 周期缓慢漂移，
+ *    叠加出流动的光感；
+ * 3. **顶部/底部暗角**：保证控制区文字可读。
+ *
+ * [coverUri] 为空或加载失败时退化为纯 seed 色渐变漂移。
  */
 @Composable
 fun AmbientGlowBackground(
     baseColor: Color,
+    coverUri: String?,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
 ) {
     if (!enabled) return
+    val context = LocalContext.current
+    // 异步加载封面缩略图（64px 采样：天然模糊 + 极低内存）
+    val coverBitmap by produceState<ImageBitmap?>(initialValue = null, coverUri) {
+        value = withContext(Dispatchers.IO) {
+            runCatching {
+                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 48 }
+                when (coverUri?.takeIf { it.isNotBlank() }) {
+                    null -> null
+                    else -> context.contentResolver.openInputStream(android.net.Uri.parse(coverUri))
+                        ?.use { BitmapFactory.decodeStream(it, null, opts) }
+                        ?: BitmapFactory.decodeFile(coverUri, opts),
+                }?.asImageBitmap()
+            }.getOrNull()
+        }
+    }
+    // 从 seed 色派生两个邻近色相光斑
+    val spotA = remember(baseColor) { baseColor.copy(alpha = 0.55f).shiftHue(24f) }
+    val spotB = remember(baseColor) { baseColor.copy(alpha = 0.45f).shiftHue(-32f) }
     val transition = rememberInfiniteTransition(label = "ambientGlow")
-    // 三个光斑各自独立漂移，周期错开避免同步感
+    // 光斑相位：周期长、错开，避免同步感
     val phase1 by transition.animateFloat(
         initialValue = 0f, targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(17_000, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(21_000, easing = LinearEasing), RepeatMode.Restart),
         label = "phase1",
     )
     val phase2 by transition.animateFloat(
         initialValue = 0f, targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(23_000, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(29_000, easing = LinearEasing), RepeatMode.Restart),
         label = "phase2",
     )
-    val phase3 by transition.animateFloat(
-        initialValue = 0f, targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(29_000, easing = LinearEasing), RepeatMode.Restart),
-        label = "phase3",
-    )
-    val base = baseColor
-    val glowA = lerpHue(base, 0.12f)
-    val glowB = lerpHue(base, -0.10f)
-    val glowC = lerpHue(base, 0.05f).copy(alpha = 0.5f)
-
     Canvas(modifier = modifier) {
         val w = size.width
         val h = size.height
-        // 底色铺满
-        drawRect(Brush.verticalGradient(listOf(base.copy(alpha = 0.35f), Color.Transparent)))
-        fun spot(phase: Float, rx: Float, ry: Float, radius: Float, color: Color) {
-            drawCircle(
-                brush = Brush.radialGradient(
-                    colors = listOf(color.copy(alpha = 0.45f), Color.Transparent),
-                    center = Offset(
-                        x = w * (0.5f + rx * kotlin.math.cos(phase)),
-                        y = h * (0.5f + ry * kotlin.math.sin(phase * 0.8f)),
-                    ),
-                    radius = radius,
-                ),
-                radius = radius,
+        // 第 1 层：封面位图铺底（低分辨率放大 = 天然重度模糊）
+        coverBitmap?.let { bmp ->
+            drawCoverBlurred(bmp, alpha = 0.85f)
+        } ?: run {
+            // 无封面：seed 色对角渐变兜底
+            drawRect(
+                Brush.linearGradient(
+                    listOf(
+                        baseColor.copy(alpha = 0.5f),
+                        baseColor.copy(alpha = 0.2f),
+                        Color.Black.copy(alpha = 0.3f),
+                    )
+                )
             )
         }
-        spot(phase1, 0.32f, 0.25f, w * 0.55f, glowA)
-        spot(phase2, -0.30f, -0.20f, w * 0.60f, glowB)
-        spot(phase3, 0.15f, -0.35f, w * 0.45f, glowC)
+        // 第 2 层：两个大光斑缓慢漂移（李萨如轨迹）
+        drawSpot(
+            center = Offset(
+                x = w * (0.5f + 0.38f * cos(phase1)),
+                y = h * (0.42f + 0.30f * sin(phase1 * 2f) / 2f),
+            ),
+            radius = maxOf(w, h) * 0.75f,
+            color = spotA,
+        )
+        drawSpot(
+            center = Offset(
+                x = w * (0.5f + 0.42f * cos(phase2 + 1.2f)),
+                y = h * (0.58f + 0.34f * sin(phase2)),
+            ),
+            radius = maxOf(w, h) * 0.65f,
+            color = spotB,
+        )
+        // 第 3 层：上下暗角，保证控制区可读性
+        drawRect(
+            Brush.verticalGradient(
+                0f to Color.Black.copy(alpha = 0.35f),
+                0.35f to Color.Transparent,
+                0.62f to Color.Transparent,
+                1f to Color.Black.copy(alpha = 0.45f),
+            )
+        )
     }
 }
-
-/** 简单色相偏移：向白/黑两端插值模拟邻近色。 */
-private fun lerpHue(color: Color, amount: Float): Color {
-    val target = if (amount >= 0) Color.White else Color.Black
-    val t = kotlin.math.abs(amount)
-    return Color(
-        red = color.red + (target.red - color.red) * t,
-        green = color.green + (target.green - color.green) * t,
-        blue = color.blue + (target.blue - color.blue) * t,
-        alpha = color.alpha,
+/** 把位图按 Cover 模式铺满画布。位图本身只有几十像素宽，放大后即重度模糊效果。 */
+private fun DrawScope.drawCoverBlurred(bitmap: ImageBitmap, alpha: Float) {
+    val scale = maxOf(size.width / bitmap.width, size.height / bitmap.height)
+    val dstW = bitmap.width * scale
+    val dstH = bitmap.height * scale
+    val dstOffset = Offset((size.width - dstW) / 2f, (size.height - dstH) / 2f)
+    drawImage(
+        image = bitmap,
+        dstSize = androidx.compose.ui.unit.IntSize(dstW.toInt(), dstH.toInt()),
+        dstOffset = androidx.compose.ui.unit.IntOffset(dstOffset.x.toInt(), dstOffset.y.toInt()),
+        alpha = alpha,
+        filterQuality = androidx.compose.ui.graphics.FilterQuality.Low,
     )
+}
+/** 径向渐变大光斑。 */
+private fun DrawScope.drawSpot(center: Offset, radius: Float, color: Color) {
+    drawCircle(
+        brush = Brush.radialGradient(
+            colors = listOf(color, Color.Transparent),
+            center = center,
+            radius = radius,
+        ),
+        radius = radius,
+        center = center,
+    )
+}
+/** HSL 色相偏移，用于从主色派生邻近色。 */
+private fun Color.shiftHue(degrees: Float): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(
+        android.graphics.Color.argb((alpha * 255).toInt(), (red * 255).toInt(), (green * 255).toInt(), (blue * 255).toInt()),
+        hsv,
+    )
+    hsv[0] = (hsv[0] + degrees + 360f) % 360f
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }

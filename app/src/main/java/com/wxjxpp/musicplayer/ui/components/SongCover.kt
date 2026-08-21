@@ -15,6 +15,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import coil.compose.SubcomposeAsyncImage
 import coil.request.ImageRequest
+import coil.size.Precision
+import coil.size.Scale
 import com.wxjxpp.musicplayer.core.model.Song
 
 /**
@@ -57,6 +59,9 @@ fun SongCover(
         model = ImageRequest.Builder(context)
             .data(coverUri)
             .crossfade(true)
+            // 按物理像素精确解码，禁止 Coil 缩到逻辑像素导致大图发糊
+            .precision(Precision.EXACT)
+            .scale(Scale.FIT)
             .build(),
         contentDescription = null,
         contentScale = ContentScale.Crop,
