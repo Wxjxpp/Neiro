@@ -24,6 +24,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlaylistAdd
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SelectAll
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -158,6 +159,7 @@ fun SongsTopBar(
     onOpenDrawer: () -> Unit,
     onSearch: () -> Unit,
     onScan: () -> Unit,
+    onPlayRandom: () -> Unit = {},
     sortField: com.wxjxpp.neiro.core.model.SongSortField = com.wxjxpp.neiro.core.model.SongSortField.Title,
     sortDescending: Boolean = false,
     onSortFieldChange: (com.wxjxpp.neiro.core.model.SongSortField) -> Unit = {},
@@ -224,6 +226,9 @@ fun SongsTopBar(
             }
             IconButton(onClick = onScan) {
                 Icon(Icons.Filled.Refresh, contentDescription = "扫描本地音乐")
+            }
+            IconButton(onClick = onPlayRandom) {
+                Icon(Icons.Filled.Shuffle, contentDescription = "随机一发")
             }
             IconButton(onClick = onSearch) {
                 Icon(Icons.Filled.Search, contentDescription = "搜索歌曲")

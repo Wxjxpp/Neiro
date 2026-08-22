@@ -50,6 +50,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val LyricsFontScale = floatPreferencesKey("lyrics_font_scale")
         val LyricsGapScale = floatPreferencesKey("lyrics_gap_scale")
         val PureModeDefault = booleanPreferencesKey("pure_mode_default")
+        val Lab8Bit = booleanPreferencesKey("lab_eight_bit")
+        val LabTurboSpeed = booleanPreferencesKey("lab_turbo_speed")
+        val ResumeOnStart = booleanPreferencesKey("resume_on_start")
+        val AutoPlayOnStart = booleanPreferencesKey("auto_play_on_start")
+        val LastSongId = stringPreferencesKey("last_song_id")
+        val LastPositionMs = longPreferencesKey("last_position_ms")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -212,5 +218,43 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.PureModeDefault] ?: false }
     suspend fun setPureModeDefault(enabled: Boolean) {
         store.edit { it[Keys.PureModeDefault] = enabled }
+    }
+
+    /** [实验室] 8-bit 播放模式。 */
+    fun observeLab8Bit(): Flow<Boolean> = store.data.map { it[Keys.Lab8Bit] ?: false }
+    suspend fun setLab8Bit(enabled: Boolean) {
+        store.edit { it[Keys.Lab8Bit] = enabled }
+    }
+
+    /** [实验室] 80 倍速播放模式。 */
+    fun observeLabTurboSpeed(): Flow<Boolean> = store.data.map { it[Keys.LabTurboSpeed] ?: false }
+    suspend fun setLabTurboSpeed(enabled: Boolean) {
+        store.edit { it[Keys.LabTurboSpeed] = enabled }
+    }
+
+    /** 启动时恢复上次播放（定位到上次进度，暂停）。 */
+    fun observeResumeOnStart(): Flow<Boolean> = store.data.map { it[Keys.ResumeOnStart] ?: false }
+    suspend fun setResumeOnStart(enabled: Boolean) {
+        store.edit { it[Keys.ResumeOnStart] = enabled }
+    }
+
+    /** 启动时自动继续播放。 */
+    fun observeAutoPlayOnStart(): Flow<Boolean> = store.data.map { it[Keys.AutoPlayOnStart] ?: false }
+    suspend fun setAutoPlayOnStart(enabled: Boolean) {
+        store.edit { it[Keys.AutoPlayOnStart] = enabled }
+    }
+
+    /** 上次播放的歌曲与进度（退出应用前记录）。 */
+    fun observeLastSongId(): Flow<String?> = store.data.map { it[Keys.LastSongId] }
+    fun observeLastPositionMs(): Flow<Long> = store.data.map { it[Keys.LastPositionMs] ?: 0L }
+    suspend fun savePlaybackProgress(songId: String?, positionMs: Long) {
+        store.edit {
+            if (songId == null) {
+                it.remove(Keys.LastSongId)
+            } else {
+                it[Keys.LastSongId] = songId
+            }
+            it[Keys.LastPositionMs] = positionMs
+        }
     }
 }

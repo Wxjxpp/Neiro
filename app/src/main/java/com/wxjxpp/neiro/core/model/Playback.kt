@@ -25,6 +25,10 @@ data class PlaybackState(
     val shuffleMode: ShuffleMode = ShuffleMode.Pseudo,
     val speed: Float = 1f,
     val volume: Float = 1f,
+    /** [实验室] 8-bit 音效开启。 */
+    val eightBitMode: Boolean = false,
+    /** [实验室] 80 倍速模式开启。 */
+    val turboSpeedMode: Boolean = false,
 ) {
     /** 0f..1f，供进度条使用。 */
     val progress: Float

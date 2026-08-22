@@ -2,6 +2,8 @@ package com.wxjxpp.neiro.app.navigation
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
@@ -17,6 +19,7 @@ import androidx.compose.material.icons.filled.QueueMusic
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
 import androidx.compose.material3.Text
@@ -64,7 +67,12 @@ fun AppDrawerSheet(
     val dimens = AppTheme.dimens
     val grouped = drawerItems().groupBy { it.group }
 
-    ModalDrawerSheet {
+    ModalDrawerSheet(
+        // 侧边栏宽度：默认 360dp 太宽，收窄为屏幕宽度的 70%
+        drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+        windowInsets = WindowInsets(0),
+        modifier = Modifier.fillMaxWidth(0.7f),
+    ) {
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())

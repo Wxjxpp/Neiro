@@ -1,4 +1,6 @@
 package com.wxjxpp.neiro.feature.player
+
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.ExperimentalSharedTransitionApi
@@ -12,7 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -112,6 +114,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
     onLyricsOffsetChange: (Long) -> Unit,
     onMatchLyrics: () -> Unit = {},
     onToggleTranslation: () -> Unit = {},
+    onSpeedChange: (Float) -> Unit = {},
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
@@ -119,11 +122,16 @@ fun SharedTransitionScope.PlayerDetailScreen(
     var showLyrics by remember { mutableStateOf(false) }
     // 翻译显示开关：默认开启，可在播放页直接切换（同时通知设置持久化）
     var translationOn by remember(showTranslation) { mutableStateOf(showTranslation) }
-    // 纯净模式：长按播放键或设置页开关开启，只留播放/换曲键；点播放键暂停时退出
-    var pureMode by remember { mutableStateOf(pureModeDefault) }
+    // 纯净模式：设置页默认值 + 长按播放键临时开启。
+    // 退出方式只有"再点一次暂停键"（点暂停=退出纯净并暂停）或关闭页面；
+    // 页面内切换不回写设置，避免"点一下就永久改配置"。
+    var pureModeOverride by remember { mutableStateOf<Boolean?>(null) }
+    val pureMode = pureModeOverride ?: pureModeDefault
     var showQueue by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
+    // 返回键优先级：歌词页 → 播放页；播放页 → 退出播放页
+    BackHandler(enabled = showLyrics) { showLyrics = false }
     Box(modifier = Modifier.fillMaxSize()) {
         // 动态流光背景（封面位图铺底 + 光斑漂移）
         AmbientGlowBackground(
@@ -132,7 +140,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
             enabled = ambientGlow,
             modifier = Modifier.fillMaxSize(),
         )
-        // 顶部红线外区域实心填充（含状态栏），只在交界处留小段过渡
+        // 顶部红线外区域实心填充（含状态栏），只在交界处留小段过渡；
+        // 同时承担"按住顶部下滑关闭播放页"的手势区
         Spacer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -144,7 +153,14 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         0.82f to MaterialTheme.colorScheme.surface,
                         1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                     ),
-                ),
+                )
+                // 按住上部下滑关闭播放页（Sheet 式）；上滑无动作避免误触
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures { change, dragAmount ->
+                        change.consume()
+                        if (dragAmount > 80f) onBack()
+                    }
+                },
         )
         Column(
             modifier = Modifier
@@ -152,27 +168,73 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 .padding(top = statusBarPadding.calculateTopPadding()),
         ) {
             Spacer(Modifier.height(dimens.spaceSm))
-            // 顶部：标题 + 歌手（跑马灯）
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceSm),
-                horizontalAlignment = Alignment.CenterHorizontally,
-            ) {
-                Text(
-                    text = song.title,
-                    style = MaterialTheme.typography.titleLarge,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                )
-                Text(
-                    text = song.artistName,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    maxLines = 1,
-                    modifier = Modifier.marqueeIfLong(),
-                )
+            // 顶部：播放页=标题+歌手居中；歌词页=左侧小封面+右侧标题歌手（Apple Music 风格）
+            if (!showLyrics) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceSm),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Text(
+                        text = song.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                    Text(
+                        text = song.artistName,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        modifier = Modifier.marqueeIfLong(),
+                    )
+                }
+            } else {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 12.dp, end = dimens.spaceXl, top = 4.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    SongCover(
+                        song = song,
+                        size = 52.dp,
+                        radius = 9.dp,
+                        modifier = Modifier
+                            .sharedElement(
+                                sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
+                                animatedVisibilityScope = animatedVisibilityScope,
+                            )
+                            // 歌词页按住小封面上滑回到播放页
+                            .pointerInput(Unit) {
+                                detectVerticalDragGestures { change, dragAmount ->
+                                    change.consume()
+                                    if (dragAmount < -40f) showLyrics = false
+                                }
+                            },
+                    )
+                    Column(
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(start = 12.dp),
+                    ) {
+                        Text(
+                            text = song.title,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            text = song.artistName,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
             }
             // 主区域：封面 / 歌词，AnimatedContent 滑动切换动画
             Box(
@@ -195,19 +257,6 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 ) { lyricsMode ->
                     if (lyricsMode) {
                         Box(modifier = Modifier.fillMaxSize()) {
-                        // Apple Music 风格：歌词模式左上角小封面（sharedElement 切换时自动动画）
-                            SongCover(
-                                song = song,
-                                size = 56.dp,
-                                radius = 10.dp,
-                                modifier = Modifier
-                                    .align(Alignment.TopStart)
-                                    .padding(start = 56.dp, top = 8.dp)
-                                    .sharedElement(
-                                        sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
-                                        animatedVisibilityScope = animatedVisibilityScope,
-                                    ),
-                            )
                         if (lyrics.isEmpty) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -247,7 +296,15 @@ fun SharedTransitionScope.PlayerDetailScreen(
                                 song = song,
                                 size = dimens.detailCoverSize,
                                 radius = dimens.detailCoverRadius,
-                                modifier = Modifier.sharedElement(
+                                modifier = Modifier
+                                    // 按住封面上滑打开歌词页
+                                    .pointerInput(Unit) {
+                                        detectVerticalDragGestures { change, dragAmount ->
+                                            change.consume()
+                                            if (dragAmount < -40f) showLyrics = true
+                                        }
+                                    }
+                                    .sharedElement(
                                     sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
                                     animatedVisibilityScope = animatedVisibilityScope,
                                 ),
@@ -316,70 +373,82 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // 播放控制行：纯净模式下只留上一首/播放/下一首
+            // 播放控制行：左侧随机/循环合一，中间上一首/播放/下一首，右侧播放列表
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceMd),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceEvenly,
+                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 if (!pureMode) {
-                    IconButton(onClick = onToggleShuffle) {
+                    // 左侧：随机/循环合一（短按=随机开关；长按=循环三态）
+                    IconButton(
+                        onClick = onToggleShuffle,
+                        modifier = Modifier.pointerInput(Unit) {
+                            androidx.compose.foundation.gestures.detectTapGestures(
+                                onLongPress = { onCycleRepeat() },
+                            )
+                        },
+                    ) {
                         Icon(
-                            Icons.Filled.Shuffle,
-                            contentDescription = "随机播放",
-                            tint = if (state.shuffle) {
+                            imageVector = if (state.shuffle) Icons.Filled.Shuffle else when (state.repeatMode) {
+                                RepeatMode.One -> Icons.Filled.RepeatOne
+                                RepeatMode.All -> Icons.Filled.Repeat
+                                RepeatMode.Off -> Icons.Filled.Shuffle
+                            },
+                            contentDescription = "随机/循环（长按切循环）",
+                            tint = if (state.shuffle || state.repeatMode != RepeatMode.Off) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
                     }
+                } else {
+                    Spacer(Modifier.size(48.dp))
                 }
-                IconButton(onClick = onPrevious) {
-                    Icon(Icons.Filled.SkipPrevious, contentDescription = "上一首")
-                }
-                IconButton(
-                    onClick = {
-                        // 纯净模式下点暂停即退出纯净模式
-                        if (pureMode && state.isPlaying) pureMode = false
-                        onTogglePlay()
-                    },
-                    modifier = Modifier
-                        .size(56.dp)
-                        .pointerInput(Unit) {
-                            detectTapGestures(onLongPress = { pureMode = true })
-                        },
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
                 ) {
-                    Icon(
-                        imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
-                        contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                        modifier = Modifier.size(44.dp),
-                    )
-                }
-                IconButton(onClick = onNext) {
-                    Icon(Icons.Filled.SkipNext, contentDescription = "下一首")
+                    IconButton(onClick = onPrevious) {
+                        Icon(Icons.Filled.SkipPrevious, contentDescription = "上一首")
+                    }
+                    IconButton(
+                        onClick = {
+                            // 纯净模式下点暂停即退出纯净模式
+                            if (pureMode && state.isPlaying) pureModeOverride = false
+                            onTogglePlay()
+                        },
+                        modifier = Modifier
+                            .size(56.dp)
+                            .pointerInput(Unit) {
+                                androidx.compose.foundation.gestures.detectTapGestures(
+                                    onLongPress = { pureModeOverride = true },
+                                )
+                            },
+                    ) {
+                        Icon(
+                            imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
+                            modifier = Modifier.size(44.dp),
+                        )
+                    }
+                    IconButton(onClick = onNext) {
+                        Icon(Icons.Filled.SkipNext, contentDescription = "下一首")
+                    }
                 }
                 if (!pureMode) {
-                    IconButton(onClick = onCycleRepeat) {
-                        Icon(
-                            imageVector = if (state.repeatMode == RepeatMode.One) {
-                                Icons.Filled.RepeatOne
-                            } else {
-                                Icons.Filled.Repeat
-                            },
-                            contentDescription = "循环模式",
-                            tint = if (state.repeatMode == RepeatMode.Off) {
-                                MaterialTheme.colorScheme.onSurfaceVariant
-                            } else {
-                                MaterialTheme.colorScheme.primary
-                            },
-                        )
+                    // 右侧：播放列表
+                    IconButton(onClick = { showQueue = true }) {
+                        Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
                     }
+                } else {
+                    Spacer(Modifier.size(48.dp))
                 }
             }
-            // 功能按钮行：歌词偏移 / 翻译开关 / 歌词切换 / 播放列表（在播放控件下方，不与其重叠）
+            // 功能按钮行：歌词偏移 / 翻译开关 / 歌词切换（播放列表已移到控制行右侧）
             if (!pureMode) {
                 Row(
                     modifier = Modifier
@@ -426,8 +495,27 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             },
                         )
                     }
-                    IconButton(onClick = { showQueue = true }) {
-                        Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
+                    // 倍速：循环 1x → 1.25x → 1.5x → 2x → 1x
+                    IconButton(
+                        onClick = {
+                            val next = when (state.speed) {
+                                1f -> 1.25f
+                                1.25f -> 1.5f
+                                1.5f -> 2f
+                                else -> 1f
+                            }
+                            onSpeedChange(next)
+                        },
+                    ) {
+                        Text(
+                            text = if (state.speed == 1f) "倍速" else "%.2fx".format(state.speed).removeSuffix("0"),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (state.speed != 1f) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
                     }
                 }
             }

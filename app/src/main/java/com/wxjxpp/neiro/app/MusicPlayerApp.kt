@@ -188,6 +188,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onLyricsOffsetChange = viewModel::setLyricsOffset,
                         onMatchLyrics = viewModel::matchLyricsOnline,
                         onToggleTranslation = { viewModel.setShowTranslation(!uiState.showTranslation) },
+                        onSpeedChange = viewModel::setSpeed,
                     )
 
                     else -> Scaffold(
@@ -208,6 +209,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                     onOpenDrawer = { scope.launch { drawerState.open() } },
                                     onSearch = { route = Destination.Search.route },
                                     onScan = scanLibrary,
+                                    onPlayRandom = { viewModel.playRandom() },
                                     sortField = uiState.songSortField,
                                     sortDescending = uiState.songSortDescending,
                                     onSortFieldChange = viewModel::setSongSortField,
@@ -409,6 +411,14 @@ private fun RouteContent(
             onLyricsGapScaleChange = viewModel::setLyricsGapScale,
             pureModeDefault = uiState.pureModeDefault,
             onPureModeDefaultChange = viewModel::setPureModeDefault,
+            lab8Bit = uiState.lab8Bit,
+            onLab8BitChange = viewModel::setLab8Bit,
+            labTurboSpeed = uiState.labTurboSpeed,
+            onLabTurboSpeedChange = viewModel::setLabTurboSpeed,
+            resumeOnStart = uiState.resumeOnStart,
+            onResumeOnStartChange = viewModel::setResumeOnStart,
+            autoPlayOnStart = uiState.autoPlayOnStart,
+            onAutoPlayOnStartChange = viewModel::setAutoPlayOnStart,
             onLabSpringLyricsChange = viewModel::setLabSpringLyrics,
             contentPadding = contentPadding,
             modifier = modifier,

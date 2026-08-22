@@ -34,6 +34,7 @@ import com.wxjxpp.neiro.core.source.LocalMusicSource
 import com.wxjxpp.neiro.core.source.MusicSourceRegistry
 import com.wxjxpp.neiro.core.source.OnlineMusicSource
 import com.wxjxpp.neiro.core.source.online.defaultOnlinePlatforms
+import com.wxjxpp.neiro.core.source.online.lxSourceOf
 import com.wxjxpp.neiro.core.together.NoopTogetherTransport
 import com.wxjxpp.neiro.core.together.TogetherTransport
 import com.wxjxpp.neiro.core.userapi.UserApiAction
@@ -183,13 +184,23 @@ class DefaultAppContainer(
             supportedActions = { activeCapabilities },
         )
     }
+    // LX 自定义音源：已导入脚本时追加到搜索页（取流走脚本，搜索复用内置平台接口）
+    private val lxSources: List<OnlineMusicSource> = onlineSources.mapNotNull { source ->
+        lxSourceOf(source.platform, userApiClient)?.let { lxPlatform ->
+            OnlineMusicSource(
+                platform = lxPlatform,
+                userApiClient = userApiClient,
+                supportedActions = { activeCapabilities },
+                streamResolver = { song, quality -> lxPlatform.streamUrl(song, quality) },
+            )
+        }
+    }.filter { userApiStore.apis.value.isNotEmpty() }
 
     private val registry = DefaultMusicSourceRegistry(
-        listOf(LocalMusicSource(songRepository)) + onlineSources,
+        listOf(LocalMusicSource(songRepository)) + onlineSources + lxSources,
     )
     override val sourceRegistry: MusicSourceRegistry = registry
-
-    override val onlineSearch = OnlineSearchRepository(onlineSources)
+    override val onlineSearch = OnlineSearchRepository(onlineSources + lxSources)
 
     override val togetherTransport: TogetherTransport = NoopTogetherTransport()
 

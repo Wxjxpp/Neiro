@@ -63,6 +63,14 @@ fun SettingsScreen(
     onLyricsGapScaleChange: (Float) -> Unit = {},
     pureModeDefault: Boolean = false,
     onPureModeDefaultChange: (Boolean) -> Unit = {},
+    lab8Bit: Boolean = false,
+    onLab8BitChange: (Boolean) -> Unit = {},
+    labTurboSpeed: Boolean = false,
+    onLabTurboSpeedChange: (Boolean) -> Unit = {},
+    resumeOnStart: Boolean = false,
+    onResumeOnStartChange: (Boolean) -> Unit = {},
+    autoPlayOnStart: Boolean = false,
+    onAutoPlayOnStartChange: (Boolean) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -175,6 +183,19 @@ fun SettingsScreen(
                         checked = pauseOnAudioFocusLoss,
                         onCheckedChange = onPauseOnAudioFocusLossChange,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    SwitchRow(
+                        title = "记录上次播放",
+                        subtitle = "退出应用时记住听到哪，下次打开恢复到该位置（暂停）",
+                        checked = resumeOnStart,
+                        onCheckedChange = onResumeOnStartChange,
+                    )
+                    SwitchRow(
+                        title = "启动自动播放",
+                        subtitle = "打开应用后自动继续上次的歌曲（需先开启记录上次播放）",
+                        checked = autoPlayOnStart,
+                        onCheckedChange = onAutoPlayOnStartChange,
+                    )
                 }
                 "appearance" -> {
                     SwitchRow(
@@ -208,6 +229,18 @@ fun SettingsScreen(
                         subtitle = "进入播放页时直接隐藏辅助控件（长按播放键也可临时开启）",
                         checked = pureModeDefault,
                         onCheckedChange = onPureModeDefaultChange,
+                    )
+                    SwitchRow(
+                        title = "8bit 播放模式",
+                        subtitle = "把音频量化为 8-bit，复古游戏机音质",
+                        checked = lab8Bit,
+                        onCheckedChange = onLab8BitChange,
+                    )
+                    SwitchRow(
+                        title = "80 倍速播放模式",
+                        subtitle = "超高速播放（实验性音效，慎开）",
+                        checked = labTurboSpeed,
+                        onCheckedChange = onLabTurboSpeedChange,
                     )
                 }
             }

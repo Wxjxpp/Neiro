@@ -109,6 +109,20 @@ class Media3PlayerController(
 
     /** 懒初始化：必须在主线程创建。 */
     private var player: ExoPlayer? = null
+    /** 实验室音效：8-bit 量化。 */
+    private val eightBitProcessor = EightBitAudioProcessor()
+    /** 实验室音效：80 倍速（PCM 帧复制）。 */
+    private val turboProcessor = TurboSpeedAudioProcessor(80)
+
+    override fun setEightBitMode(enabled: Boolean) {
+        _state.update { it.copy(eightBitMode = enabled) }
+        eightBitProcessor.setEnabledMode(enabled)
+    }
+
+    override fun setTurboSpeedMode(enabled: Boolean) {
+        _state.update { it.copy(turboSpeedMode = enabled) }
+        turboProcessor.setEnabledMode(enabled)
+    }
 
     private val _state = MutableStateFlow(PlaybackState())
     override val state: StateFlow<PlaybackState> = _state.asStateFlow()
@@ -143,6 +157,7 @@ class Media3PlayerController(
             /* handleAudioFocus = */ true,
         )
         .setHandleAudioBecomingNoisy(false)
+        .setAudioProcessors(listOf(eightBitProcessor, turboProcessor))
         .build()
         .apply {
             addListener(object : Player.Listener {

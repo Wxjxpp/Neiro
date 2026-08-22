@@ -38,6 +38,10 @@ interface PlayerController {
     fun cycleRepeatMode()
     fun setSpeed(speed: Float)
     fun setVolume(volume: Float)
+    /** [实验室] 8-bit 播放模式。 */
+    fun setEightBitMode(enabled: Boolean)
+    /** [实验室] 80 倍速播放模式。 */
+    fun setTurboSpeedMode(enabled: Boolean)
 
     /** 追加到队列尾部。 */
     fun addToQueue(songs: List<Song>)

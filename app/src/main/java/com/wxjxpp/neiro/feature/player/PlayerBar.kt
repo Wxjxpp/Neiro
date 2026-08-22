@@ -5,6 +5,7 @@ import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.SharedTransitionScope
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -29,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -90,6 +92,13 @@ fun SharedTransitionScope.PlayerBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(dimens.playerBarHeight)
+                    // 上滑手势打开播放页（点击也可）
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures { change, dragAmount ->
+                            change.consume()
+                            if (dragAmount < -40f) onExpand()
+                        }
+                    }
                     .clickable(onClick = onExpand)
                     .padding(horizontal = dimens.spaceMd),
                 verticalAlignment = Alignment.CenterVertically,

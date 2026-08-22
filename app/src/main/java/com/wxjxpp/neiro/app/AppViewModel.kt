@@ -17,9 +17,11 @@ import com.wxjxpp.neiro.core.userapi.UserApiInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.sample
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -91,6 +93,14 @@ data class ShellUiState(
     val lyricsGapScale: Float = 1f,
     /** 纯净模式默认开启。 */
     val pureModeDefault: Boolean = false,
+    /** [实验室] 8-bit 播放模式。 */
+    val lab8Bit: Boolean = false,
+    /** [实验室] 80 倍速播放模式。 */
+    val labTurboSpeed: Boolean = false,
+    /** 启动时恢复上次播放。 */
+    val resumeOnStart: Boolean = false,
+    /** 启动时自动继续播放。 */
+    val autoPlayOnStart: Boolean = false,
 )
 
 class AppViewModel(
@@ -110,6 +120,8 @@ class AppViewModel(
     private var playCounts: Map<String, Int> = emptyMap()
 
     init {
+        // 搜索页音源筛选条：全部 + 各平台（含已导入 LX 脚本派生的音源）
+        _uiState.update { it.copy(onlinePlatforms = container.onlineSearch.platforms) }
         container.songRepository.observeSongs()
             .onEach { songs ->
                 _uiState.update { it.copy(songs = sortSongs(songs)) }
@@ -199,6 +211,30 @@ class AppViewModel(
         container.appSettings.observePureModeDefault()
             .onEach { enabled -> _uiState.update { it.copy(pureModeDefault = enabled) } }
             .launchIn(viewModelScope)
+        container.appSettings.observeLab8Bit()
+            .onEach { enabled ->
+                _uiState.update { it.copy(lab8Bit = enabled) }
+                container.playerController.setEightBitMode(enabled)
+            }
+            .launchIn(viewModelScope)
+        container.appSettings.observeLabTurboSpeed()
+            .onEach { enabled ->
+                _uiState.update { it.copy(labTurboSpeed = enabled) }
+                container.playerController.setTurboSpeedMode(enabled)
+            }
+            .launchIn(viewModelScope)
+        // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录
+        container.playerController.state
+            .sample(5_000L)
+            .onEach { state ->
+                val id = state.current?.id
+                if (id != null && state.positionMs > 0L) {
+                    container.appSettings.savePlaybackProgress(id, state.positionMs)
+                    lastSavedSongId = id
+                }
+            }
+            .launchIn(viewModelScope)
+        restoreLastPlayback()
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
             .onEach { state -> onSongChanged(state.current) }
@@ -287,6 +323,9 @@ class AppViewModel(
     /** 点击歌词行跳转到指定时间。 */
     fun seekTo(positionMs: Long) = container.playerController.seekTo(positionMs)
 
+    /** 倍速播放（0.5x ~ 3.0x）。 */
+    fun setSpeed(speed: Float) = container.playerController.setSpeed(speed)
+
     /**
      * 本地歌曲手动从网络匹配歌词。
      * 直接走 LyricsLocator 的在线兜底（按"歌名 + 歌手"匹配），命中后写入缓存。
@@ -332,12 +371,65 @@ class AppViewModel(
         viewModelScope.launch { container.appSettings.setLyricsFontScale(scale) }
     }
 
-    fun setLyricsGapScale(scale: Float) {
+        fun setLyricsGapScale(scale: Float) {
         viewModelScope.launch { container.appSettings.setLyricsGapScale(scale) }
     }
 
     fun setPureModeDefault(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setPureModeDefault(enabled) }
+    }
+
+    /** [实验室] 8-bit 播放模式。 */
+    fun setLab8Bit(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setLab8Bit(enabled) }
+    }
+
+    /** [实验室] 80 倍速播放模式。 */
+    fun setLabTurboSpeed(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setLabTurboSpeed(enabled) }
+    }
+
+    /** 启动时恢复上次播放。 */
+    fun setResumeOnStart(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setResumeOnStart(enabled) }
+    }
+
+    /** 启动时自动继续播放。 */
+    fun setAutoPlayOnStart(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setAutoPlayOnStart(enabled) }
+    }
+
+    /** 歌曲页"随机一发"：从当前曲库随机抽一首立即播放。 */
+    fun playRandom() {
+        val songs = _uiState.value.songs
+        if (songs.isEmpty()) return
+        container.playerController.play(songs.random())
+    }
+
+    private var lastSavedSongId: String? = null
+    private var restoreAttempted = false
+
+    /** 恢复上次播放进度（应用启动时调用一次）。 */
+    private fun restoreLastPlayback() {
+        if (restoreAttempted) return
+        restoreAttempted = true
+        viewModelScope.launch {
+            val settings = container.appSettings
+            val resumeEnabled = settings.observeResumeOnStart().first()
+            val autoPlay = settings.observeAutoPlayOnStart().first()
+            // 两个开关都关着就不恢复
+            if (!resumeEnabled && !autoPlay) return@launch
+            val songId = settings.observeLastSongId().first() ?: return@launch
+            val positionMs = settings.observeLastPositionMs().first()
+            // 等曲库加载完成再找歌（数据库为空说明还没扫完）
+            val song = container.songRepository.observeSongs()
+                .first { it.isNotEmpty() }
+                .find { it.id == songId }
+                ?: return@launch
+            container.playerController.setQueue(listOf(song), autoPlay = false)
+            if (positionMs > 0L) container.playerController.seekTo(positionMs)
+            if (autoPlay) container.playerController.resume()
+        }
     }
 
     /** 播放整个选中的歌曲集合。 */

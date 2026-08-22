@@ -25,6 +25,8 @@ class OnlineMusicSource(
     private val userApiClient: UserApiClient,
     /** 当前启用脚本声明支持的平台 → 动作，用于提前判断能否取流。 */
     private val supportedActions: () -> Map<String, List<String>>,
+    /** LX 音源专用：绕过官方接口直接由脚本取流（Song → 直链）。 */
+    private val streamResolver: (suspend (Song, String) -> String?)? = null,
 ) : MusicSource {
 
     /** 网易云官方取流入口（weapi）。其它平台为 null，直接走脚本。 */
@@ -61,7 +63,11 @@ class OnlineMusicSource(
     suspend fun resolvePlayUrlDetailed(song: Song, quality: Quality): PlayUrlResult {
         val remote = song.location as? MediaLocation.Remote
             ?: return PlayUrlResult.Failure("这不是在线歌曲")
-
+        // 0. LX 音源：完全由脚本取流，不经过官方接口
+        streamResolver?.let { resolver ->
+            val direct = runCatching { resolver(song, quality.toScriptQuality()) }.getOrNull()
+            if (direct != null) return PlayUrlResult.Success(direct)
+        }
         // 1. 平台官方接口优先（网易云 weapi：免费歌免登录，带 Cookie 解锁 VIP）
         val officialStream = neteaseStream
         if (officialStream != null) {
