@@ -95,19 +95,20 @@ fun LyricsPane(
         runCatching {
             val viewport = listState.layoutInfo.viewportSize.height
             if (viewport <= 0) return@runCatching
-            if (abs(index - listState.firstVisibleItemIndex) > 10) {
-                // 跳跃太远先快速跳到附近再动画对齐，避免长距离慢滚
-                listState.scrollToItem(index = (index - 4).coerceAtLeast(0))
+            var info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+            if (info == null || abs(index - listState.firstVisibleItemIndex) > 8) {
+                // 目标行不在视口内：先无动画粗定位到目标附近（用户看不到中间态），
+                // 再读取实际尺寸做单段精调。绝不能用 animateScrollToItem——
+                // 它会把行顶边怼到视口顶部导致先冲过头再校正的两段式跳动。
+                listState.scrollToItem(index = (index - 3).coerceAtLeast(0))
+                info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+                    ?: return@runCatching
             }
-            listState.animateScrollToItem(index = index)
-            // 二次校正：此时目标行已可见，读取真实尺寸把中心对齐视口中心
-            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
-            if (info != null) {
-                val target = (viewport - info.size) / 2
-                val delta = info.offset - target
-                if (abs(delta) > 4) {
-                    listState.animateScrollBy(delta.toFloat(), tween(220))
-                }
+            // 单段动画：把该行中心直接滚到视口 32% 高度处（聚焦位）
+            val targetTop = viewport * 0.32f - info.size / 2f
+            val delta = info.offset - targetTop
+            if (abs(delta) > 4) {
+                listState.animateScrollBy(delta, tween(420))
             }
         }
     }
