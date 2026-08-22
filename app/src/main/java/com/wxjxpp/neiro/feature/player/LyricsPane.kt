@@ -130,7 +130,7 @@ fun LyricsPane(
         horizontalAlignment = Alignment.CenterHorizontally,
         contentPadding = PaddingValues(
             start = 24.dp, end = 24.dp,
-            top = 300.dp, bottom = 400.dp,
+            top = 220.dp, bottom = 320.dp,
         ),
         verticalArrangement = Arrangement.spacedBy(22.dp),
     ) {
@@ -149,13 +149,13 @@ fun LyricsPane(
         }
     }
 }
-/** 让目标行滚到视口中心的偏移量（负值向上滚）。取视口 35% 处，聚焦行位于屏幕上三分之一视觉焦点。 */
+/** 让目标行滚到视口中心的偏移量（负值向上滚）。取视口 30% 处，聚焦行位于屏幕上三分之一视觉焦点。 */
 private fun centeringOffset(
     listState: androidx.compose.foundation.lazy.LazyListState,
     density: androidx.compose.ui.unit.Density,
 ): Int = with(density) {
     val viewportHeight = listState.layoutInfo.viewportSize.height
-    (viewportHeight * 0.35f).toInt().coerceAtLeast(0)
+    (viewportHeight * 0.30f).toInt().coerceAtLeast(0)
 }
 @Composable
 private fun LyricRow(
