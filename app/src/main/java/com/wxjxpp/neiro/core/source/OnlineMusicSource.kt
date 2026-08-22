@@ -28,16 +28,6 @@ class OnlineMusicSource(
     /** LX 音源专用：绕过官方接口直接由脚本取流（Song → 直链）。 */
     private val streamResolver: (suspend (Song, String) -> String?)? = null,
 ) : MusicSource {
-
-    /** 网易云官方取流入口（weapi）。其它平台为 null，直接走脚本。 */
-    private val neteaseStream: (suspend (String, String) -> String?)? =
-        (platform as? com.wxjxpp.neiro.core.source.online.NeteasePlatform)
-            ?.let { n ->
-                { songId: String, quality: String ->
-                    n.streamUrl(songId, quality)
-                }
-            }
-
     override val id: String = platform.id
     override val displayName: String = platform.displayName
 
@@ -67,16 +57,11 @@ class OnlineMusicSource(
         streamResolver?.let { resolver ->
             val direct = runCatching { resolver(song, quality.toScriptQuality()) }.getOrNull()
             if (direct != null) return PlayUrlResult.Success(direct)
+            return PlayUrlResult.Failure(
+                "音源脚本未能解析播放地址（可能不支持该音质、歌曲下架或脚本接口异常）"
+            )
         }
-        // 1. 平台官方接口优先（网易云 weapi：免费歌免登录，带 Cookie 解锁 VIP）
-        val officialStream = neteaseStream
-        if (officialStream != null) {
-            val official = runCatching { officialStream(remote.songId, quality.toScriptQuality()) }
-                .getOrNull()
-            if (official != null) return PlayUrlResult.Success(official)
-        }
-
-        // 2. 音源脚本兜底
+        // 1. 平台官方接口通道已移除（仅外置音源策略），直接走脚本判定
         val actions = supportedActions()
         if (actions.isEmpty()) {
             return PlayUrlResult.Failure(

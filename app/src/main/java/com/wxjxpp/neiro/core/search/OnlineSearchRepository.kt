@@ -15,12 +15,14 @@ import kotlinx.coroutines.coroutineScope
  * 单个平台失败不影响其它平台：各自 runCatching，返回空列表即可。
  */
 class OnlineSearchRepository(
-    private val sources: List<OnlineMusicSource>,
+    /** 动态取当前可用源（外置脚本源会随启用状态变化）。 */
+    private val sourcesProvider: () -> List<OnlineMusicSource>,
 ) {
 
-    /** 可选平台列表，供 UI 渲染筛选条。 */
-    val platforms: List<PlatformOption> = listOf(PlatformOption(ALL, "全部")) +
-        sources.map { PlatformOption(it.id, it.displayName) }
+    /** 可选平台列表，供 UI 渲染筛选条。每次读取都反映最新源集合。 */
+    val platforms: List<PlatformOption>
+        get() = listOf(PlatformOption(ALL, "全部")) +
+            sourcesProvider().map { PlatformOption(it.id, it.displayName) }
 
     data class PlatformOption(val id: String, val displayName: String)
 
@@ -38,8 +40,8 @@ class OnlineSearchRepository(
     ): Result {
         val trimmed = keyword.trim()
         if (trimmed.isEmpty()) return Result()
-
-        val targets = if (platformId == ALL) sources else sources.filter { it.id == platformId }
+        val all = sourcesProvider()
+        val targets = if (platformId == ALL) all else all.filter { it.id == platformId }
         if (targets.isEmpty()) return Result()
 
         return coroutineScope {

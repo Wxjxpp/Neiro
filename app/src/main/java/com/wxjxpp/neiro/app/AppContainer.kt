@@ -83,6 +83,9 @@ interface AppContainer {
     /** 在线聚合搜索。 */
     val onlineSearch: OnlineSearchRepository
 
+    /** 在线歌曲/歌词下载。 */
+    val downloadManager: com.wxjxpp.neiro.core.download.DownloadManager
+
     /** 面向用户的一次性提示（音源导入失败、取流失败等）。 */
     val messages: SharedFlow<String>
 
@@ -177,30 +180,39 @@ class DefaultAppContainer(
     private var neteaseCookie: String = ""
 
     // === 音源注册表 ===
-    private val onlineSources = defaultOnlinePlatforms(httpClient) { neteaseCookie }.map { platform ->
-        OnlineMusicSource(
-            platform = platform,
-            userApiClient = userApiClient,
-            supportedActions = { activeCapabilities },
-        )
-    }
-    // LX 自定义音源：已导入脚本时追加到搜索页（取流走脚本，搜索复用内置平台接口）
-    private val lxSources: List<OnlineMusicSource> = defaultOnlinePlatforms(httpClient) { neteaseCookie }.mapNotNull { platform ->
-        lxSourceOf(platform, userApiClient)?.let { lxPlatform ->
-            OnlineMusicSource(
-                platform = lxPlatform,
-                userApiClient = userApiClient,
-                supportedActions = { activeCapabilities },
-                streamResolver = { song, quality -> lxPlatform.streamUrl(song, quality) },
-            )
+    // 仅外置 LX 音源：每个内置平台派生一个 "xxx-lx" 源，取流完全交给脚本。
+    // 内置官方取流通道已移除（合规要求），未启用脚本时在线结果不可播并给出明确提示。
+    private val lxSources: List<OnlineMusicSource> = defaultOnlinePlatforms(httpClient) { neteaseCookie }
+        .mapNotNull { platform ->
+            lxSourceOf(platform, userApiClient)?.let { lxPlatform ->
+                OnlineMusicSource(
+                    platform = lxPlatform,
+                    userApiClient = userApiClient,
+                    supportedActions = { activeCapabilities },
+                    streamResolver = { song, quality -> lxPlatform.streamUrl(song, quality) },
+                )
+            }
         }
-    }.filter { userApiStore.apis.value.isNotEmpty() }
-
-    private val registry = DefaultMusicSourceRegistry(
-        listOf(LocalMusicSource(songRepository)) + onlineSources + lxSources,
+    /** 当前可用的外置音源集合（随脚本启用状态变化）。 */
+    @Volatile
+    private var activeOnlineSources: List<OnlineMusicSource> = emptyList()
+private val registry = DefaultMusicSourceRegistry(
+        listOf(LocalMusicSource(songRepository)),
     )
     override val sourceRegistry: MusicSourceRegistry = registry
-    override val onlineSearch = OnlineSearchRepository(onlineSources + lxSources)
+    override val onlineSearch = OnlineSearchRepository(sourcesProvider = { activeOnlineSources })
+
+    override val downloadManager =
+        com.wxjxpp.neiro.core.download.DownloadManager(application, registry)
+
+    /** 按脚本启用状态重建外置音源集合，并同步进注册表与搜索页。 */
+    private fun refreshOnlineSources(enabled: Boolean) {
+        val target = if (enabled) lxSources else emptyList()
+        // 先移除旧的外置源再注册新的，避免残留
+        registry.sources.filterIsInstance<OnlineMusicSource>().forEach { registry.unregister(it.id) }
+        target.forEach { registry.register(it) }
+        activeOnlineSources = target
+    }
 
     override val togetherTransport: TogetherTransport = NoopTogetherTransport()
 
@@ -219,11 +231,21 @@ class DefaultAppContainer(
         appScope.launch {
             appSettings.observeShuffleMode().collect { media3Controller.setShuffleMode(it) }
         }
-        // 启动时恢复上次启用的音源脚本
+        // 启动时恢复上次启用的音源脚本；引擎状态变化时同步外置源集合
         appScope.launch {
             appSettings.observeActiveUserApiId().collect { id ->
                 if (id != null && id != activatingId && userApiEngine.status !is UserApiStatus.Ready) {
                     activateUserApi(id)
+                }
+                if (id == null) refreshOnlineSources(enabled = false)
+            }
+        }
+        appScope.launch {
+            userApiEngine.status.collect { status ->
+                when (status) {
+                    is UserApiStatus.Ready -> refreshOnlineSources(enabled = true)
+                    is UserApiStatus.Idle, is UserApiStatus.Failed -> refreshOnlineSources(enabled = false)
+                    is UserApiStatus.Initializing -> Unit
                 }
             }
         }

@@ -154,7 +154,15 @@ class AppViewModel(
             .launchIn(viewModelScope)
 
         container.userApiEngine.status
-            .onEach { status -> _uiState.update { it.copy(userApiStatus = status) } }
+            .onEach { status ->
+                _uiState.update {
+                    it.copy(
+                        userApiStatus = status,
+                        // 外置源集合随脚本状态变化，筛选条同步刷新
+                        onlinePlatforms = container.onlineSearch.platforms,
+                    )
+                }
+            }
             .launchIn(viewModelScope)
 
         // 网易云 Cookie
@@ -222,6 +230,12 @@ class AppViewModel(
                 _uiState.update { it.copy(labTurboSpeed = enabled) }
                 container.playerController.setTurboSpeedMode(enabled)
             }
+            .launchIn(viewModelScope)
+        container.appSettings.observeResumeOnStart()
+            .onEach { enabled -> _uiState.update { it.copy(resumeOnStart = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeAutoPlayOnStart()
+            .onEach { enabled -> _uiState.update { it.copy(autoPlayOnStart = enabled) } }
             .launchIn(viewModelScope)
         // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录
         container.playerController.state
@@ -309,6 +323,18 @@ class AppViewModel(
     // ---- 播放 ----
 
     fun play(song: Song) = container.playerController.play(song)
+
+    /** 下载在线歌曲文件到公共音乐目录。 */
+    fun downloadSong(song: Song) {
+        viewModelScope.launch { notifyVia(container.downloadManager.downloadSong(song)) }
+    }
+
+    /** 下载在线歌词到公共文档目录。 */
+    fun downloadLyrics(song: Song) {
+        viewModelScope.launch { notifyVia(container.downloadManager.downloadLyrics(song)) }
+    }
+
+    private suspend fun notifyVia(message: String) { container.notify(message) }
     fun togglePlay() = container.playerController.togglePlay()
     fun next() = container.playerController.next()
     fun previous() = container.playerController.previous()

@@ -354,6 +354,8 @@ private fun RouteContent(
             isLoadingOnline = uiState.isSearchingOnline,
             onQueryChange = viewModel::updateSearchQuery,
             onSongClick = viewModel::play,
+            onDownloadSong = viewModel::downloadSong,
+            onDownloadLyrics = viewModel::downloadLyrics,
             onOnlinePlatformChange = viewModel::setOnlineSearchPlatform,
             contentPadding = contentPadding,
             modifier = modifier,

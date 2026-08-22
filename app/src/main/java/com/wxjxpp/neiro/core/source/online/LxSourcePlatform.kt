@@ -10,9 +10,7 @@ import org.json.JSONObject
  *
  * 与内置平台（网易/酷狗/QQ...）不同，它没有自己的搜索 HTTP 接口——
  * 搜索仍复用对应内置平台的公开接口，但取流完全交给已启用的
- * LX 脚本（QuickJS 引擎）。这样：
- * - 没导入脚本时：该音源不出现在搜索页（容器层按脚本列表过滤）
- * - 导入后：用户可在搜索页切到 "酷我 · LX" 等条目，结果必然可播
+ * LX 脚本（QuickJS 引擎）。
  *
  * [base] 提供搜索与 payload 构造；[sourceId] 是 LX 协议的平台标识
  * （kw / kg / tx / wy / mg）。
@@ -22,8 +20,8 @@ class LxSourcePlatform(
     private val userApiClient: UserApiClient,
     private val sourceId: String,
 ) : OnlinePlatform by base {
-    override val id: String = "$sourceId-lx"
-    override val displayName: String = "${base.displayName} · LX"
+    override val id: String = "\$sourceId-lx"
+    override val displayName: String = "\${base.displayName} · LX"
 
     /** LX 取流：完整 [Song]（含 payload）→ 直链。官方接口不参与。 */
     suspend fun streamUrl(song: Song, quality: String): String? {
@@ -40,6 +38,7 @@ class LxSourcePlatform(
             ?.optString("url")
             ?.takeIf { it.startsWith("http") }
     }
+
     companion object {
         /**
          * 构造 LX 协议的 musicInfo：优先使用平台搜索时保存的原始 JSON
@@ -49,7 +48,7 @@ class LxSourcePlatform(
             remote.payload?.let { raw ->
                 runCatching { JSONObject(raw) }.getOrNull()?.let { json ->
                     if (!json.has("songmid")) json.put("songmid", remote.songId)
-                    if (!json.has("source")) json.put("source", remote.sourceId.substringBefore(':'))
+                    if (!json.has("source")) json.put("source", lxSourceId(remote.sourceId))
                     if (!json.has("name")) json.put("name", song.title)
                     if (!json.has("singer")) json.put("singer", song.artistName)
                     return json
@@ -58,12 +57,21 @@ class LxSourcePlatform(
             return JSONObject().apply {
                 put("songmid", remote.songId)
                 put("hash", remote.songId)
-                put("source", remote.sourceId.substringBefore(':'))
+                put("source", lxSourceId(remote.sourceId))
                 put("name", song.title)
                 put("singer", song.artistName)
                 put("albumName", song.albumTitle)
             }
         }
+
+        /**
+         * 从 Song.id / sourceId 还原 LX 协议平台标识。
+         *
+         * LX 派生源的 id 形如 "wy-lx"（[LxSourcePlatform.id]），内置源是 "wy"；
+         * 脚本协议只认 "wy/kw/kg/tx/mg"，所以必须把 "-lx" 后缀剥掉。
+         */
+        internal fun lxSourceId(rawSourceId: String): String =
+            rawSourceId.substringBefore(':').removeSuffix("-lx")
     }
 }
 

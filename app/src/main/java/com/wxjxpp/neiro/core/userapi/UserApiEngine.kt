@@ -197,7 +197,29 @@ class UserApiEngine(private val context: Context) {
      */
     private fun injectNativeBridge(ctx: QuickJSContext) {
         val global = ctx.globalObject
-
+        // quickjs-wrapper 的 console.js 默认 stdout 是"抛错占位"实现，脚本一调
+        // console.log 就会炸出 "you should be set a stdout of platform"。
+        // 正确姿势：覆写已有 console 对象的 stdout，把日志接到 logcat。
+        val stdoutFn = JSCallFunction { args ->
+            val level = args.getOrNull(0) as? String ?: "log"
+            val msg = args.getOrNull(1) as? String ?: ""
+            android.util.Log.d("LxScript", "[$level] $msg")
+            null
+        }
+        runCatching {
+            val existing = global.getProperty("console")
+            if (existing is com.whl.quickjs.wrapper.JSObject) {
+                existing.setProperty("stdout", stdoutFn)
+            } else {
+                // console 未被库注入时手动补全
+                global.setProperty("console", ctx.createObject().also { c ->
+                    c.setProperty("stdout", stdoutFn)
+                    listOf("log", "debug", "info", "warn", "error").forEach { name ->
+                        c.setProperty(name, stdoutFn)
+                    }
+                })
+            }
+        }
         global.setProperty("__lx_native_call__", JSCallFunction { args ->
             if (args.size >= 3 && key == args[0]) {
                 onScriptAction(args[1] as? String ?: "", args[2] as? String ?: "")

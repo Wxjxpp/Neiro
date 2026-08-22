@@ -54,49 +54,58 @@ class EightBitAudioProcessor : BaseAudioProcessor() {
 }
 
 /**
- * 80 倍速播放模式：把 PCM 每帧复制 N 份实现"快进"听感
- * （Media3 的 setPlaybackSpeed 上限 4x，超高速只能靠重采样）。
- * N = round(80)，实际输出采样率不变，时长压缩为 1/N。
+ * 80 倍速播放模式：抽帧降采样实现时间压缩——每 N 帧只保留 1 帧，
+ * 播放时长压缩为 1/N（等效 80 倍速快进），音高保持不变、人耳可闻。
  *
- * 实现说明：每读取 1 个样本帧就写入 N 次，等效于把音频"拉长"了 N 倍
- * 频率（音调变高 80 倍），配合原速播放产生芯片音乐式超高速效果。
+ * 注意：不能用"帧复制"实现——复制会把音调抬高 N 倍（80 倍即 ~3.5MHz），
+ * 落在超声波段，人耳完全听不到（无声 bug 的根因）。
  */
 class TurboSpeedAudioProcessor(private var factor: Int = 80) : BaseAudioProcessor() {
     private var enabled: Boolean = false
     private var frameBytes: Int = 0
+    /** 跨缓冲区的帧计数（抽帧按全局帧号取模，避免每缓冲都从头开始）。 */
+    private var frameCounter: Long = 0L
 
     fun setEnabledMode(on: Boolean) {
         if (enabled == on) return
         enabled = on
+        frameCounter = 0L
         runCatching { flush() }
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
         frameBytes = inputAudioFormat.bytesPerFrame
-        // 禁用时直通
-        if (!enabled || frameBytes <= 0) return inputAudioFormat
         return inputAudioFormat
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (remaining == 0) return
-        if (!enabled) {
+        if (!enabled || frameBytes <= 0) {
             // 直通
             val output = replaceOutputBuffer(remaining)
             output.put(inputBuffer)
             output.flip()
             return
         }
-        // 按帧对齐，每帧复制 factor 份（音调升高 factor 倍的超高速效果）
+        // 抽帧：全局帧号 % factor == 0 的帧保留，其余丢弃
         val frames = remaining / frameBytes
         val usable = frames * frameBytes
-        val output = replaceOutputBuffer(usable * factor)
-        val data = ByteArray(frameBytes)
-        repeat(frames) {
-            inputBuffer.get(data)
-            repeat(factor) { output.put(data) }
+        val kept = ArrayList<Int>(frames / factor + 1)
+        for (i in 0 until frames) {
+            if (frameCounter % factor == 0L) kept += i
+            frameCounter++
         }
+        val startPos = inputBuffer.position()
+        val output = replaceOutputBuffer(kept.size * frameBytes)
+        val data = ByteArray(frameBytes)
+        for (index in kept) {
+            inputBuffer.position(startPos + index * frameBytes)
+            inputBuffer.get(data)
+            output.put(data)
+        }
+        // 输入必须全部消费（含被丢弃的帧与尾部不足一帧的字节），否则会卡住管线
+        inputBuffer.position(startPos + remaining)
         output.flip()
     }
 }

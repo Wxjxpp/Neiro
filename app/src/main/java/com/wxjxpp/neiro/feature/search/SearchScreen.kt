@@ -1,6 +1,8 @@
 package com.wxjxpp.neiro.feature.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -12,22 +14,27 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.Divider
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.SearchBar
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.search.OnlineSearchRepository
@@ -37,9 +44,12 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 /**
  * 搜索页。
  *
- * - 聚合搜索：并发搜全部平台，交错展示
- * - 单平台：按平台过滤
+ * - 搜索栏：Material3 [SearchBar] 全屏展开模式（对齐官方 FullScreenSearchBar 样例）
+ * - 平台筛选：FilterChip + FlowRow（对齐官方 SingleSelectConnectedButtonGroupWithFlowLayout 视觉，
+ *   material3 1.5.0-alpha18 尚未提供该组件，这里用等价组合实现）
+ * - 在线结果每行带下载按钮（歌曲文件 / 歌词）
  */
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SearchScreen(
     query: String,
@@ -52,40 +62,80 @@ fun SearchScreen(
     onQueryChange: (String) -> Unit,
     onSongClick: (Song) -> Unit,
     onOnlinePlatformChange: (String) -> Unit,
+    onDownloadSong: ((Song) -> Unit)? = null,
+    onDownloadLyrics: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
     // 在线/本地 Tab 状态：仅聚合模式下有意义；默认先看在线结果。
-    // （旧实现 showLocal 初值取 localResults.isNotEmpty()，且被错误地用于控制在线列表展示，
-    //   导致"选在线显示本地、选本地显示在线"，这里重写为明确的 Tab 语义）
     var showLocalTab by remember(query, onlineResults) { mutableStateOf(false) }
     val allLocalEmpty = localResults.isEmpty() && !isLoadingOnline && onlineResults.isEmpty()
 
-    Column(modifier = modifier.fillMaxSize().padding(contentPadding)) {
-        OutlinedTextField(
-            value = query,
-            onValueChange = onQueryChange,
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
-            placeholder = { Text("歌名 / 歌手 / 专辑 / 标签") },
-            leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
-            singleLine = true,
-        )
+    Column(modifier = modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
+        // 全屏搜索栏：激活时由 Material3 接管整屏展示（对齐官方 FullScreenSearchBar 行为），
+        // 收起后作为顶部圆角搜索条。material3 1.5.0-alpha18 的 SearchBarDefaults.InputField
+        // 已改为 TextFieldState 新签名，这里在 inputField 槽位用普通 TextField 保持字符串受控。
+        var active by remember { mutableStateOf(false) }
+        SearchBar(
+            inputField = {
+                androidx.compose.material3.TextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    placeholder = { Text("歌名 / 歌手 / 专辑 / 标签") },
+                    leadingIcon = { Icon(Icons.Filled.Search, contentDescription = null) },
+                    trailingIcon = {
+                        if (query.isNotEmpty()) {
+                            IconButton(onClick = { onQueryChange("") }) {
+                                Icon(Icons.Filled.Close, contentDescription = "清空")
+                            }
+                        }
+                    },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                        imeAction = androidx.compose.ui.text.input.ImeAction.Search,
+                    ),
+                    keyboardActions = androidx.compose.foundation.text.KeyboardActions(
+                        onSearch = { active = false },
+                    ),
+                    colors = androidx.compose.material3.TextFieldDefaults.colors(
+                        focusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedContainerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        focusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                        unfocusedIndicatorColor = androidx.compose.ui.graphics.Color.Transparent,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .onFocusChanged { state ->
+                            if (state.isFocused && !active) active = true
+                        },
+                )
+            },
+            expanded = active,
+            onExpandedChange = { active = it },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            // 展开态正文：轻提示（不做历史记录）
+            Text(
+                text = "输入关键词后按搜索键收起并开始检索在线曲库",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
+            )
+        }
 
-        // 聚合搜索时展示平台筛选器
+        // 聚合搜索时展示平台筛选器：FilterChip + FlowRow 自动换行
         if (query.isNotBlank() && onlinePlatforms.size > 1) {
-            SingleChoiceSegmentedButtonRow(
+            FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs)
+                    .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs),
+                horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
             ) {
                 onlinePlatforms.forEach { platform ->
-                    SegmentedButton(
+                    FilterChip(
                         selected = currentOnlinePlatform == platform.id,
                         onClick = { onOnlinePlatformChange(platform.id) },
-                        shape = SegmentedButtonDefaults.itemShape(onlinePlatforms.indexOf(platform), onlinePlatforms.size),
                         label = { Text(platform.displayName, style = MaterialTheme.typography.labelMedium) },
                     )
                 }
@@ -112,13 +162,15 @@ fun SearchScreen(
                         ) {
                             // 在线/本地切换：i=0 在线，i=1 本地
                             val labels = listOf("在线", "本地")
-                            var active by remember(query, onlineResults) { mutableStateOf(if (showLocalTab) 1 else 0) }
-                            SingleChoiceSegmentedButtonRow(modifier = Modifier.weight(1f)) {
+                            var tabActive by remember(query, onlineResults) { mutableStateOf(if (showLocalTab) 1 else 0) }
+                            FlowRow(
+                                modifier = Modifier.weight(1f),
+                                horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
+                            ) {
                                 labels.forEachIndexed { i, label ->
-                                    SegmentedButton(
-                                        selected = active == i,
-                                        onClick = { active = i; showLocalTab = (i == 1) },
-                                        shape = SegmentedButtonDefaults.itemShape(i, labels.size),
+                                    FilterChip(
+                                        selected = tabActive == i,
+                                        onClick = { tabActive = i; showLocalTab = (i == 1) },
                                         label = { Text(label, style = MaterialTheme.typography.labelMedium) },
                                     )
                                 }
@@ -145,7 +197,12 @@ fun SearchScreen(
                         SectionHeader("在线结果（${onlineResults.size}）")
                     }
                     items(onlineResults, key = { "online_${it.id}" }) { song ->
-                        SearchResultRow(song = song, onClick = { onSongClick(song) })
+                        SearchResultRow(
+                            song = song,
+                            onClick = { onSongClick(song) },
+                            onDownloadSong = onDownloadSong,
+                            onDownloadLyrics = onDownloadLyrics,
+                        )
                     }
                 }
                 // 本地结果
@@ -187,7 +244,12 @@ private fun HintText(text: String) {
 }
 
 @Composable
-private fun SearchResultRow(song: Song, onClick: () -> Unit) {
+private fun SearchResultRow(
+    song: Song,
+    onClick: () -> Unit,
+    onDownloadSong: ((Song) -> Unit)? = null,
+    onDownloadLyrics: ((Song) -> Unit)? = null,
+) {
     val dimens = AppTheme.dimens
     Row(
         modifier = Modifier
@@ -208,6 +270,32 @@ private fun SearchResultRow(song: Song, onClick: () -> Unit) {
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
+        }
+        // 在线结果提供下载入口：歌曲文件 / 歌词
+        if (song.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote) {
+            if (onDownloadSong != null || onDownloadLyrics != null) {
+                var showMenu by remember { mutableStateOf(false) }
+                IconButton(onClick = { showMenu = true }) {
+                    Icon(Icons.Filled.Download, contentDescription = "下载", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = showMenu,
+                    onDismissRequest = { showMenu = false },
+                ) {
+                    onDownloadSong?.let { download ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("下载歌曲") },
+                            onClick = { showMenu = false; download(song) },
+                        )
+                    }
+                    onDownloadLyrics?.let { download ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text("下载歌词") },
+                            onClick = { showMenu = false; download(song) },
+                        )
+                    }
+                }
+            }
         }
     }
 }
