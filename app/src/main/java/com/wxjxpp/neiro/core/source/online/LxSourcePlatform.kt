@@ -20,8 +20,27 @@ class LxSourcePlatform(
     private val userApiClient: UserApiClient,
     private val sourceId: String,
 ) : OnlinePlatform by base {
-    override val id: String = "\$sourceId-lx"
-    override val displayName: String = "\${base.displayName} · LX"
+    override val id: String = "$sourceId-lx"
+    override val displayName: String = "${base.displayName} · LX"
+
+    /**
+     * 搜索复用 [base] 的公开接口，但结果必须重挂到本 LX 源：
+     * 内置官方源已从注册表移除，若保留 base 的 sourceId，
+     * 播放/下载时按 sourceId 查注册表会得到"找不到音源"。
+     */
+    override suspend fun search(keyword: String, page: Int, pageSize: Int): List<Song> =
+        base.search(keyword, page, pageSize).map { song ->
+            val remote = song.location as? MediaLocation.Remote
+            if (remote != null) {
+                song.copy(
+                    id = "$id:${remote.songId}",
+                    tags = listOf(displayName),
+                    location = remote.copy(sourceId = id),
+                )
+            } else {
+                song
+            }
+        }
 
     /** LX 取流：完整 [Song]（含 payload）→ 直链。官方接口不参与。 */
     suspend fun streamUrl(song: Song, quality: String): String? {
