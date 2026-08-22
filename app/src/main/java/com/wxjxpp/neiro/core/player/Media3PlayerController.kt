@@ -10,7 +10,8 @@ import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
-import androidx.media3.exoplayer.audio.DefaultAudioSink
+import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.exoplayer.audio.AudioSink
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -149,22 +150,34 @@ class Media3PlayerController(
 
     private fun ensurePlayer(): ExoPlayer = player ?: createPlayer().also { player = it }
 
-    private fun createPlayer(): ExoPlayer = ExoPlayer.Builder(context)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .setUsage(C.USAGE_MEDIA)
-                .build(),
-            /* handleAudioFocus = */ true,
-        )
-        .setHandleAudioBecomingNoisy(false)
-        .setAudioSink(
-            DefaultAudioSink.Builder(context)
-                .setAudioProcessors(arrayOf(eightBitProcessor, turboProcessor))
-                .build(),
-        )
-        .build()
-        .apply {
+    private fun createPlayer(): ExoPlayer {
+        // 注入实验室音效处理器：覆写 buildAudioSink 把自定义 AudioProcessor
+        // 插到链首（官方 chain 保留在后）
+        val renderersFactory = object : DefaultRenderersFactory(context) {
+            override fun buildAudioSink(
+                context: Context,
+                audioProcessors: Array<AudioProcessor>,
+                enableFloatOutput: Boolean,
+                enableAudioTrackPlaybackParams: Boolean,
+            ): AudioSink =
+                super.buildAudioSink(
+                    context,
+                    arrayOf(eightBitProcessor, turboProcessor, *audioProcessors),
+                    enableFloatOutput,
+                    enableAudioTrackPlaybackParams,
+                )
+        }
+        return ExoPlayer.Builder(context, renderersFactory)
+            .setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(C.USAGE_MEDIA)
+                    .build(),
+                /* handleAudioFocus = */ true,
+            )
+            .setHandleAudioBecomingNoisy(false)
+            .build()
+            .apply {
             addListener(object : Player.Listener {
                 /** 系统音频焦点回调：按用户设置决定是否真的暂停。 */
                 override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
