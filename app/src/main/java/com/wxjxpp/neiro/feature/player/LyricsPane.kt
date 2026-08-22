@@ -91,9 +91,6 @@ fun LyricsPane(
     LaunchedEffect(positionMs, lines, effectiveOffset) {
         activeIndex = activeIndexOf(positionMs)
     }
-    // ---- 用户拖动检测：拖动时暂停自动居中且取消模糊，松手 3 秒后恢复跟随 ----
-    val isDragged by listState.interactionSource.collectIsDraggedAsState()
-    var userDragging by remember { mutableStateOf(false) }
     // 统一的平滑滚动函数：优先弹簧动效，否则普通 animate 滚动
     suspend fun smoothScrollTo(index: Int) {
         if (index < 0) return

@@ -28,7 +28,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.Translate
+
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledIconButton
@@ -390,7 +391,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     onToggleTranslation()
                 }) {
                     Icon(
-                        Icons.AutoMirrored.Filled.Translate,
+                        Icons.Filled.Translate,
                         contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
                         tint = if (translationOn) {
                             MaterialTheme.colorScheme.primary

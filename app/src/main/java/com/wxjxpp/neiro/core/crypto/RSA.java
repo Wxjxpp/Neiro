@@ -1,4 +1,4 @@
-package com.wxjxpp.musicplayer.core.crypto;
+package com.wxjxpp.neiro.core.crypto;
 
 import android.util.Base64;
 
