@@ -11,7 +11,9 @@ import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.exoplayer.DefaultRenderersFactory
+import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.exoplayer.audio.AudioSink
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -156,16 +158,18 @@ class Media3PlayerController(
         val renderersFactory = object : DefaultRenderersFactory(context) {
             override fun buildAudioSink(
                 context: Context,
-                audioProcessors: Array<AudioProcessor>,
                 enableFloatOutput: Boolean,
                 enableAudioTrackPlaybackParams: Boolean,
             ): AudioSink =
-                super.buildAudioSink(
-                    context,
-                    arrayOf(eightBitProcessor, turboProcessor, *audioProcessors),
-                    enableFloatOutput,
-                    enableAudioTrackPlaybackParams,
-                )
+                // media3 1.8+ 已移除带 processors 的 4 参重载，
+                // 这里用 Builder 重建 sink，自定义处理器插链首
+                DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(
+                        arrayOf<AudioProcessor>(eightBitProcessor, turboProcessor),
+                    )
+                    .setEnableFloatOutput(enableFloatOutput)
+                    .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                    .build()
         }
         return ExoPlayer.Builder(context, renderersFactory)
             .setAudioAttributes(
@@ -216,6 +220,7 @@ class Media3PlayerController(
                 }
             })
         }
+    }
 
     override fun setQueue(songs: List<Song>, startIndex: Int, autoPlay: Boolean) {
         _queue.value = songs
