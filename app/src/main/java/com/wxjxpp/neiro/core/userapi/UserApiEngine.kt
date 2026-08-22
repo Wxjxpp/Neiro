@@ -212,12 +212,15 @@ class UserApiEngine(private val context: Context) {
                 existing.setProperty("stdout", stdoutFn)
             } else {
                 // console 未被库注入时手动补全
-                global.setProperty("console", ctx.createObject().also { c ->
-                    c.setProperty("stdout", stdoutFn)
-                    listOf("log", "debug", "info", "warn", "error").forEach { name ->
-                        c.setProperty(name, stdoutFn)
-                    }
-                })
+                global.setProperty(
+                    "console",
+                    ctx.createNewJSObject().also { c ->
+                        c.setProperty("stdout", stdoutFn)
+                        listOf("log", "debug", "info", "warn", "error").forEach { name ->
+                            c.setProperty(name, stdoutFn)
+                        }
+                    },
+                )
             }
         }
         global.setProperty("__lx_native_call__", JSCallFunction { args ->
