@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.LyricLine
 import com.wxjxpp.neiro.core.model.Lyrics
 import kotlin.math.abs
+/** 歌词水平对齐方式。 */
+enum class LyricsAlign { Start, Center, End }
+
 /**
  * 自研逐字歌词渲染器（纯 Compose，无第三方渲染依赖）。
  *
@@ -66,6 +69,8 @@ fun LyricsPane(
     modifier: Modifier = Modifier,
     showTranslation: Boolean = true,
     offsetMs: Long = 0L,
+    align: LyricsAlign = LyricsAlign.Center,
+    springAnimation: Boolean = false,
     onSeekTo: (Long) -> Unit = {},
 ) {
     if (lyrics.isEmpty) return
@@ -89,29 +94,38 @@ fun LyricsPane(
     // ---- 用户拖动检测：拖动时暂停自动居中且取消模糊，松手 3 秒后恢复跟随 ----
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
     var userDragging by remember { mutableStateOf(false) }
+    // 统一的平滑滚动函数：优先弹簧动效，否则普通 animate 滚动
+    suspend fun smoothScrollTo(index: Int) {
+        if (index < 0) return
+        runCatching {
+            if (springAnimation && index > listState.firstVisibleItemIndex + 8) {
+                // 跳跃太远时先快速跳到附近再动画对齐，避免长距离慢滚
+                listState.scrollToItem(index = (index - 6).coerceAtLeast(0))
+            }
+            listState.animateScrollToItem(
+                index = index,
+                scrollOffset = -centeringOffset(listState, density),
+            )
+        }
+    }
+    // 用户拖动：暂停跟随；停止超 3 秒后**平滑滚回**当前句（不瞬移）
+    val isDragged by listState.interactionSource.collectIsDraggedAsState()
+    var userDragging by remember { mutableStateOf(false) }
     LaunchedEffect(isDragged) {
         if (isDragged) {
             userDragging = true
         } else if (userDragging) {
             kotlinx.coroutines.delay(3_000L)
             userDragging = false
-            // 恢复时立即对齐到当前行，避免从远处慢慢滚回来
-            runCatching {
-                listState.scrollToItem(
-                    index = activeIndex.coerceAtLeast(0),
-                    scrollOffset = -centeringOffset(listState, density),
-                )
-            }
+            smoothScrollTo(activeIndex.coerceAtLeast(0))
         }
     }
-    // 当前行变化且用户没在拖动时滚动到列表中心
+    // 切句且用户没在拖动时平滑滚到列表聚焦位（视口 35% 处）
     var lastScrolledIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(activeIndex, userDragging) {
         if (activeIndex < 0 || activeIndex == lastScrolledIndex || userDragging) return@LaunchedEffect
         lastScrolledIndex = activeIndex
-        runCatching {
-            listState.animateScrollToItem(index = activeIndex, scrollOffset = -centeringOffset(listState, density))
-        }
+        smoothScrollTo(activeIndex)
     }
     LazyColumn(
         state = listState,
@@ -126,8 +140,10 @@ fun LyricsPane(
         itemsIndexed(lines, key = { i, _ -> i }) { index, line ->
             LyricRow(
                 line = line,
+                align = align,
                 isActive = index == activeIndex,
                 distance = index - activeIndex,
+                springAnimation = springAnimation,
                 isUserScrolling = userDragging,
                 positionMs = positionMs - effectiveOffset,
                 showTranslation = showTranslation,
@@ -136,19 +152,21 @@ fun LyricsPane(
         }
     }
 }
-/** 让目标行滚到视口中心的偏移量（负值向上滚）。取视口 40% 处，略高于几何中心，视觉更居中。 */
+/** 让目标行滚到视口中心的偏移量（负值向上滚）。取视口 35% 处，聚焦行位于屏幕上三分之一视觉焦点。 */
 private fun centeringOffset(
     listState: androidx.compose.foundation.lazy.LazyListState,
     density: androidx.compose.ui.unit.Density,
 ): Int = with(density) {
     val viewportHeight = listState.layoutInfo.viewportSize.height
-    (viewportHeight * 0.4f).toInt().coerceAtLeast(0)
+    (viewportHeight * 0.35f).toInt().coerceAtLeast(0)
 }
 @Composable
 private fun LyricRow(
     line: LyricLine,
+    align: LyricsAlign,
     isActive: Boolean,
     distance: Int,
+    springAnimation: Boolean = false,
     isUserScrolling: Boolean,
     positionMs: Long,
     showTranslation: Boolean,
@@ -166,8 +184,24 @@ private fun LyricRow(
         else -> (abs(distance).coerceAtMost(4) * 2).dp
     }
     val blurRadius by animateDpAsState(targetBlur, tween(300), label = "lyricBlur")
-    // 当前行轻微放大
-    val scale by animateFloatAsState(if (isActive) 1.06f else 1f, tween(300), label = "lyricScale")
+    // 当前行轻微放大；弹簧模式下用 spring 带回弹
+    val scale by animateFloatAsState(
+        targetValue = if (isActive) 1.06f else 1f,
+        animationSpec = if (springAnimation) {
+            androidx.compose.animation.core.spring(
+                dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
+                stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
+            )
+        } else {
+            tween(300)
+        },
+        label = "lyricScale",
+    )
+    val rowAlignment = when (align) {
+        LyricsAlign.Start -> Alignment.Start
+        LyricsAlign.Center -> Alignment.CenterHorizontally
+        LyricsAlign.End -> Alignment.End
+    }
     val alpha by animateFloatAsState(
         targetValue = when {
             isActive -> 1f
@@ -182,7 +216,7 @@ private fun LyricRow(
             .fillMaxWidth()
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .clickable(onClick = onClick),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = rowAlignment,
     ) {
         Box(modifier = Modifier.blur(blurRadius).alpha(alpha)) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {

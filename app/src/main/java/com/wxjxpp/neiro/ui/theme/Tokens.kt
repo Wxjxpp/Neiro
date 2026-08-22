@@ -8,13 +8,34 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ProvidableCompositionLocal
 import androidx.compose.runtime.staticCompositionLocalOf
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
- * 字体。需要自定义字型时在这里替换 FontFamily，页面不受影响。
+ * 字体。整体比 M3 默认缩小一档（用户反馈默认字号/图标过大）：
+ * titleLarge 22→18、titleMedium 16→14、bodyLarge 16→14、
+ * bodyMedium 14→13、bodySmall 12→11、labelLarge 14→12。
  */
-val AppTypography = Typography()
+val AppTypography = Typography(
+    displayLarge = TextStyle(fontSize = 57.sp, fontWeight = FontWeight.Normal),
+    displayMedium = TextStyle(fontSize = 40.sp, fontWeight = FontWeight.Normal),
+    displaySmall = TextStyle(fontSize = 32.sp, fontWeight = FontWeight.Normal),
+    headlineLarge = TextStyle(fontSize = 28.sp, fontWeight = FontWeight.Normal),
+    headlineMedium = TextStyle(fontSize = 24.sp, fontWeight = FontWeight.Normal),
+    headlineSmall = TextStyle(fontSize = 20.sp, fontWeight = FontWeight.Normal),
+    titleLarge = TextStyle(fontSize = 18.sp, fontWeight = FontWeight.Bold),
+    titleMedium = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.SemiBold),
+    titleSmall = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    bodyLarge = TextStyle(fontSize = 14.sp, fontWeight = FontWeight.Normal),
+    bodyMedium = TextStyle(fontSize = 13.sp, fontWeight = FontWeight.Normal),
+    bodySmall = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Normal),
+    labelLarge = TextStyle(fontSize = 12.sp, fontWeight = FontWeight.Medium),
+    labelMedium = TextStyle(fontSize = 11.sp, fontWeight = FontWeight.Medium),
+    labelSmall = TextStyle(fontSize = 10.sp, fontWeight = FontWeight.Medium),
+)
 
 /**
  * M3 Expressive 形状档位。圆角整体偏大是 Expressive 的特征之一。
@@ -50,7 +71,7 @@ data class AppDimens(
     val floatingBarRadius: Dp = 28.dp,
     val floatingBarElevation: Dp = 6.dp,
 
-    val detailCoverSize: Dp = 280.dp,
+    val detailCoverSize: Dp = 240.dp,
     val detailCoverRadius: Dp = 28.dp,
 
     val listItemHeight: Dp = 68.dp,

@@ -44,6 +44,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val PauseOnHeadphoneDisconnect = booleanPreferencesKey("pause_on_headphone_disconnect")
         val PauseOnAudioFocusLoss = booleanPreferencesKey("pause_on_audio_focus_loss")
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
+        val LyricsAlign = stringPreferencesKey("lyrics_align")
+        val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -170,5 +172,19 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.AmbientGlow] ?: true }
     suspend fun setAmbientGlow(enabled: Boolean) {
         store.edit { it[Keys.AmbientGlow] = enabled }
+    }
+
+    /** 歌词对齐方式：start / center / end。默认居中。 */
+    fun observeLyricsAlign(): Flow<String> =
+        store.data.map { it[Keys.LyricsAlign] ?: "center" }
+    suspend fun setLyricsAlign(align: String) {
+        store.edit { it[Keys.LyricsAlign] = align }
+    }
+
+    /** [实验室] 歌词弹簧动效。默认关。 */
+    fun observeLabSpringLyrics(): Flow<Boolean> =
+        store.data.map { it[Keys.LabSpringLyrics] ?: false }
+    suspend fun setLabSpringLyrics(enabled: Boolean) {
+        store.edit { it[Keys.LabSpringLyrics] = enabled }
     }
 }

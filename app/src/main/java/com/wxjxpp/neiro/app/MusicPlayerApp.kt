@@ -169,6 +169,8 @@ fun MusicPlayerApp(container: AppContainer) {
                         showTranslation = uiState.showTranslation,
                         lyricsOffsetMs = uiState.lyricsOffsetMs,
                         ambientGlow = uiState.ambientGlow,
+                        lyricsAlign = uiState.lyricsAlign,
+                        springLyrics = uiState.labSpringLyrics,
                         queue = queue,
                         animatedVisibilityScope = this@AnimatedContent,
                         onBack = { collapsePlayerDetail() },
@@ -182,6 +184,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onPickQueueItem = viewModel::playQueueItem,
                         onLyricsOffsetChange = viewModel::setLyricsOffset,
                         onMatchLyrics = viewModel::matchLyricsOnline,
+                        onToggleTranslation = viewModel::setShowTranslation,
                     )
 
                     else -> Scaffold(
@@ -394,6 +397,10 @@ private fun RouteContent(
             onPauseOnHeadphoneDisconnectChange = viewModel::setPauseOnHeadphoneDisconnect,
             onPauseOnAudioFocusLossChange = viewModel::setPauseOnAudioFocusLoss,
             onAmbientGlowChange = viewModel::setAmbientGlow,
+            lyricsAlign = uiState.lyricsAlign,
+            labSpringLyrics = uiState.labSpringLyrics,
+            onLyricsAlignChange = viewModel::setLyricsAlign,
+            onLabSpringLyricsChange = viewModel::setLabSpringLyrics,
             contentPadding = contentPadding,
             modifier = modifier,
         )

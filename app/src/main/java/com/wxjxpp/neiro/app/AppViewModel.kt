@@ -78,6 +78,12 @@ data class ShellUiState(
     val pauseOnAudioFocusLoss: Boolean = true,
     /** 播放页动态流光背景。 */
     val ambientGlow: Boolean = true,
+
+    /** 歌词对齐：start / center / end。 */
+    val lyricsAlign: String = "center",
+
+    /** [实验室] 歌词弹簧动效。 */
+    val labSpringLyrics: Boolean = false,
 )
 
 class AppViewModel(
@@ -170,6 +176,12 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeAmbientGlow()
             .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeLyricsAlign()
+            .onEach { align -> _uiState.update { it.copy(lyricsAlign = align) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeLabSpringLyrics()
+            .onEach { enabled -> _uiState.update { it.copy(labSpringLyrics = enabled) } }
             .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
@@ -290,6 +302,14 @@ class AppViewModel(
 
     fun setAmbientGlow(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setAmbientGlow(enabled) }
+    }
+
+    fun setLyricsAlign(align: String) {
+        viewModelScope.launch { container.appSettings.setLyricsAlign(align) }
+    }
+
+    fun setLabSpringLyrics(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setLabSpringLyrics(enabled) }
     }
 
     /** 播放整个选中的歌曲集合。 */

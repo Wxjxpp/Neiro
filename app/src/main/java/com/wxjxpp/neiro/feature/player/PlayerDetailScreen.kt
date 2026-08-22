@@ -28,6 +28,7 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.Translate
 import androidx.compose.material.icons.filled.Lyrics
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
@@ -92,6 +93,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
     lyricsOffsetMs: Long,
     ambientGlow: Boolean,
     queue: List<Song>,
+    lyricsAlign: String = "center",
+    springLyrics: Boolean = false,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -104,11 +107,14 @@ fun SharedTransitionScope.PlayerDetailScreen(
     onPickQueueItem: (Int) -> Unit,
     onLyricsOffsetChange: (Long) -> Unit,
     onMatchLyrics: () -> Unit = {},
+    onToggleTranslation: () -> Unit = {},
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
     var dragging by remember { mutableStateOf(false) }
     var showLyrics by remember { mutableStateOf(false) }
+    // 翻译显示开关：默认开启，可在播放页直接切换（同时通知设置持久化）
+    var translationOn by remember(showTranslation) { mutableStateOf(showTranslation) }
     var showQueue by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
@@ -168,6 +174,20 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     label = "coverLyricsSwitch",
                 ) { lyricsMode ->
                     if (lyricsMode) {
+                        Box(modifier = Modifier.fillMaxSize()) {
+                        // Apple Music 风格：歌词模式左上角小封面（sharedElement 切换时自动动画）
+                            SongCover(
+                                song = song,
+                                size = 56.dp,
+                                radius = 10.dp,
+                                modifier = Modifier
+                                    .align(Alignment.TopStart)
+                                    .padding(start = 56.dp, top = 8.dp)
+                                    .sharedElement(
+                                        sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
+                                        animatedVisibilityScope = animatedVisibilityScope,
+                                    ),
+                            )
                         if (lyrics.isEmpty) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -186,11 +206,18 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             LyricsPane(
                                 lyrics = lyrics,
                                 positionMs = state.positionMs,
-                                showTranslation = showTranslation,
+                                showTranslation = translationOn,
                                 offsetMs = lyricsOffsetMs,
+                                align = when (lyricsAlign) {
+                                    "start" -> LyricsAlign.Start
+                                    "end" -> LyricsAlign.End
+                                    else -> LyricsAlign.Center
+                                },
+                                springAnimation = springLyrics,
                                 onSeekTo = onSeekTo,
                                 modifier = Modifier.fillMaxSize(),
                             )
+                        }
                         }
                     } else {
                         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
@@ -338,13 +365,13 @@ fun SharedTransitionScope.PlayerDetailScreen(
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
         }
-        // 右下角操作列：歌词切换 / 播放列表 / 歌词偏移
-        Column(
+        // 控制台上方横置按钮行：歌词偏移 / 翻译开关 / 歌词切换 / 播放列表
+        Row(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(end = dimens.spaceLg, bottom = 180.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(4.dp),
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 210.dp),
+            horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
                 Icon(
@@ -356,6 +383,22 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         MaterialTheme.colorScheme.onSurfaceVariant
                     },
                 )
+            }
+            if (translationOn || lyrics.hasTranslation) {
+                IconButton(onClick = {
+                    translationOn = !translationOn
+                    onToggleTranslation()
+                }) {
+                    Icon(
+                        Icons.AutoMirrored.Filled.Translate,
+                        contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
+                        tint = if (translationOn) {
+                            MaterialTheme.colorScheme.primary
+                        } else {
+                            MaterialTheme.colorScheme.onSurfaceVariant
+                        },
+                    )
+                }
             }
             IconButton(onClick = { showLyrics = !showLyrics }) {
                 Icon(
