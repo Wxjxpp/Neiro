@@ -184,7 +184,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onPickQueueItem = viewModel::playQueueItem,
                         onLyricsOffsetChange = viewModel::setLyricsOffset,
                         onMatchLyrics = viewModel::matchLyricsOnline,
-                        onToggleTranslation = viewModel::setShowTranslation,
+                        onToggleTranslation = { viewModel.setShowTranslation(!uiState.showTranslation) },
                     )
 
                     else -> Scaffold(
