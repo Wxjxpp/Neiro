@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -46,6 +47,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
         val LyricsAlign = stringPreferencesKey("lyrics_align")
         val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
+        val LyricsFontScale = floatPreferencesKey("lyrics_font_scale")
+        val LyricsGapScale = floatPreferencesKey("lyrics_gap_scale")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -186,5 +189,20 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.LabSpringLyrics] ?: false }
     suspend fun setLabSpringLyrics(enabled: Boolean) {
         store.edit { it[Keys.LabSpringLyrics] = enabled }
+    }
+
+
+    /** 歌词字号缩放（0.7~1.6）。 */
+    fun observeLyricsFontScale(): Flow<Float> =
+        store.data.map { it[Keys.LyricsFontScale] ?: 1f }
+    suspend fun setLyricsFontScale(scale: Float) {
+        store.edit { it[Keys.LyricsFontScale] = scale }
+    }
+
+    /** 歌词行间隙缩放（0.5~2.0）。 */
+    fun observeLyricsGapScale(): Flow<Float> =
+        store.data.map { it[Keys.LyricsGapScale] ?: 1f }
+    suspend fun setLyricsGapScale(scale: Float) {
+        store.edit { it[Keys.LyricsGapScale] = scale }
     }
 }

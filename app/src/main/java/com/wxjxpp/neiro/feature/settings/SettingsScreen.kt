@@ -55,8 +55,12 @@ fun SettingsScreen(
     onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
     onAmbientGlowChange: (Boolean) -> Unit = {},
     lyricsAlign: String = "center",
+    lyricsFontScale: Float = 1f,
+    lyricsGapScale: Float = 1f,
     labSpringLyrics: Boolean = false,
     onLyricsAlignChange: (String) -> Unit = {},
+    onLyricsFontScaleChange: (Float) -> Unit = {},
+    onLyricsGapScaleChange: (Float) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -113,6 +117,31 @@ fun SettingsScreen(
                             )
                         }
                     }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    var fontValue by remember(lyricsFontScale) { mutableStateOf(lyricsFontScale) }
+                    Text(
+                        text = "歌词字号：%.0f%%".format(fontValue * 100),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = fontValue,
+                        onValueChange = { fontValue = it },
+                        onValueChangeFinished = { onLyricsFontScaleChange(fontValue) },
+                        valueRange = 0.7f..1.6f,
+                    )
+                    var gapValue by remember(lyricsGapScale) { mutableStateOf(lyricsGapScale) }
+                    Text(
+                        text = "行间隙：%.0f%%".format(gapValue * 100),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Slider(
+                        value = gapValue,
+                        onValueChange = { gapValue = it },
+                        onValueChangeFinished = { onLyricsGapScaleChange(gapValue) },
+                        valueRange = 0.5f..2.0f,
+                    )
                 }
                 "playback" -> {
                     Text(

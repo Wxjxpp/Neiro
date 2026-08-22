@@ -49,6 +49,10 @@ class RoomSongRepository(
         scanner.scan().collect { progress ->
             if (progress is ScanProgress.Found) found += progress.song
         }
+        // 全量替换：DELETE + 重新 upsert 保证触发 Room 失效通知，
+        // observeSongs 的 Flow 会立即重发，UI 下拉刷新后立刻看到新列表
+        // （纯 upsert 在内容未变时不触发 Flow，导致刷新"看起来没反应"）
+        dao.deleteAll()
         if (found.isEmpty()) return
         // 先落轻量索引让列表立刻可见
         dao.upsert(found.map { it.toEntity() })

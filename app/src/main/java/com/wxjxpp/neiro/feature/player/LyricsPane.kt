@@ -1,8 +1,8 @@
 package com.wxjxpp.neiro.feature.player
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,14 +28,12 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -44,22 +42,19 @@ import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.LyricLine
 import com.wxjxpp.neiro.core.model.Lyrics
 import kotlin.math.abs
+
 /** 歌词水平对齐方式。 */
 enum class LyricsAlign { Start, Center, End }
 
 /**
  * 自研逐字歌词渲染器（纯 Compose，无第三方渲染依赖）。
  *
- * - 音节时间轴（增强型 LRC / TTML / QRC）→ 音节级逐字填充
- * - 仅行时间轴（普通 LRC / SRT）→ 整行按行进度填充
- * - 当前行垂直居中、高亮并轻微放大；其余行按距离**渐进式模糊**
- *   （相邻行模糊小，越远越模糊），翻译与主文本同步模糊
- * - 用户手动拖动歌词时暂停自动居中且取消模糊，松手 3 秒后恢复跟随
- * - 点击任意行跳转到该行时间（[onSeekTo]）
- * - [offsetMs] 用户手动偏移，正数让歌词提前、负数延后
- *
- * 排版注意：逐字音节必须用 [FlowRow] 而不是 Row——Row 不换行，
- * 长句会被挤压成一条竖线。
+ * 视觉参考 Apple Music（图一/图三标杆）：
+ * - 同屏可见行数少（大字号 + 大行距），当前行清晰，其余行**重度模糊**渐隐
+ * - 对齐方式支持左/中/右，主文本与翻译严格同向
+ * - 当前行垂直聚焦于视口 30% 高度处；切句平滑滚动
+ * - 用户拖动时暂停跟随并取消模糊，停止 3 秒后平滑滚回
+ * - 字号 [fontScale] 与行间隙 [gapScale] 用户可调（设置页）
  */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -71,6 +66,8 @@ fun LyricsPane(
     offsetMs: Long = 0L,
     align: LyricsAlign = LyricsAlign.Center,
     springAnimation: Boolean = false,
+    fontScale: Float = 1f,
+    gapScale: Float = 1f,
     onSeekTo: (Long) -> Unit = {},
 ) {
     if (lyrics.isEmpty) return
@@ -78,7 +75,6 @@ fun LyricsPane(
     // 用户偏移 + LRC 内嵌 offset：正数 = 歌词提前显示
     val effectiveOffset = offsetMs + lyrics.offsetMs
     val listState = rememberLazyListState()
-    val density = LocalDensity.current
     fun activeIndexOf(pos: Long): Int {
         val p = pos - effectiveOffset
         var found = -1
@@ -91,21 +87,31 @@ fun LyricsPane(
     LaunchedEffect(positionMs, lines, effectiveOffset) {
         activeIndex = activeIndexOf(positionMs)
     }
-    // 统一的平滑滚动函数：优先弹簧动效，否则普通 animate 滚动
+    // 统一的平滑滚动：目标行**中心**对齐视口中心（MusicFree 同款算法）。
+    // animateScrollToItem 只能按 item 顶边定位，多行长句会 under-scroll，
+    // 所以先粗定位，再从 layoutInfo 读实际高度做一次精确校正。
     suspend fun smoothScrollTo(index: Int) {
         if (index < 0) return
         runCatching {
-            if (springAnimation && index > listState.firstVisibleItemIndex + 8) {
-                // 跳跃太远时先快速跳到附近再动画对齐，避免长距离慢滚
-                listState.scrollToItem(index = (index - 6).coerceAtLeast(0))
+            val viewport = listState.layoutInfo.viewportSize.height
+            if (viewport <= 0) return@runCatching
+            if (abs(index - listState.firstVisibleItemIndex) > 10) {
+                // 跳跃太远先快速跳到附近再动画对齐，避免长距离慢滚
+                listState.scrollToItem(index = (index - 4).coerceAtLeast(0))
             }
-            listState.animateScrollToItem(
-                index = index,
-                scrollOffset = -centeringOffset(listState, density),
-            )
+            listState.animateScrollToItem(index = index)
+            // 二次校正：此时目标行已可见，读取真实尺寸把中心对齐视口中心
+            val info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
+            if (info != null) {
+                val target = (viewport - info.size) / 2
+                val delta = info.offset - target
+                if (abs(delta) > 4) {
+                    listState.animateScrollBy(delta.toFloat(), tween(220))
+                }
+            }
         }
     }
-    // 用户拖动：暂停跟随；停止超 3 秒后**平滑滚回**当前句（不瞬移）
+    // 用户拖动：暂停跟随；停止超 3 秒后平滑滚回当前句（不瞬移）
     val isDragged by listState.interactionSource.collectIsDraggedAsState()
     var userDragging by remember { mutableStateOf(false) }
     LaunchedEffect(isDragged) {
@@ -117,7 +123,7 @@ fun LyricsPane(
             smoothScrollTo(activeIndex.coerceAtLeast(0))
         }
     }
-    // 切句且用户没在拖动时平滑滚到列表聚焦位（视口 35% 处）
+    // 切句且用户没在拖动时平滑滚到聚焦位
     var lastScrolledIndex by remember { mutableIntStateOf(-1) }
     LaunchedEffect(activeIndex, userDragging) {
         if (activeIndex < 0 || activeIndex == lastScrolledIndex || userDragging) return@LaunchedEffect
@@ -127,12 +133,16 @@ fun LyricsPane(
     LazyColumn(
         state = listState,
         modifier = modifier.fillMaxSize(),
-        horizontalAlignment = Alignment.CenterHorizontally,
+        horizontalAlignment = when (align) {
+            LyricsAlign.Start -> Alignment.Start
+            LyricsAlign.Center -> Alignment.CenterHorizontally
+            LyricsAlign.End -> Alignment.End
+        },
         contentPadding = PaddingValues(
-            start = 24.dp, end = 24.dp,
-            top = 220.dp, bottom = 320.dp,
+            start = 28.dp, end = 28.dp,
+            top = 200.dp, bottom = 300.dp,
         ),
-        verticalArrangement = Arrangement.spacedBy(22.dp),
+        verticalArrangement = Arrangement.spacedBy((26 * gapScale).dp),
     ) {
         itemsIndexed(lines, key = { i, _ -> i }) { index, line ->
             LyricRow(
@@ -140,50 +150,49 @@ fun LyricsPane(
                 align = align,
                 isActive = index == activeIndex,
                 distance = index - activeIndex,
-                springAnimation = springAnimation,
                 isUserScrolling = userDragging,
                 positionMs = positionMs - effectiveOffset,
                 showTranslation = showTranslation,
+                fontScale = fontScale,
+                springAnimation = springAnimation,
                 onClick = { onSeekTo(line.startMs + effectiveOffset + 1) },
             )
         }
     }
 }
-/** 让目标行滚到视口中心的偏移量（负值向上滚）。取视口 30% 处，聚焦行位于屏幕上三分之一视觉焦点。 */
-private fun centeringOffset(
-    listState: androidx.compose.foundation.lazy.LazyListState,
-    density: androidx.compose.ui.unit.Density,
-): Int = with(density) {
-    val viewportHeight = listState.layoutInfo.viewportSize.height
-    (viewportHeight * 0.30f).toInt().coerceAtLeast(0)
-}
+
 @Composable
 private fun LyricRow(
     line: LyricLine,
     align: LyricsAlign,
     isActive: Boolean,
     distance: Int,
-    springAnimation: Boolean = false,
     isUserScrolling: Boolean,
     positionMs: Long,
     showTranslation: Boolean,
+    fontScale: Float,
+    springAnimation: Boolean,
     onClick: () -> Unit,
 ) {
     val activeColor = MaterialTheme.colorScheme.primary
     val inactiveColor = MaterialTheme.colorScheme.onSurfaceVariant
-    val baseStyle = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Bold)
+    // 字号用户可调：基准 titleLarge，当前行更大、非当前行略小（Apple Music 层级感）
+    val baseStyle = MaterialTheme.typography.titleLarge
+        .copy(fontSize = MaterialTheme.typography.titleLarge.fontSize * fontScale)
+    val activeStyle = baseStyle.copy(fontWeight = FontWeight.Bold)
+    val inactiveStyle = baseStyle.copy(fontWeight = FontWeight.SemiBold)
 
-    // 渐进式模糊：当前行 0；|距离|=1 → 2dp；2 → 4dp；≥4 封顶 8dp。
-    // 用户拖动浏览时全部不模糊（只降透明度）。
-    val targetBlur = when {
-        isUserScrolling -> 0.dp
-        isActive -> 0.dp
-        else -> (abs(distance).coerceAtMost(4) * 2).dp
+    // 透明度分层（MusicFree 方式）：非当前行低透明度，无模糊——
+    // Compose 的 Modifier.blur 在多数设备上效果脏且费电，透明度分层更干净
+    // 距离越远越淡：|d|=1 → 0.55，2 → 0.42，≥3 封顶 0.32
+    val rowAlpha = when {
+        isUserScrolling -> 0.6f
+        isActive -> 1f
+        else -> (0.55f - (abs(distance) - 1) * 0.13f).coerceAtLeast(0.32f)
     }
-    val blurRadius by animateDpAsState(targetBlur, tween(300), label = "lyricBlur")
     // 当前行轻微放大；弹簧模式下用 spring 带回弹
     val scale by animateFloatAsState(
-        targetValue = if (isActive) 1.06f else 1f,
+        targetValue = if (isActive) 1.04f else 0.96f,
         animationSpec = if (springAnimation) {
             androidx.compose.animation.core.spring(
                 dampingRatio = androidx.compose.animation.core.Spring.DampingRatioMediumBouncy,
@@ -194,37 +203,37 @@ private fun LyricRow(
         },
         label = "lyricScale",
     )
-    val rowAlignment = when (align) {
-        LyricsAlign.Start -> Alignment.Start
-        LyricsAlign.Center -> Alignment.CenterHorizontally
-        LyricsAlign.End -> Alignment.End
-    }
-    val alpha by animateFloatAsState(
-        targetValue = when {
-            isActive -> 1f
-            isUserScrolling -> 0.75f
-            else -> 0.5f
-        },
-        animationSpec = tween(350),
-        label = "lyricAlpha",
-    )
+    // 非当前行透明度更低，与重度模糊叠加出"退后"的层次
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer(scaleX = scale, scaleY = scale)
             .clickable(onClick = onClick),
-        horizontalAlignment = rowAlignment,
+        horizontalAlignment = when (align) {
+            LyricsAlign.Start -> Alignment.Start
+            LyricsAlign.Center -> Alignment.CenterHorizontally
+            LyricsAlign.End -> Alignment.End
+        },
     ) {
-        Box(modifier = Modifier.blur(blurRadius).alpha(alpha)) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Box(modifier = Modifier.alpha(rowAlpha)) {
+            Column(
+                horizontalAlignment = when (align) {
+                    LyricsAlign.Start -> Alignment.Start
+                    LyricsAlign.Center -> Alignment.CenterHorizontally
+                    LyricsAlign.End -> Alignment.End
+                },
+            ) {
                 if (line.syllables.isNotEmpty()) {
                     KaraokeText(
                         line = line,
+                        align = align,
                         isActive = isActive,
                         positionMs = positionMs,
                         activeColor = activeColor,
                         inactiveColor = inactiveColor,
-                        style = baseStyle,
+                        activeStyle = activeStyle,
+                        inactiveStyle = inactiveStyle,
                     )
                 } else {
                     val lineProgress = when {
@@ -233,23 +242,32 @@ private fun LyricRow(
                             ((positionMs - line.startMs).toFloat() / (line.endMs - line.startMs)).coerceIn(0f, 1f)
                         else -> 1f
                     }
-                    ProgressFilledText(
+                    PlainTextWithProgress(
                         text = line.text,
                         progress = lineProgress,
+                        align = align,
+                        isActive = isActive,
                         activeColor = activeColor,
-                        baseColor = inactiveColor,
-                        style = baseStyle,
-                        maxLines = 4,
+                        inactiveColor = inactiveColor,
+                        activeStyle = activeStyle,
+                        inactiveStyle = inactiveStyle,
+                        maxLines = 3,
                     )
                 }
-                // 翻译与主文本放同一个模糊 Box 内：要模糊就一起模糊
+                // 翻译与主文本同一模糊层、同向对齐
                 if (showTranslation && !line.translation.isNullOrBlank()) {
                     Text(
-                        text = line.translation,
-                        style = MaterialTheme.typography.bodyMedium,
+                        text = line.translation!!,
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontSize = MaterialTheme.typography.bodyMedium.fontSize * fontScale,
+                            textAlign = when (align) {
+                                LyricsAlign.Start -> TextAlign.Start
+                                LyricsAlign.Center -> TextAlign.Center
+                                LyricsAlign.End -> TextAlign.End
+                            },
+                        ),
                         color = if (isActive) activeColor else inactiveColor,
                         modifier = Modifier.padding(top = 6.dp),
-                        textAlign = TextAlign.Center,
                         maxLines = 2,
                         overflow = TextOverflow.Ellipsis,
                     )
@@ -258,51 +276,125 @@ private fun LyricRow(
         }
     }
 }
-/** 逐字卡拉 OK：FlowRow 保证长句正常换行。 */
+
+/** 文本水平对齐 → FlowRow 排列 / textAlign 的统一映射。 */
+private fun flowRowArrangement(align: LyricsAlign): Arrangement.Horizontal = when (align) {
+    LyricsAlign.Start -> Arrangement.Start
+    LyricsAlign.Center -> Arrangement.Center
+    LyricsAlign.End -> Arrangement.End
+}
+private fun textAlignOf(align: LyricsAlign): TextAlign = when (align) {
+    LyricsAlign.Start -> TextAlign.Start
+    LyricsAlign.Center -> TextAlign.Center
+    LyricsAlign.End -> TextAlign.End
+}
+
+/** 逐字卡拉 OK：FlowRow 保证长句正常换行；非当前行用整段 Text。 */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KaraokeText(
     line: LyricLine,
+    align: LyricsAlign,
     isActive: Boolean,
     positionMs: Long,
     activeColor: Color,
     inactiveColor: Color,
-    style: TextStyle,
+    activeStyle: TextStyle,
+    inactiveStyle: TextStyle,
 ) {
     if (!isActive) {
         Text(
             text = line.text,
-            style = style,
+            style = inactiveStyle,
             color = inactiveColor,
-            textAlign = TextAlign.Center,
+            textAlign = textAlignOf(align),
             modifier = Modifier.fillMaxWidth(),
         )
         return
     }
     FlowRow(
         modifier = Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.Center,
+        horizontalArrangement = flowRowArrangement(align),
     ) {
         line.syllables.forEach { syl ->
             val end = syl.endMs ?: (syl.startMs + 300)
             when {
-                positionMs >= end -> Text(text = syl.text, style = style, color = activeColor)
+                positionMs >= end -> Text(text = syl.text, style = activeStyle, color = activeColor)
                 positionMs >= syl.startMs -> ProgressFilledText(
                     text = syl.text,
                     progress = ((positionMs - syl.startMs).toFloat() / (end - syl.startMs)).coerceIn(0f, 1f),
                     activeColor = activeColor,
                     baseColor = inactiveColor,
-                    style = style,
+                    style = activeStyle,
                 )
-                else -> Text(text = syl.text, style = style, color = inactiveColor)
+                else -> Text(text = syl.text, style = activeStyle, color = inactiveColor)
             }
         }
     }
 }
-/**
- * 进度填充文本：两层 Text 叠加，上层用 DstOut 混合的透明渐变
- * 从 progress 位置开始把已画内容"擦掉"，形成从左到右的填充效果。
- */
+
+/** 整行填充文本（无音节时间轴时）：当前行走双层擦除，非当前行直接渲染。 */
+@Composable
+private fun PlainTextWithProgress(
+    text: String,
+    progress: Float,
+    align: LyricsAlign,
+    isActive: Boolean,
+    activeColor: Color,
+    inactiveColor: Color,
+    activeStyle: TextStyle,
+    inactiveStyle: TextStyle,
+    maxLines: Int,
+) {
+    if (!isActive) {
+        Text(
+            text = text,
+            style = inactiveStyle,
+            color = inactiveColor,
+            textAlign = textAlignOf(align),
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        return
+    }
+    Box(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            text = text,
+            style = activeStyle,
+            color = inactiveColor,
+            textAlign = textAlignOf(align),
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Text(
+            text = text,
+            style = activeStyle,
+            color = activeColor,
+            textAlign = textAlignOf(align),
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            modifier = Modifier
+                .fillMaxWidth()
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
+                .drawWithContent {
+                    drawContent()
+                    val edge = size.width * progress
+                    drawRect(
+                        brush = Brush.horizontalGradient(
+                            colors = listOf(Color.Transparent, Color.Black),
+                            startX = edge,
+                            endX = edge + 1f,
+                        ),
+                        blendMode = BlendMode.DstOut,
+                    )
+                },
+        )
+    }
+}
+
+/** 音节级进度填充文本。 */
 @Composable
 private fun ProgressFilledText(
     text: String,
@@ -310,19 +402,13 @@ private fun ProgressFilledText(
     activeColor: Color,
     baseColor: Color,
     style: TextStyle,
-    maxLines: Int = Int.MAX_VALUE,
 ) {
     Box {
-        Text(
-            text = text, style = style, color = baseColor,
-            maxLines = maxLines, overflow = TextOverflow.Ellipsis,
-        )
+        Text(text = text, style = style, color = baseColor)
         Text(
             text = text,
             style = style,
             color = activeColor,
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis,
             modifier = Modifier
                 .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                 .drawWithContent {

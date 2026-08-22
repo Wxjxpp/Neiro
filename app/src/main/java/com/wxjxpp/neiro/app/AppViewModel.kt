@@ -84,6 +84,11 @@ data class ShellUiState(
 
     /** [实验室] 歌词弹簧动效。 */
     val labSpringLyrics: Boolean = false,
+
+    /** 歌词字号缩放。 */
+    val lyricsFontScale: Float = 1f,
+    /** 歌词行间隙缩放。 */
+    val lyricsGapScale: Float = 1f,
 )
 
 class AppViewModel(
@@ -182,6 +187,12 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeLabSpringLyrics()
             .onEach { enabled -> _uiState.update { it.copy(labSpringLyrics = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeLyricsFontScale()
+            .onEach { scale -> _uiState.update { it.copy(lyricsFontScale = scale) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeLyricsGapScale()
+            .onEach { scale -> _uiState.update { it.copy(lyricsGapScale = scale) } }
             .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
@@ -310,6 +321,14 @@ class AppViewModel(
 
     fun setLabSpringLyrics(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setLabSpringLyrics(enabled) }
+    }
+
+    fun setLyricsFontScale(scale: Float) {
+        viewModelScope.launch { container.appSettings.setLyricsFontScale(scale) }
+    }
+
+    fun setLyricsGapScale(scale: Float) {
+        viewModelScope.launch { container.appSettings.setLyricsGapScale(scale) }
     }
 
     /** 播放整个选中的歌曲集合。 */

@@ -98,6 +98,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
     queue: List<Song>,
     lyricsAlign: String = "center",
     springLyrics: Boolean = false,
+    lyricsFontScale: Float = 1f,
+    lyricsGapScale: Float = 1f,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -219,6 +221,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
                                     else -> LyricsAlign.Center
                                 },
                                 springAnimation = springLyrics,
+                                fontScale = lyricsFontScale,
+                                gapScale = lyricsGapScale,
                                 onSeekTo = onSeekTo,
                                 modifier = Modifier.fillMaxSize(),
                             )
