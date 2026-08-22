@@ -36,11 +36,11 @@ jobs:
         run: |
           mkdir -p dist
           cp app/build/outputs/apk/release/app-release.apk \
-             "dist/music-player-${{ steps.meta.outputs.version }}-${GITHUB_REF_NAME}.apk"
+             "dist/neiro-${{ steps.meta.outputs.version }}-${GITHUB_REF_NAME}.apk"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: music-player-release
+          name: neiro-release
           path: dist/*.apk
 
       # 构建完成后直接发布到 Release
@@ -48,7 +48,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ steps.meta.outputs.tag }}
-          name: music-player ${{ steps.meta.outputs.version }} (${{ github.ref_name }})
+          name: Neiro ${{ steps.meta.outputs.version }} (${{ github.ref_name }})
           body: |
             分支：`${{ github.ref_name }}`
             提交：`${{ github.sha }}`

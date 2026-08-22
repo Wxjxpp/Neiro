@@ -1,4 +1,4 @@
-# music-player
+Neiro
 
 Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 

@@ -6,12 +6,12 @@ plugins {
 }
 
 android {
-    namespace = "com.wxjxpp.musicplayer"
+    namespace = "com.wxjxpp.neiro"
     // AGP 8.13.x 支持到 36；升 compileSdk 需要先升 AGP
     compileSdk = 36
 
     defaultConfig {
-        applicationId = "com.wxjxpp.musicplayer"
+        applicationId = "com.wxjxpp.neiro"
         minSdk = 24
         targetSdk = 36
         versionCode = 7
