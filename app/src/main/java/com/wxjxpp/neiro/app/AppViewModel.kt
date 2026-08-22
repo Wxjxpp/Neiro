@@ -77,7 +77,7 @@ data class ShellUiState(
     /** 他源发声自动暂停。 */
     val pauseOnAudioFocusLoss: Boolean = true,
     /** 播放页动态流光背景。 */
-    val ambientGlow: Boolean = true,
+    val ambientGlow: Boolean = false,
 
     /** 歌词对齐：start / center / end。 */
     val lyricsAlign: String = "center",
@@ -89,6 +89,8 @@ data class ShellUiState(
     val lyricsFontScale: Float = 1f,
     /** 歌词行间隙缩放。 */
     val lyricsGapScale: Float = 1f,
+    /** 纯净模式默认开启。 */
+    val pureModeDefault: Boolean = false,
 )
 
 class AppViewModel(
@@ -193,6 +195,9 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeLyricsGapScale()
             .onEach { scale -> _uiState.update { it.copy(lyricsGapScale = scale) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observePureModeDefault()
+            .onEach { enabled -> _uiState.update { it.copy(pureModeDefault = enabled) } }
             .launchIn(viewModelScope)
         // 切歌时记录上一首的播放事件并加载新歌词
         playbackState
@@ -329,6 +334,10 @@ class AppViewModel(
 
     fun setLyricsGapScale(scale: Float) {
         viewModelScope.launch { container.appSettings.setLyricsGapScale(scale) }
+    }
+
+    fun setPureModeDefault(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setPureModeDefault(enabled) }
     }
 
     /** 播放整个选中的歌曲集合。 */

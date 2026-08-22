@@ -45,7 +45,7 @@ fun SettingsScreen(
     lyricsOffsetMs: Long = 0L,
     pauseOnHeadphoneDisconnect: Boolean = true,
     pauseOnAudioFocusLoss: Boolean = true,
-    ambientGlow: Boolean = true,
+    ambientGlow: Boolean = false,
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,
     onShuffleModeChange: (ShuffleMode) -> Unit,
@@ -61,6 +61,8 @@ fun SettingsScreen(
     onLyricsAlignChange: (String) -> Unit = {},
     onLyricsFontScaleChange: (Float) -> Unit = {},
     onLyricsGapScaleChange: (Float) -> Unit = {},
+    pureModeDefault: Boolean = false,
+    onPureModeDefaultChange: (Boolean) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -181,12 +183,6 @@ fun SettingsScreen(
                         checked = floatingPlayerBar,
                         onCheckedChange = onFloatingPlayerBarChange,
                     )
-                    SwitchRow(
-                        title = "动态流光背景",
-                        subtitle = "播放页根据封面主色呈现流动渐变背景",
-                        checked = ambientGlow,
-                        onCheckedChange = onAmbientGlowChange,
-                    )
                 }
                 "lab" -> {
                     Text(
@@ -196,10 +192,22 @@ fun SettingsScreen(
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceSm),
                     )
                     SwitchRow(
+                        title = "动态流光背景",
+                        subtitle = "播放页根据封面主色呈现流动渐变背景（实验性）",
+                        checked = ambientGlow,
+                        onCheckedChange = onAmbientGlowChange,
+                    )
+                    SwitchRow(
                         title = "歌词弹簧动效",
                         subtitle = "切句与翻译切换时使用带回弹的弹簧动画，更加灵动",
                         checked = labSpringLyrics,
                         onCheckedChange = onLabSpringLyricsChange,
+                    )
+                    SwitchRow(
+                        title = "纯净模式默认开启",
+                        subtitle = "进入播放页时直接隐藏辅助控件（长按播放键也可临时开启）",
+                        checked = pureModeDefault,
+                        onCheckedChange = onPureModeDefaultChange,
                     )
                 }
             }
@@ -215,8 +223,8 @@ fun SettingsScreen(
     ) {
         SubsectionEntry(title = "歌词", subtitle = "翻译 / 偏移 / 对齐方式") { subsection = "lyrics" }
         SubsectionEntry(title = "播放", subtitle = "随机模式 / 耳机与音频焦点") { subsection = "playback" }
-        SubsectionEntry(title = "外观", subtitle = "悬浮播放栏 / 流光背景") { subsection = "appearance" }
-        SubsectionEntry(title = "实验室", subtitle = "实验性功能") { subsection = "lab" }
+        SubsectionEntry(title = "外观", subtitle = "悬浮播放栏") { subsection = "appearance" }
+        SubsectionEntry(title = "实验室", subtitle = "流光背景 / 弹簧动效 / 纯净模式") { subsection = "lab" }
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
         SectionTitle("在线播放")
         Text(

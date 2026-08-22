@@ -112,17 +112,49 @@ class LrcParser : LyricsParser {
                 )
             }
 
+        val merged = mergeTranslationPairs(lines.sortedBy { it.startMs })
         return Lyrics(
             format = if (hasWordTiming) LyricsFormat.EnhancedLrc else LyricsFormat.Lrc,
-            lines = lines,
+            lines = merged,
             offsetMs = offsetMs,
             metadata = metadata,
         )
     }
 
     private data class Raw(val text: String, val endMs: Long?)
-
     private data class Stamp(val startMs: Long, val endMs: Long?)
+
+    /**
+     * 双语 LRC 翻译配对。
+     *
+     * 很多双语 LRC 的翻译行时间戳与原句**并不严格相等**（差几十毫秒），
+     * 只按"同一时间戳"分桶会把翻译漏成独立歌词行。补一轮启发式合并：
+     * - 与上一句起始差 ≤ 60ms：直接视为同句第二文本（翻译）
+     * - 差 ≤ 1500ms 且两行文字系统不同（一方含 CJK/韩文另一方不含）：视为翻译
+     *   （语言系统校验避免误吞快歌中相邻的两句不同歌词）
+     */
+    private fun mergeTranslationPairs(sorted: List<LyricLine>): List<LyricLine> {
+        val result = mutableListOf<LyricLine>()
+        for (line in sorted) {
+            val prev = result.lastOrNull()
+            if (prev != null && prev.translation == null) {
+                val gap = line.startMs - prev.startMs
+                val langDiff = hasIdeographic(prev.text) != hasIdeographic(line.text)
+                if (gap in 0..60L || (gap in 0..1500L && langDiff)) {
+                    result[result.size - 1] = prev.copy(translation = line.text)
+                    continue
+                }
+            }
+            result += line
+        }
+        return result
+    }
+
+    /** 是否含有表意文字（汉字 / 日文假名 / 谚文）。 */
+    private fun hasIdeographic(text: String): Boolean = text.any {
+        val c = it.code
+        c in 0x3040..0x30FF || c in 0x3400..0x4DBF || c in 0x4E00..0x9FFF || c in 0xAC00..0xD7AF
+    }
 
     /** 收集行首的所有时间戳，同时兼容 clock 与 millis 两种写法。 */
     private fun parseLineStamps(line: String): List<Stamp> {

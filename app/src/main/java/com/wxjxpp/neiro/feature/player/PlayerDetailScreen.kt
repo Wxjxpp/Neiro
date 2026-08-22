@@ -43,10 +43,8 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.FilledIconButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -100,6 +98,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
     springLyrics: Boolean = false,
     lyricsFontScale: Float = 1f,
     lyricsGapScale: Float = 1f,
+    pureModeDefault: Boolean = false,
     animatedVisibilityScope: AnimatedVisibilityScope,
     onBack: () -> Unit,
     onTogglePlay: () -> Unit,
@@ -120,8 +119,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
     var showLyrics by remember { mutableStateOf(false) }
     // 翻译显示开关：默认开启，可在播放页直接切换（同时通知设置持久化）
     var translationOn by remember(showTranslation) { mutableStateOf(showTranslation) }
-    // 纯净模式：长按播放键开启，只留播放/换曲键；点播放键暂停时退出
-    var pureMode by remember { mutableStateOf(false) }
+    // 纯净模式：长按播放键或设置页开关开启，只留播放/换曲键；点播放键暂停时退出
+    var pureMode by remember { mutableStateOf(pureModeDefault) }
     var showQueue by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
@@ -132,6 +131,20 @@ fun SharedTransitionScope.PlayerDetailScreen(
             coverUri = song.coverUri,
             enabled = ambientGlow,
             modifier = Modifier.fillMaxSize(),
+        )
+        // 顶部红线外区域实心填充（含状态栏），只在交界处留小段过渡
+        Spacer(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .height(statusBarPadding.calculateTopPadding() + 88.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0f to MaterialTheme.colorScheme.surface,
+                        0.82f to MaterialTheme.colorScheme.surface,
+                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                    ),
+                ),
         )
         Column(
             modifier = Modifier
@@ -243,28 +256,18 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                 }
             }
-            // 底部控制区背景：垂直渐隐过渡，与主区域自然融合
-            Spacer(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .background(
-                        Brush.verticalGradient(
-                            0f to Color.Transparent,
-                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                        ),
-                    ),
-            )
         }
-        // ---- 控制台（叠在渐变之上）----
+        // ---- 控制台 ----
+        // 红线外区域实心填充，只在与歌词交接处留一小段渐变过渡（不做大面积半透明）
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
                 .fillMaxWidth()
                 .background(
                     Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.55f),
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+                        0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                        0.12f to MaterialTheme.colorScheme.surface,
+                        1f to MaterialTheme.colorScheme.surface,
                     ),
                 ),
         ) {
@@ -337,23 +340,22 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 IconButton(onClick = onPrevious) {
                     Icon(Icons.Filled.SkipPrevious, contentDescription = "上一首")
                 }
-                FilledIconButton(
+                IconButton(
                     onClick = {
                         // 纯净模式下点暂停即退出纯净模式
                         if (pureMode && state.isPlaying) pureMode = false
                         onTogglePlay()
                     },
                     modifier = Modifier
-                        .size(72.dp)
+                        .size(56.dp)
                         .pointerInput(Unit) {
                             detectTapGestures(onLongPress = { pureMode = true })
                         },
-                    shapes = IconButtonDefaults.shapes(),
                 ) {
                     Icon(
                         imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
                         contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                        modifier = Modifier.size(32.dp),
+                        modifier = Modifier.size(44.dp),
                     )
                 }
                 IconButton(onClick = onNext) {
@@ -377,56 +379,56 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                 }
             }
-        }
-        // 控制台最底部按钮行：歌词偏移 / 翻译开关 / 歌词切换 / 播放列表（纯净模式隐藏）
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 4.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
+            // 功能按钮行：歌词偏移 / 翻译开关 / 歌词切换 / 播放列表（在播放控件下方，不与其重叠）
             if (!pureMode) {
-                IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
-                    Icon(
-                        Icons.Filled.Schedule,
-                        contentDescription = "歌词偏移",
-                        tint = if (showOffsetPanel || lyricsOffsetMs != 0L) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-                if (translationOn || lyrics.hasTranslation) {
-                    IconButton(onClick = {
-                        translationOn = !translationOn
-                        onToggleTranslation()
-                    }) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(bottom = 4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
                         Icon(
-                            Icons.Filled.Translate,
-                            contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
-                            tint = if (translationOn) {
+                            Icons.Filled.Schedule,
+                            contentDescription = "歌词偏移",
+                            tint = if (showOffsetPanel || lyricsOffsetMs != 0L) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
                     }
-                }
-                IconButton(onClick = { showLyrics = !showLyrics }) {
-                    Icon(
-                        Icons.Filled.Lyrics,
-                        contentDescription = if (showLyrics) "显示封面" else "显示歌词",
-                        tint = if (showLyrics) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-                IconButton(onClick = { showQueue = true }) {
-                    Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
+                    if (lyrics.hasTranslation) {
+                        IconButton(onClick = {
+                            translationOn = !translationOn
+                            onToggleTranslation()
+                        }) {
+                            Icon(
+                                Icons.Filled.Translate,
+                                contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
+                                tint = if (translationOn) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurfaceVariant
+                                },
+                            )
+                        }
+                    }
+                    IconButton(onClick = { showLyrics = !showLyrics }) {
+                        Icon(
+                            Icons.Filled.Lyrics,
+                            contentDescription = if (showLyrics) "显示封面" else "显示歌词",
+                            tint = if (showLyrics) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
+                    IconButton(onClick = { showQueue = true }) {
+                        Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
+                    }
                 }
             }
         }

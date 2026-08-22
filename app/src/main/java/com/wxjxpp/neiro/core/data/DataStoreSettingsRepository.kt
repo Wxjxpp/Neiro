@@ -49,6 +49,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
         val LyricsFontScale = floatPreferencesKey("lyrics_font_scale")
         val LyricsGapScale = floatPreferencesKey("lyrics_gap_scale")
+        val PureModeDefault = booleanPreferencesKey("pure_mode_default")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -172,7 +173,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
 
     /** 播放页动态流光背景（根据封面取色流动渐变）。 */
     fun observeAmbientGlow(): Flow<Boolean> =
-        store.data.map { it[Keys.AmbientGlow] ?: true }
+        store.data.map { it[Keys.AmbientGlow] ?: false }
     suspend fun setAmbientGlow(enabled: Boolean) {
         store.edit { it[Keys.AmbientGlow] = enabled }
     }
@@ -204,5 +205,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.LyricsGapScale] ?: 1f }
     suspend fun setLyricsGapScale(scale: Float) {
         store.edit { it[Keys.LyricsGapScale] = scale }
+    }
+
+    /** 纯净模式默认开启（进入播放页即生效）。 */
+    fun observePureModeDefault(): Flow<Boolean> =
+        store.data.map { it[Keys.PureModeDefault] ?: false }
+    suspend fun setPureModeDefault(enabled: Boolean) {
+        store.edit { it[Keys.PureModeDefault] = enabled }
     }
 }
