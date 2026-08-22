@@ -10,6 +10,7 @@ import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.PlaybackException
@@ -157,7 +158,11 @@ class Media3PlayerController(
             /* handleAudioFocus = */ true,
         )
         .setHandleAudioBecomingNoisy(false)
-        .setAudioProcessors(listOf(eightBitProcessor, turboProcessor))
+        .setAudioSink(
+            DefaultAudioSink.Builder(context)
+                .setAudioProcessors(arrayOf(eightBitProcessor, turboProcessor))
+                .build(),
+        )
         .build()
         .apply {
             addListener(object : Player.Listener {

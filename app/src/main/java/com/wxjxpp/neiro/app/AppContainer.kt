@@ -185,8 +185,8 @@ class DefaultAppContainer(
         )
     }
     // LX 自定义音源：已导入脚本时追加到搜索页（取流走脚本，搜索复用内置平台接口）
-    private val lxSources: List<OnlineMusicSource> = onlineSources.mapNotNull { source ->
-        lxSourceOf(source.platform, userApiClient)?.let { lxPlatform ->
+    private val lxSources: List<OnlineMusicSource> = defaultOnlinePlatforms(httpClient) { neteaseCookie }.mapNotNull { platform ->
+        lxSourceOf(platform, userApiClient)?.let { lxPlatform ->
             OnlineMusicSource(
                 platform = lxPlatform,
                 userApiClient = userApiClient,

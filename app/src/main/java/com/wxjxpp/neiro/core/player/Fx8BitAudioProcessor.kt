@@ -17,8 +17,7 @@ class EightBitAudioProcessor : BaseAudioProcessor() {
     fun setEnabledMode(on: Boolean) {
         if (enabled == on) return
         enabled = on
-        // 输入格式变化时让 ExoPlayer 重新排队，立即生效
-        inputFormat?.let { onFlush() }
+        runCatching { flush() }
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
@@ -69,7 +68,7 @@ class TurboSpeedAudioProcessor(private var factor: Int = 80) : BaseAudioProcesso
     fun setEnabledMode(on: Boolean) {
         if (enabled == on) return
         enabled = on
-        inputFormat?.let { onFlush() }
+        runCatching { flush() }
     }
 
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {

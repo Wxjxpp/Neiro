@@ -14,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -386,7 +387,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     IconButton(
                         onClick = onToggleShuffle,
                         modifier = Modifier.pointerInput(Unit) {
-                            androidx.compose.foundation.gestures.detectTapGestures(
+                            detectTapGestures(
                                 onLongPress = { onCycleRepeat() },
                             )
                         },
@@ -424,7 +425,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         modifier = Modifier
                             .size(56.dp)
                             .pointerInput(Unit) {
-                                androidx.compose.foundation.gestures.detectTapGestures(
+                                detectTapGestures(
                                     onLongPress = { pureModeOverride = true },
                                 )
                             },

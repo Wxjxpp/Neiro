@@ -31,7 +31,7 @@ class LxSourcePlatform(
         val result = userApiClient.musicUrl(
             source = sourceId,
             quality = quality,
-            musicInfo = remote.musicInfo(song),
+            musicInfo = buildMusicInfo(song, remote),
         )
         return (result as? UserApiClient.Result.Success)
             ?.dataJson
@@ -39,6 +39,31 @@ class LxSourcePlatform(
             ?.optJSONObject("data")
             ?.optString("url")
             ?.takeIf { it.startsWith("http") }
+    }
+    companion object {
+        /**
+         * 构造 LX 协议的 musicInfo：优先使用平台搜索时保存的原始 JSON
+         * （脚本依赖 hash/copyrightId 等平台字段），缺失时退化最小结构。
+         */
+        internal fun buildMusicInfo(song: Song, remote: MediaLocation.Remote): JSONObject {
+            remote.payload?.let { raw ->
+                runCatching { JSONObject(raw) }.getOrNull()?.let { json ->
+                    if (!json.has("songmid")) json.put("songmid", remote.songId)
+                    if (!json.has("source")) json.put("source", remote.sourceId.substringBefore(':'))
+                    if (!json.has("name")) json.put("name", song.title)
+                    if (!json.has("singer")) json.put("singer", song.artistName)
+                    return json
+                }
+            }
+            return JSONObject().apply {
+                put("songmid", remote.songId)
+                put("hash", remote.songId)
+                put("source", remote.sourceId.substringBefore(':'))
+                put("name", song.title)
+                put("singer", song.artistName)
+                put("albumName", song.albumTitle)
+            }
+        }
     }
 }
 
