@@ -437,91 +437,19 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     .padding(bottom = 120.dp),
             )
         }
+        // 返回按钮：悬浮左上角（安全区内，纯净模式隐藏）
+        if (!pureMode) {
+            IconButton(
+                onClick = onBack,
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(start = 4.dp, top = statusBarPadding.calculateTopPadding() + 4.dp),
+            ) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+            }
+        }
     }
     if (showQueue && !pureMode) {
-        QueueSheet(
-            queue = queue,
-            currentSongId = song.id,
-            onDismiss = { showQueue = false },
-            onPick = { index ->
-                onPickQueueItem(index)
-                showQueue = false
-            },
-        )
-    }
-}
-        // 返回按钮：悬浮左上角（安全区内）
-        IconButton(
-            onClick = onBack,
-            modifier = Modifier
-                .align(Alignment.TopStart)
-                .padding(start = 4.dp, top = statusBarPadding.calculateTopPadding() + 4.dp),
-        ) {
-            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-        }
-        // 控制台上方横置按钮行：歌词偏移 / 翻译开关 / 歌词切换 / 播放列表
-        Row(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .padding(bottom = 210.dp),
-            horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
-                Icon(
-                    Icons.Filled.Schedule,
-                    contentDescription = "歌词偏移",
-                    tint = if (showOffsetPanel || lyricsOffsetMs != 0L) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            if (translationOn || lyrics.hasTranslation) {
-                IconButton(onClick = {
-                    translationOn = !translationOn
-                    onToggleTranslation()
-                }) {
-                    Icon(
-                        Icons.Filled.Translate,
-                        contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
-                        tint = if (translationOn) {
-                            MaterialTheme.colorScheme.primary
-                        } else {
-                            MaterialTheme.colorScheme.onSurfaceVariant
-                        },
-                    )
-                }
-            }
-            IconButton(onClick = { showLyrics = !showLyrics }) {
-                Icon(
-                    Icons.Filled.Lyrics,
-                    contentDescription = if (showLyrics) "显示封面" else "显示歌词",
-                    tint = if (showLyrics) {
-                        MaterialTheme.colorScheme.primary
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            IconButton(onClick = { showQueue = true }) {
-                Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
-            }
-        }
-        // 歌词偏移调节面板：紧凑版，±50ms
-        if (showOffsetPanel && showLyrics) {
-            LyricsOffsetPanel(
-                offsetMs = lyricsOffsetMs,
-                onChange = onLyricsOffsetChange,
-                onDismiss = { showOffsetPanel = false },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 120.dp),
-            )
-        }
-    }
-    if (showQueue) {
         QueueSheet(
             queue = queue,
             currentSongId = song.id,
