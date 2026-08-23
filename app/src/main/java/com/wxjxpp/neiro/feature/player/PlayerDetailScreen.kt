@@ -636,7 +636,7 @@ private fun QualityPickerDialog(
                                     Quality.Standard -> "标准音质，日常够用"
                                     Quality.High -> "较高码率，细节更丰富"
                                     Quality.Lossless -> "无损压缩（FLAC / APE）"
-                                    Quality.HiRes -> "高解析度，需要音源支持",
+                                    Quality.HiRes -> "高解析度，需要音源支持"
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
