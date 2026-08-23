@@ -3,12 +3,14 @@ package com.wxjxpp.neiro.app
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
+import com.wxjxpp.neiro.core.data.QualityFallbackDirection
 import com.wxjxpp.neiro.core.data.RoomSongRepository
 import com.wxjxpp.neiro.core.model.HeatmapDay
 import com.wxjxpp.neiro.core.model.Lyrics
 import com.wxjxpp.neiro.core.model.PlayEvent
 import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.Playlist
+import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.ShuffleMode
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.SongSortField
@@ -101,6 +103,10 @@ data class ShellUiState(
     val resumeOnStart: Boolean = false,
     /** 启动时自动继续播放。 */
     val autoPlayOnStart: Boolean = false,
+    /** 在线播放偏好音质（播放页可临时改）。 */
+    val preferredQuality: Quality = Quality.Standard,
+    /** 取流失败时的音质回退方向。 */
+    val qualityFallbackDirection: QualityFallbackDirection = QualityFallbackDirection.LOWER,
 )
 
 class AppViewModel(
@@ -236,6 +242,13 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeAutoPlayOnStart()
             .onEach { enabled -> _uiState.update { it.copy(autoPlayOnStart = enabled) } }
+            .launchIn(viewModelScope)
+        // 在线音质与回退方向
+        container.appSettings.observePreferredQuality()
+            .onEach { quality -> _uiState.update { it.copy(preferredQuality = quality) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeQualityFallbackDirection()
+            .onEach { direction -> _uiState.update { it.copy(qualityFallbackDirection = direction) } }
             .launchIn(viewModelScope)
         // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录
         container.playerController.state
@@ -423,6 +436,16 @@ class AppViewModel(
     /** 启动时自动继续播放。 */
     fun setAutoPlayOnStart(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setAutoPlayOnStart(enabled) }
+    }
+
+    /** 在线播放偏好音质（持久化，取流层立即生效）。 */
+    fun setPreferredQuality(quality: Quality) {
+        viewModelScope.launch { container.appSettings.setPreferredQuality(quality) }
+    }
+
+    /** 取流失败时的音质回退方向。 */
+    fun setQualityFallbackDirection(direction: QualityFallbackDirection) {
+        viewModelScope.launch { container.appSettings.setQualityFallbackDirection(direction) }
     }
 
     /** 歌曲页"随机一发"：从当前曲库随机抽一首立即播放。 */

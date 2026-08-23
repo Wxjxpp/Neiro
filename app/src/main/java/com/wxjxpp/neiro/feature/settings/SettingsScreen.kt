@@ -32,6 +32,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import com.wxjxpp.neiro.core.data.QualityFallbackDirection
+import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.ShuffleMode
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
@@ -71,6 +73,10 @@ fun SettingsScreen(
     onResumeOnStartChange: (Boolean) -> Unit = {},
     autoPlayOnStart: Boolean = false,
     onAutoPlayOnStartChange: (Boolean) -> Unit = {},
+    preferredQuality: Quality = Quality.Standard,
+    onPreferredQualityChange: (Quality) -> Unit = {},
+    qualityFallbackDirection: QualityFallbackDirection = QualityFallbackDirection.LOWER,
+    onQualityFallbackDirectionChange: (QualityFallbackDirection) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -83,6 +89,7 @@ fun SettingsScreen(
             title = when (subsection) {
                 "lyrics" -> "歌词"
                 "playback" -> "播放"
+                "source" -> "音源"
                 "appearance" -> "外观"
                 "lab" -> "实验室"
                 else -> ""
@@ -205,6 +212,58 @@ fun SettingsScreen(
                         onCheckedChange = onFloatingPlayerBarChange,
                     )
                 }
+                "source" -> {
+                    Text(
+                        text = "当前在线播放音质",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        Quality.entries.forEachIndexed { index, q ->
+                            SegmentedButton(
+                                selected = preferredQuality == q,
+                                onClick = { onPreferredQualityChange(q) },
+                                shape = SegmentedButtonDefaults.itemShape(index, Quality.entries.size),
+                                label = { Text(qualityLabel(q)) },
+                            )
+                        }
+                    }
+                    Text(
+                        text = "取流失败时自动换源；全部音源失败后再按下面的方向调整音质重试一轮。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = AppTheme.dimens.spaceSm),
+                    )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    Text(
+                        text = "音质回退方向（全部换源失败后生效）",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        listOf(
+                            QualityFallbackDirection.LOWER to "优先降低",
+                            QualityFallbackDirection.HIGHER to "优先升高",
+                        ).forEachIndexed { index, (direction, label) ->
+                            SegmentedButton(
+                                selected = qualityFallbackDirection == direction,
+                                onClick = { onQualityFallbackDirectionChange(direction) },
+                                shape = SegmentedButtonDefaults.itemShape(index, 2),
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    Text(
+                        text = if (qualityFallbackDirection == QualityFallbackDirection.LOWER) {
+                            "降低：Lossless → High → Standard → Low，流量友好"
+                        } else {
+                            "升高：Low → Standard → High → Lossless → HiRes，音质优先"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = AppTheme.dimens.spaceSm),
+                    )
+                }
                 "lab" -> {
                     Text(
                         text = "实验性功能可能不稳定，随时可能更改或移除。",
@@ -256,6 +315,7 @@ fun SettingsScreen(
     ) {
         SubsectionEntry(title = "歌词", subtitle = "翻译 / 偏移 / 对齐方式") { subsection = "lyrics" }
         SubsectionEntry(title = "播放", subtitle = "随机模式 / 耳机与音频焦点") { subsection = "playback" }
+        SubsectionEntry(title = "音源", subtitle = "在线音质 / 自动换源回退策略") { subsection = "source" }
         SubsectionEntry(title = "外观", subtitle = "悬浮播放栏") { subsection = "appearance" }
         SubsectionEntry(title = "实验室", subtitle = "流光背景 / 弹簧动效 / 纯净模式") { subsection = "lab" }
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
@@ -309,6 +369,15 @@ private fun SettingsSubsection(
         Spacer(Modifier.height(AppTheme.dimens.spaceSm))
         content()
     }
+}
+
+/** 音质档位的短标签（设置页用）。 */
+internal fun qualityLabel(q: Quality): String = when (q) {
+    Quality.Low -> "低"
+    Quality.Standard -> "标"
+    Quality.High -> "高"
+    Quality.Lossless -> "无"
+    Quality.HiRes -> "Hi"
 }
 
 /** 根列表里的一行菜单入口。 */

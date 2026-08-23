@@ -189,6 +189,8 @@ fun MusicPlayerApp(container: AppContainer) {
                         onMatchLyrics = viewModel::matchLyricsOnline,
                         onToggleTranslation = { viewModel.setShowTranslation(!uiState.showTranslation) },
                         onSpeedChange = viewModel::setSpeed,
+                        currentQuality = uiState.preferredQuality,
+                        onQualityChange = viewModel::setPreferredQuality,
                     )
 
                     else -> Scaffold(
@@ -421,6 +423,10 @@ private fun RouteContent(
             onResumeOnStartChange = viewModel::setResumeOnStart,
             autoPlayOnStart = uiState.autoPlayOnStart,
             onAutoPlayOnStartChange = viewModel::setAutoPlayOnStart,
+            preferredQuality = uiState.preferredQuality,
+            onPreferredQualityChange = viewModel::setPreferredQuality,
+            qualityFallbackDirection = uiState.qualityFallbackDirection,
+            onQualityFallbackDirectionChange = viewModel::setQualityFallbackDirection,
             onLabSpringLyricsChange = viewModel::setLabSpringLyrics,
             contentPadding = contentPadding,
             modifier = modifier,

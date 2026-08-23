@@ -63,6 +63,9 @@ interface DiaryRepository {
     suspend fun delete(id: String)
 }
 
+/** 音质降级/升级方向。 */
+enum class QualityFallbackDirection { LOWER, HIGHER }
+
 /** 设置项存储。实现建议用 DataStore。 */
 interface SettingsRepository {
     fun observeFloatingPlayerBar(): Flow<Boolean>

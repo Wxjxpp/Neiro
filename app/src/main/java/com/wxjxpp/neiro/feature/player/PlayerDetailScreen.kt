@@ -14,6 +14,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -66,7 +67,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.Lyrics
+import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.PlaybackState
+import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
@@ -116,6 +119,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
     onMatchLyrics: () -> Unit = {},
     onToggleTranslation: () -> Unit = {},
     onSpeedChange: (Float) -> Unit = {},
+    currentQuality: Quality = Quality.Standard,
+    onQualityChange: (Quality) -> Unit = {},
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
@@ -130,6 +135,9 @@ fun SharedTransitionScope.PlayerDetailScreen(
     val pureMode = pureModeOverride ?: pureModeDefault
     var showQueue by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
+    // 音质选择弹窗：仅在线歌曲可打开
+    var showQualityPicker by remember { mutableStateOf(false) }
+    val isRemoteSong = song.location is MediaLocation.Remote
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
     // 返回键优先级：歌词页 → 播放页；播放页 → 退出播放页
     BackHandler(enabled = showLyrics) { showLyrics = false }
@@ -518,6 +526,21 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             },
                         )
                     }
+                    // 音质：仅在线歌曲可点（本地歌曲无音质概念，置灰）
+                    IconButton(
+                        onClick = { showQualityPicker = true },
+                        enabled = isRemoteSong,
+                    ) {
+                        Text(
+                            text = qualityLabel(currentQuality),
+                            style = MaterialTheme.typography.labelMedium,
+                            color = if (isRemoteSong && currentQuality != Quality.Standard) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.onSurfaceVariant
+                            },
+                        )
+                    }
                 }
             }
         }
@@ -555,6 +578,78 @@ fun SharedTransitionScope.PlayerDetailScreen(
             },
         )
     }
+    // 音质选择：单选当前偏好音质，选择后持久化并对下一次取流生效
+    if (showQualityPicker && isRemoteSong) {
+        QualityPickerDialog(
+            current = currentQuality,
+            onPick = { picked ->
+                showQualityPicker = false
+                if (picked != currentQuality) onQualityChange(picked)
+            },
+            onDismiss = { showQualityPicker = false },
+        )
+    }
+}
+
+/** 音质档位的短标签。 */
+internal fun qualityLabel(q: Quality): String = when (q) {
+    Quality.Low -> "低"
+    Quality.Standard -> "标"
+    Quality.High -> "高"
+    Quality.Lossless -> "无"
+    Quality.HiRes -> "Hi"
+}
+
+/** 音质选择弹窗：列出全部档位，高亮当前项。 */
+@Composable
+private fun QualityPickerDialog(
+    current: Quality,
+    onPick: (Quality) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("在线播放音质") },
+        text = {
+            Column {
+                Text(
+                    text = "取流失败时会按设置中的回退方向自动换源 / 调整音质。",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                Quality.entries.forEach { q ->
+                    val selected = q == current
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { onPick(q) }
+                            .padding(vertical = 10.dp, horizontal = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(selected = selected, onClick = { onPick(q) })
+                        Column(modifier = Modifier.padding(start = 6.dp)) {
+                            Text(qualityLabel(q), style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                text = when (q) {
+                                    Quality.Low -> "流量友好，音质一般"
+                                    Quality.Standard -> "标准音质，日常够用"
+                                    Quality.High -> "较高码率，细节更丰富"
+                                    Quality.Lossless -> "无损压缩（FLAC / APE）"
+                                    Quality.HiRes -> "高解析度，需要音源支持",
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("取消") }
+        },
+    )
 }
 /** 封面模式下的当前歌词横幅：单行居中，点击进入完整歌词页。 */
 @Composable

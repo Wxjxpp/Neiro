@@ -6,6 +6,7 @@ import com.wxjxpp.neiro.core.data.DataStoreSettingsRepository
 import com.wxjxpp.neiro.core.data.DiaryRepository
 import com.wxjxpp.neiro.core.data.LyricsRepository
 import com.wxjxpp.neiro.core.data.PlaylistRepository
+import com.wxjxpp.neiro.core.data.QualityFallbackDirection
 import com.wxjxpp.neiro.core.data.RoomDiaryRepository
 import com.wxjxpp.neiro.core.data.RoomLyricsRepository
 import com.wxjxpp.neiro.core.data.RoomPlaylistRepository
@@ -49,6 +50,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -256,19 +258,68 @@ private val registry = DefaultMusicSourceRegistry(
     }
 
     /** 按歌曲所属平台解析播放地址。 */
+    /** 按用户设置的方向取相邻音质档位；已到边界返回 null。 */
+    private fun neighborQuality(q: Quality, direction: QualityFallbackDirection): Quality? {
+        val ladder = Quality.entries
+        val idx = ladder.indexOf(q)
+        val next = when (direction) {
+            QualityFallbackDirection.LOWER -> idx - 1
+            QualityFallbackDirection.HIGHER -> idx + 1
+        }
+        return ladder.getOrNull(next)
+    }
+
+    /**
+     * 在线歌曲取流，带两级自动回退：
+     * 1. 换源：当前平台失败 → 轮询其他 LX 平台（wy→kw→kg→tx→mg）找可用直链
+     * 2. 音质：全部平台失败 → 按设置方向调整音质重试一轮
+     *
+     * 换源成功的歌会临时改挂到实际取流的源上播放（不改曲库元数据）。
+     */
     private suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.RemoteUrl {
         val location = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Remote
             ?: return Media3PlayerController.RemoteUrl.Failure("这不是在线歌曲")
-        val source = registry.find(location.sourceId) as? OnlineMusicSource
-            ?: return Media3PlayerController.RemoteUrl.Failure("找不到音源：${location.sourceId}")
-        val quality = appSettings.currentQuality()
-        return when (val result = source.resolvePlayUrlDetailed(song, quality)) {
-            is OnlineMusicSource.PlayUrlResult.Success ->
-                Media3PlayerController.RemoteUrl.Success(result.url)
-
-            is OnlineMusicSource.PlayUrlResult.Failure ->
-                Media3PlayerController.RemoteUrl.Failure(result.reason)
+        if (activeOnlineSources.isEmpty()) {
+            return Media3PlayerController.RemoteUrl.Failure("没有可用的外置音源（请先在「自定义音源」启用脚本）")
         }
+        val baseQuality = appSettings.currentQuality()
+        val fallbackDir = appSettings.observeQualityFallbackDirection().first()
+
+        // 音质阶梯：首选 + 回退方向逐级
+        val qualities = buildList {
+            add(baseQuality)
+            var q = baseQuality
+            while (true) {
+                q = neighborQuality(q, fallbackDir) ?: break
+                add(q)
+            }
+        }
+        // 平台顺序：当前源优先，其余按注册表顺序
+        val orderedSources = listOfNotNull(registry.find(location.sourceId) as? OnlineMusicSource) +
+            activeOnlineSources.filter { it.id != location.sourceId }
+
+        val failures = mutableListOf<String>()
+        for (quality in qualities) {
+            for (source in orderedSources) {
+                // 只试脚本声明支持的源；换源时用目标源的 id 构造请求
+                val actions = activeCapabilities[source.platform.id] ?: continue
+                if ("musicUrl" !in actions) continue
+                val targetSong = if (source.id == location.sourceId) song else song.copy(
+                    id = "${source.id}:${location.songId}",
+                    location = location.copy(sourceId = source.id),
+                )
+                val label = if (source.id == location.sourceId) "" else "（换源 ${source.displayName}）"
+                when (val r = source.resolvePlayUrlDetailed(targetSong, quality)) {
+                    is OnlineMusicSource.PlayUrlResult.Success ->
+                        return Media3PlayerController.RemoteUrl.Success(r.url)
+                    is OnlineMusicSource.PlayUrlResult.Failure ->
+                        failures += "[$quality$label] ${r.reason.take(80)}"
+                }
+            }
+        }
+        return Media3PlayerController.RemoteUrl.Failure(
+            "「${song.title}」所有音质/平台均失败：\n" + failures.takeLast(4).joinToString("\n")
+        )
     }
 
     private fun onUserApiAction(action: UserApiAction) {

@@ -123,6 +123,18 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.edit { it[Keys.PreferredQuality] = quality.name }
     }
 
+    /** 失败重试时的音质调整方向：降低（默认）或升高。 */
+    val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
+    fun observeQualityFallbackDirection(): Flow<QualityFallbackDirection> =
+        store.data.map { prefs ->
+            runCatching {
+                QualityFallbackDirection.valueOf(prefs[Keys.QualityFallbackDirection] ?: QualityFallbackDirection.LOWER.name)
+            }.getOrDefault(QualityFallbackDirection.LOWER)
+        }
+    suspend fun setQualityFallbackDirection(direction: QualityFallbackDirection) {
+        store.edit { it[Keys.QualityFallbackDirection] = direction.name }
+    }
+
     /** 取流时需要立即读到当前音质，不适合走 Flow。 */
     suspend fun currentQuality(): Quality = observePreferredQuality().first()
 

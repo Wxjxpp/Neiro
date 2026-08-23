@@ -56,11 +56,9 @@ class LxSourcePlatform(
         )
         return when (result) {
             is UserApiClient.Result.Success -> {
-                val url = result.dataJson
-                    ?.let { runCatching { JSONObject(it) }.getOrNull() }
-                    ?.optJSONObject("data")
-                    ?.optString("url")
-                    ?.takeIf { it.startsWith("http") }
+                // 注意：UserApiClient.musicUrl 已把 {source, action, data:{type,url}}
+                // 解包过一次，这里的 dataJson 就是直链本体，不要再套一层 JSON 解析
+                val url = result.dataJson?.takeIf { it.startsWith("http") }
                 if (url != null) {
                     OnlineMusicSource.PlayUrlResult.Success(url)
                 } else {
