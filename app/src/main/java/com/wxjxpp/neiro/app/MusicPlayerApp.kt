@@ -614,10 +614,7 @@ private fun RouteContent(
                     onOnlinePlatformChange = viewModel::setOnlineSearchPlatform,
                     onFavorites = viewModel::addFavorites,
                     onDownloadMany = viewModel::downloadSongs,
-                    onBatchToPlaylist = { songs ->
-                        batchSongs = songs
-                        showBatchSheet = true
-                    },
+                    onBatchToPlaylist = { songs -> onBatchOperate(songs) },
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )

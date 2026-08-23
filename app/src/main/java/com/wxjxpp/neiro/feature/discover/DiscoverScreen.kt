@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.calculateBottomPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -197,12 +196,15 @@ private fun DiscoverDetail(
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
                 items(songs, key = { it.id }) { song ->
+                    val rowDownload: (() -> Unit)? = onDownloadSong
+                        ?.takeIf { song.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote }
+                        ?.let { fn -> { fn(song) } }
                     SongRowDetailed(
                         song = song,
                         onClick = { onSongClick(song) },
                         isFavorite = song.id in favoriteIds,
                         isDownloading = song.id in downloadingIds,
-                        onDownload = onDownloadSong?.takeIf { song.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote },
+                        onDownload = rowDownload,
                     )
                 }
             }
