@@ -332,11 +332,17 @@ class AppViewModel(
             SongSortField.AddedTime -> songs.sortedBy { it.addedAt }
             SongSortField.PlayCount -> songs.sortedByDescending { playCounts[it.id] ?: 0 }
             // 专辑排序：专辑名 → 曲目号 → 标题，同专辑歌曲自然聚在一起
-            SongSortField.Album -> songs.sortedWith(
-                compareBy<Song>(java.text.Collator.getInstance()) { it.albumTitle }
-                    .thenBy { it.trackNumber ?: Int.MAX_VALUE }
-                    .thenBy(java.text.Collator.getInstance()) { it.title },
-            )
+            SongSortField.Album -> {
+                val collator = java.text.Collator.getInstance()
+                songs.sortedWith { a, b ->
+                    val byAlbum = collator.compare(a.albumTitle, b.albumTitle)
+                    if (byAlbum != 0) byAlbum
+                    else {
+                        val byTrack = (a.trackNumber ?: Int.MAX_VALUE).compareTo(b.trackNumber ?: Int.MAX_VALUE)
+                        if (byTrack != 0) byTrack else collator.compare(a.title, b.title)
+                    }
+                }
+            }
         }
         return if (state.songSortDescending) sorted.asReversed() else sorted
     }
