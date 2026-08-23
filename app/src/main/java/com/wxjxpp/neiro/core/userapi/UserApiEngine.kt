@@ -283,13 +283,45 @@ class UserApiEngine(private val context: Context) {
                 val headers = buildMap {
                     headersJson?.keys()?.forEach { k -> put(k, headersJson.optString(k)) }
                 }
+                // LX 协议：form 是 urlencoded 表单对象，formData 是 multipart 表单对象。
+                // 宿主要负责把它们序列化成 body（对齐 LX Music 桌面/RN 宿主行为），
+                // 直接丢弃会导致网易云 eapi 等表单请求必然失败。
+                fun JSONObject?.formToBody(key: String): String? {
+                    val obj = this?.optJSONObject(key) ?: return null
+                    return obj.keys().asSequence()
+                        .map { k ->
+                            val v = obj.opt(k)
+                            "${java.net.URLEncoder.encode(k, "UTF-8")}=" +
+                                java.net.URLEncoder.encode(v.toString(), "UTF-8")
+                        }
+                        .joinToString("&")
+                }
+                val formBody = options.formToBody("form")
+                val formDataBody = options.formToBody("formData")
+                val rawBody = options?.opt("body")?.takeIf { it != JSONObject.NULL }?.let {
+                    if (it is JSONObject || it is org.json.JSONArray) it.toString() else it.toString()
+                }
+                val method = (options?.optString("method") ?: "GET").uppercase()
+                val effectiveHeaders = buildMap {
+                    putAll(headers)
+                    if (formBody != null && keys.none { it.equals("Content-Type", true) }) {
+                        put("Content-Type", "application/x-www-form-urlencoded")
+                    } else if (formDataBody != null && keys.none { it.equals("Content-Type", true) }) {
+                        put("Content-Type", "multipart/form-data")
+                    } else if (rawBody != null && method == "POST" &&
+                        keys.none { it.equals("Content-Type", true) }
+                    ) {
+                        // LX-Pro request.js 同款默认：POST 带 body 未声明 CT 时补 JSON
+                        put("Content-Type", "application/json")
+                    }
+                }
                 val request = UserApiAction.Request(
                     requestKey = json.optString("requestKey"),
                     url = json.optString("url"),
                     method = options?.optString("method")?.ifBlank { "GET" } ?: "GET",
-                    headers = headers,
-                    body = options?.opt("body")?.takeIf { it != JSONObject.NULL }?.toString(),
-                    form = options?.opt("form")?.takeIf { it != JSONObject.NULL }?.toString(),
+                    headers = effectiveHeaders,
+                    body = formBody ?: formDataBody ?: rawBody,
+                    form = null,
                     timeoutMs = options?.optLong("timeout", 15_000L)?.takeIf { it > 0 } ?: 15_000L,
                     binary = options?.optBoolean("binary", false) ?: false,
                 )

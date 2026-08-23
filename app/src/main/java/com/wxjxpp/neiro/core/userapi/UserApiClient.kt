@@ -20,7 +20,9 @@ import java.util.UUID
  */
 class UserApiClient(
     private val engine: UserApiEngine,
-    private val timeoutMs: Long = 20_000L,
+    // 聚合脚本（如墨澜/星海）会串行尝试多个后端，每个 8~10s，
+    // 总耗时轻松超过 20s，这里放宽到 60s 避免误判超时。
+    private val timeoutMs: Long = 60_000L,
 ) {
 
     /** 调用结果。失败时带上可展示的原因。 */
