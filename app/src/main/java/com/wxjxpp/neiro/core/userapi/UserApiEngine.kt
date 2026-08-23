@@ -66,6 +66,27 @@ class UserApiEngine(private val context: Context) {
     /** 由脚本发起、等待宿主回填的 HTTP 请求。 */
     private val pendingRequests = ConcurrentHashMap<String, UserApiAction.Request>()
 
+    /**
+     * 脚本 console 日志环形缓冲。
+     *
+     * 聚合脚本失败时会打印每个后端的尝试明细，但调用方只拿到最终异常；
+     * 把日志存下来，取流失败时附加进错误信息，用户才能看到"哪个后端、什么原因"。
+     */
+    private val scriptLog = ArrayDeque<String>()
+    private fun appendScriptLog(line: String) {
+        synchronized(scriptLog) {
+            if (scriptLog.size > 40) scriptLog.removeFirst()
+            scriptLog.addLast(line.take(300))
+        }
+    }
+        private fun drainScriptLog(): String = synchronized(scriptLog) {
+            val joined = scriptLog.joinToString("\n")
+            scriptLog.clear()
+            joined
+        }
+    /** 取出并清空脚本日志（供调用失败时附带到错误信息）。 */
+    fun takeScriptLog(): String = drainScriptLog()
+
     /** 初始化超时任务，脚本正常上报后取消。 */
     private var initTimeout: Runnable? = null
 
@@ -204,6 +225,7 @@ class UserApiEngine(private val context: Context) {
             val level = args.getOrNull(0) as? String ?: "log"
             val msg = args.getOrNull(1) as? String ?: ""
             android.util.Log.d("LxScript", "[$level] $msg")
+            appendScriptLog("[$level] $msg")
             null
         }
         runCatching {

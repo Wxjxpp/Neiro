@@ -107,16 +107,29 @@ class UserApiClient(
             // 让收集协程先跑到挂起点（订阅完成）
             yield()
             engine.requestAction(requestKey, source, action, info)
-
             val response = withTimeoutOrNull(timeoutMs) { awaiting.await() }
             if (response == null) {
                 awaiting.cancel()
-                return@coroutineScope Result.Failure("音源脚本响应超时（${timeoutMs / 1000} 秒）")
+                return@coroutineScope Result.Failure(
+                    buildString {
+                        append("音源脚本响应超时（${timeoutMs / 1000} 秒）")
+                        engine.takeScriptLog().takeIf { it.isNotBlank() }?.let {
+                            append("\n脚本日志：\n").append(it.take(600))
+                        }
+                    }
+                )
             }
             if (response.status) {
                 Result.Success(response.resultJson)
             } else {
-                Result.Failure(response.errorMessage ?: "音源脚本执行失败")
+                Result.Failure(
+                    buildString {
+                        append(response.errorMessage ?: "音源脚本执行失败")
+                        engine.takeScriptLog().takeIf { it.isNotBlank() }?.let {
+                            append("\n脚本日志：\n").append(it.take(600))
+                        }
+                    }
+                )
             }
         }
 }
