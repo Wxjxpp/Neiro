@@ -25,8 +25,8 @@ class OnlineMusicSource(
     private val userApiClient: UserApiClient,
     /** 当前启用脚本声明支持的平台 → 动作，用于提前判断能否取流。 */
     private val supportedActions: () -> Map<String, List<String>>,
-    /** LX 音源专用：绕过官方接口直接由脚本取流（Song → 直链）。 */
-    private val streamResolver: (suspend (Song, String) -> String?)? = null,
+    /** LX 音源专用：完全由脚本取流，失败原因直接透传给 UI。 */
+    private val streamResolver: (suspend (Song, Quality) -> PlayUrlResult)? = null,
 ) : MusicSource {
     override val id: String = platform.id
     override val displayName: String = platform.displayName
@@ -54,13 +54,7 @@ class OnlineMusicSource(
         val remote = song.location as? MediaLocation.Remote
             ?: return PlayUrlResult.Failure("这不是在线歌曲")
         // 0. LX 音源：完全由脚本取流，不经过官方接口
-        streamResolver?.let { resolver ->
-            val direct = runCatching { resolver(song, quality.toScriptQuality()) }.getOrNull()
-            if (direct != null) return PlayUrlResult.Success(direct)
-            return PlayUrlResult.Failure(
-                "音源脚本未能解析播放地址（可能不支持该音质、歌曲下架或脚本接口异常）"
-            )
-        }
+        streamResolver?.let { resolver -> return resolver(song, quality) }
         // 1. 平台官方接口通道已移除（仅外置音源策略），直接走脚本判定
         val actions = supportedActions()
         if (actions.isEmpty()) {

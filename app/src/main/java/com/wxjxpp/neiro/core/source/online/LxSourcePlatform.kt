@@ -1,8 +1,11 @@
 package com.wxjxpp.neiro.core.source.online
 
 import com.wxjxpp.neiro.core.model.MediaLocation
+import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.core.source.OnlineMusicSource
 import com.wxjxpp.neiro.core.userapi.UserApiClient
+import com.wxjxpp.neiro.core.source.online.toScriptQuality
 import org.json.JSONObject
 
 /**
@@ -42,20 +45,37 @@ class LxSourcePlatform(
             }
         }
 
-    /** LX 取流：完整 [Song]（含 payload）→ 直链。官方接口不参与。 */
-    suspend fun streamUrl(song: Song, quality: String): String? {
-        val remote = song.location as? MediaLocation.Remote ?: return null
+    /** LX 取流：完整 [Song]（含 payload）→ 直链；失败时透传脚本真实报错。 */
+    suspend fun streamUrl(song: Song, quality: Quality): OnlineMusicSource.PlayUrlResult {
+        val remote = song.location as? MediaLocation.Remote
+            ?: return OnlineMusicSource.PlayUrlResult.Failure("这不是在线歌曲")
         val result = userApiClient.musicUrl(
             source = sourceId,
-            quality = quality,
+            quality = quality.toScriptQuality(),
             musicInfo = buildMusicInfo(song, remote),
         )
-        return (result as? UserApiClient.Result.Success)
-            ?.dataJson
-            ?.let { runCatching { JSONObject(it) }.getOrNull() }
-            ?.optJSONObject("data")
-            ?.optString("url")
-            ?.takeIf { it.startsWith("http") }
+        return when (result) {
+            is UserApiClient.Result.Success -> {
+                val url = result.dataJson
+                    ?.let { runCatching { JSONObject(it) }.getOrNull() }
+                    ?.optJSONObject("data")
+                    ?.optString("url")
+                    ?.takeIf { it.startsWith("http") }
+                if (url != null) {
+                    OnlineMusicSource.PlayUrlResult.Success(url)
+                } else {
+                    // 脚本返回了 200 但内容里没有可用地址：给出原始返回便于定位
+                    OnlineMusicSource.PlayUrlResult.Failure(
+                        "脚本未返回播放地址，原始返回：${result.dataJson?.take(200)}"
+                    )
+                }
+            }
+            is UserApiClient.Result.Failure ->
+                // 脚本内部异常原样透传（如"所有后端均失败"及各后端明细）
+                OnlineMusicSource.PlayUrlResult.Failure(
+                    result.reason.take(300)
+                )
+        }
     }
 
     companion object {
