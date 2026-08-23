@@ -60,6 +60,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val LastSongJson = stringPreferencesKey("last_song_json")
         /** 最近播放的歌曲快照列表（JSON 数组），供"最近播放"展示与恢复。 */
         val RecentSongsJson = stringPreferencesKey("recent_songs_json")
+        /** 本地收藏夹（歌曲快照 JSON 数组，在线/本地均可）。 */
+        val FavoriteSongsJson = stringPreferencesKey("favorite_songs_json")
         val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
         val AppFontScale = floatPreferencesKey("app_font_scale")
         val AppFontFamily = stringPreferencesKey("app_font_family")
@@ -291,6 +293,11 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     fun observeLastSongJson(): Flow<String?> = store.data.map { it[Keys.LastSongJson] }
     /** 最近播放的歌曲快照（JSON 数组，最多 50 条），新歌在前。 */
     fun observeRecentSongsJson(): Flow<String> = store.data.map { it[Keys.RecentSongsJson] ?: "[]" }
+    /** 收藏夹快照（JSON 数组，无上限），新收藏在前。 */
+    fun observeFavoriteSongsJson(): Flow<String> = store.data.map { it[Keys.FavoriteSongsJson] ?: "[]" }
+    suspend fun saveFavoriteSongsJson(json: String) {
+        store.edit { it[Keys.FavoriteSongsJson] = json }
+    }
     suspend fun saveRecentSongsJson(json: String) {
         store.edit { it[Keys.RecentSongsJson] = json }
     }

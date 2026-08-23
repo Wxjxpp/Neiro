@@ -23,6 +23,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
@@ -38,6 +41,7 @@ import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -120,6 +124,11 @@ fun PlayerDetailScreen(
     onSpeedChange: (Float) -> Unit = {},
     currentQuality: Quality = Quality.Standard,
     onQualityChange: (Quality) -> Unit = {},
+    /** 收藏/下载能力由外壳注入；null = 隐藏对应按钮。 */
+    isFavorite: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
+    isDownloading: Boolean = false,
+    onDownload: (() -> Unit)? = null,
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
@@ -141,7 +150,8 @@ fun PlayerDetailScreen(
     val lyricsMode = lyricPhase > 0.5f
 
     Box(modifier = Modifier.fillMaxSize()) {
-        // 动态流光背景（封面位图铺底 + 光斑漂移）
+        // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
         AmbientGlowBackground(
             baseColor = Color(song.coverSeedColor),
             coverUri = song.coverUri,
@@ -460,6 +470,27 @@ fun PlayerDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(2.dp, Alignment.CenterHorizontally),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
+                    if (onToggleFavorite != null) {
+                        val fav = isFavorite
+                        IconButton(onClick = { onToggleFavorite() }) {
+                            Icon(
+                                if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                contentDescription = if (fav) "取消收藏" else "收藏",
+                                tint = if (fav) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                    if (isDownloading) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(40.dp).padding(10.dp))
+                    } else if (onDownload != null && isRemoteSong) {
+                        IconButton(onClick = onDownload) {
+                            Icon(
+                                Icons.Rounded.Download,
+                                contentDescription = "下载",
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
                     IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
                         Icon(
                             Icons.Rounded.Schedule,

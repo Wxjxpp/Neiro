@@ -236,12 +236,7 @@ private val registry = DefaultMusicSourceRegistry(
     override val togetherTransport: TogetherTransport = NoopTogetherTransport()
     /** 发现页：榜单直连网易云公开接口；猜你喜欢复用聚合搜索。 */
     override val discoverRepository: com.wxjxpp.neiro.core.discover.DiscoverRepository by lazy {
-        com.wxjxpp.neiro.core.discover.DiscoverRepository(
-            http = httpClient,
-            searchDelegate = { keyword, page, pageSize ->
-                activeOnlineSources.firstOrNull()?.search(keyword, page, pageSize).orEmpty()
-            },
-        )
+        com.wxjxpp.neiro.core.discover.DiscoverRepository(http = httpClient)
     }
     init {
         // 记录一次应用启动（听歌热力图的"启动次数"维度）

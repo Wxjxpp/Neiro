@@ -118,6 +118,14 @@ data class ShellUiState(
 
     /** 发现页区块数据。 */
     val discoverSections: List<com.wxjxpp.neiro.core.discover.DiscoverRepository.Section> = emptyList(),
+    /** 发现页二级详情：当前展开的榜单 id 与完整曲目。 */
+    val discoverDetailId: String? = null,
+    val discoverDetailSongs: List<Song> = emptyList(),
+    val isDiscoverDetailLoading: Boolean = false,
+    /** 本地收藏夹（在线/本地歌曲均可），新收藏在前。 */
+    val favoriteSongs: List<Song> = emptyList(),
+    /** 批量下载进行中的歌曲 id（用于按钮转圈/防重复点击）。 */
+    val downloadingIds: Set<String> = emptySet(),
     val isDiscoverLoading: Boolean = false,
     /** 最近播放（快照反序列化，新歌在前）。 */
     val recentSongs: List<Song> = emptyList(),
@@ -304,8 +312,9 @@ class AppViewModel(
         playbackState
             .onEach { state -> onSongChanged(state.current) }
             .launchIn(viewModelScope)
-        // 最近播放：启动即加载（猜你喜欢需要推荐种子）
+        // 最近播放与收藏夹：启动即加载
         launchRecentLoad()
+        loadFavorites()
     }
 
     // ---- 曲库 ----
@@ -529,23 +538,35 @@ class AppViewModel(
 
     // ---- 发现页 ----
 
-    /** 拉取发现页数据：榜单 + 猜你喜欢（以最近播放的歌手为种子）。 */
+    /** 拉取发现页数据：各榜单预览。 */
     fun loadDiscover() {
         if (_uiState.value.isDiscoverLoading) return
         _uiState.update { it.copy(isDiscoverLoading = true) }
         viewModelScope.launch {
-            val seed = _uiState.value.recentSongs.firstOrNull()?.artistName
             val sections = runCatching {
-                container.discoverRepository.homeSections(songsPerSection = 20, seedForGuess = seed)
+                container.discoverRepository.homeSections(songsPerSection = 20)
             }.getOrDefault(emptyList())
             _uiState.update { it.copy(discoverSections = sections, isDiscoverLoading = false) }
         }
     }
 
-    /** 发现页"全部播放"：整个区块加入队列并从第一首开始。 */
-    fun playSection(section: com.wxjxpp.neiro.core.discover.DiscoverRepository.Section) {
-        if (section.songs.isEmpty()) return
-        container.playerController.setQueue(section.songs, autoPlay = true)
+    /** 发现页二级菜单：拉取单个榜单的最近 50 首。 */
+    fun loadDiscoverDetail(listId: String) {
+        _uiState.update { it.copy(discoverDetailId = listId, isDiscoverDetailLoading = true) }
+        viewModelScope.launch {
+            val songs = container.discoverRepository.discoverSongs(listId, limit = 50)
+            _uiState.update { it.copy(discoverDetailSongs = songs, isDiscoverDetailLoading = false) }
+        }
+    }
+
+    fun closeDiscoverDetail() {
+        _uiState.update { it.copy(discoverDetailId = null, discoverDetailSongs = emptyList()) }
+    }
+
+    /** 榜单全部播放：整榜入队，从第一首开始。播放一律走用户导入的自定义音源。 */
+    fun playDiscoverList(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        container.playerController.setQueue(songs, autoPlay = true)
     }
 
     /** 拉取最近播放快照（进入发现页时刷新）。 */
@@ -564,6 +585,80 @@ class AppViewModel(
 
     /** 启动时加载最近播放（供猜你喜欢做推荐种子）。 */
     fun launchRecentLoad() = loadRecentSongs()
+
+    // ---- 本地收藏夹 ----
+    private fun parseSnapshotArray(json: String): List<Song> {
+        val arr = runCatching { org.json.JSONArray(json) }.getOrDefault(org.json.JSONArray())
+        return (0 until arr.length()).mapNotNull { i ->
+            com.wxjxpp.neiro.core.serialization.SongJson.fromJson(
+                arr.optJSONObject(i)?.toString() ?: return@mapNotNull null,
+            )
+        }
+    }
+    /** 收藏夹：内存态列表 + DataStore 快照双写。 */
+    private suspend fun persistFavorites(songs: List<Song>) {
+        val arr = org.json.JSONArray()
+        songs.forEach { arr.put(org.json.JSONObject(com.wxjxpp.neiro.core.serialization.SongJson.toJson(it))) }
+        container.appSettings.saveFavoriteSongsJson(arr.toString())
+    }
+    /** 轻提示转发到容器（Snackbar 展示）。 */
+    private fun notify(message: String) = container.notify(message)
+    fun loadFavorites() {
+        viewModelScope.launch {
+            val songs = parseSnapshotArray(container.appSettings.observeFavoriteSongsJson().first())
+            _uiState.update { it.copy(favoriteSongs = songs) }
+        }
+    }
+    /** 是否已收藏（按歌曲 id 判定）。 */
+    fun isFavorite(songId: String): Boolean =
+        _uiState.value.favoriteSongs.any { it.id == songId }
+    /** 收藏/取消收藏单曲。 */
+    fun toggleFavorite(song: Song) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val current = parseSnapshotArray(container.appSettings.observeFavoriteSongsJson().first())
+            val updated = if (current.any { it.id == song.id }) {
+                current.filterNot { it.id == song.id }
+            } else {
+                listOf(song) + current
+            }
+            persistFavorites(updated)
+            _uiState.update { it.copy(favoriteSongs = updated) }
+        }
+    }
+    /** 连续收藏多首（已存在的跳过）。 */
+    fun addFavorites(songs: List<Song>) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val current = parseSnapshotArray(container.appSettings.observeFavoriteSongsJson().first())
+            val existingIds = current.mapTo(mutableSetOf()) { it.id }
+            val merged = songs.filter { it.id !in existingIds } + current
+            persistFavorites(merged)
+            _uiState.update { it.copy(favoriteSongs = merged) }
+        }
+    }
+
+    // ---- 批量下载 ----
+    /** 连续下载多首（逐首排队，失败不中断；完成一首移除一个进行中标记）。 */
+    fun downloadSongs(songsToDownload: List<Song>) {
+        if (songsToDownload.isEmpty()) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(downloadingIds = it.downloadingIds + songsToDownload.map { s -> s.id }.toSet())
+            }
+            var ok = 0
+            for (s in songsToDownload) {
+                try {
+                    container.downloadManager.downloadSong(s)
+                    ok++
+                    notify("已下载：${s.title}")
+                } catch (e: Exception) {
+                    notify("下载失败：${s.title}（${e.message?.take(60)}）")
+                }
+                _uiState.update { it.copy(downloadingIds = it.downloadingIds - s.id) }
+            }
+            if (songsToDownload.size > 1) notify("批量下载完成 $ok/${songsToDownload.size}")
+        }
+    }
 
     // ---- 错误横幅 ----
 
@@ -723,6 +818,22 @@ class AppViewModel(
         viewModelScope.launch {
             container.playlistRepository.addSongs(playlistId, ids)
             clearSelection()
+        }
+    }
+    /** 批量：把若干歌曲加入已有歌单。 */
+    fun addSongsToPlaylist(playlistId: String, songs: List<Song>) {
+        if (songs.isEmpty()) return
+        viewModelScope.launch {
+            container.playlistRepository.addSongs(playlistId, songs.map { it.id })
+            notify("已加入歌单（${songs.size} 首）")
+        }
+    }
+    /** 批量：新建歌单并加入歌曲。 */
+    fun createPlaylistWithSongs(name: String, songs: List<Song>) {
+        if (songs.isEmpty() || name.isBlank()) return
+        viewModelScope.launch {
+            container.playlistRepository.create(name.trim(), songs.map { it.id })
+            notify("已创建「${name.trim()}」并加入 ${songs.size} 首")
         }
     }
 
@@ -926,7 +1037,7 @@ class AppViewModel(
         }
     }
 
-    private fun selectedSongs(): List<Song> {
+    internal fun selectedSongs(): List<Song> {
         val ids = _uiState.value.selectedSongIds
         return _uiState.value.songs.filter { it.id in ids }
     }

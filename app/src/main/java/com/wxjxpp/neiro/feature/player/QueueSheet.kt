@@ -5,12 +5,18 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.Favorite
+import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
@@ -27,7 +33,7 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 /**
  * 播放列表面板。
  *
- * 播放栏和详情页的「播放列表」按钮都打开它，点击条目直接跳到那一首。
+ * 每行支持：点击播放、收藏（心形）、下载在线歌曲。
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -36,6 +42,11 @@ fun QueueSheet(
     currentSongId: String?,
     onDismiss: () -> Unit,
     onPick: (Int) -> Unit,
+    /** 单曲下载回调（null = 不显示下载按钮）。 */
+    onDownload: ((Song) -> Unit)? = null,
+    downloadingIds: Set<String> = emptySet(),
+    favoriteIds: Set<String> = emptySet(),
+    onToggleFavorite: ((Song) -> Unit)? = null,
 ) {
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = false)
     val dimens = AppTheme.dimens
@@ -62,6 +73,8 @@ fun QueueSheet(
         LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
             itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
                 val isCurrent = song.id == currentSongId
+                val isFavorite = song.id in favoriteIds
+                val isDownloading = song.id in downloadingIds
                 ListItem(
                     modifier = Modifier.clickable { onPick(index) },
                     colors = if (isCurrent) {
@@ -90,13 +103,40 @@ fun QueueSheet(
                         Text(song.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     },
                     supportingContent = {
+                        Text(
+                            text = "${song.artistName} · ${song.albumTitle}",
+                            style = MaterialTheme.typography.bodySmall,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    },
+                    trailingContent = {
                         Row {
-                            Text(
-                                text = "${song.artistName} · ${song.albumTitle}",
-                                style = MaterialTheme.typography.bodySmall,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            if (onToggleFavorite != null) {
+                                IconButton(onClick = { onToggleFavorite(song) }) {
+                                    Icon(
+                                        if (isFavorite) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
+                                        contentDescription = if (isFavorite) "取消收藏" else "收藏",
+                                        tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                    )
+                                }
+                            }
+                            if (onDownload != null && song.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote) {
+                                if (isDownloading) {
+                                    CircularProgressIndicator(
+                                        strokeWidth = 2.dp,
+                                        modifier = Modifier.padding(all = 14.dp).size(20.dp),
+                                    )
+                                } else {
+                                    IconButton(onClick = { onDownload(song) }) {
+                                        Icon(
+                                            Icons.Rounded.Download,
+                                            contentDescription = "下载",
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                            }
                         }
                     },
                 )

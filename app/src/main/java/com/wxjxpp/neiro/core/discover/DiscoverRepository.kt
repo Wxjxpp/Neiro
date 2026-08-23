@@ -22,8 +22,6 @@ import org.json.JSONObject
  */
 class DiscoverRepository(
     private val http: HttpClient,
-    /** 关键词搜索委托：由在线搜索仓库提供（聚合或指定平台）。 */
-    private val searchDelegate: suspend (keyword: String, page: Int, pageSize: Int) -> List<Song>,
 ) {
 
     data class Section(
@@ -44,36 +42,27 @@ class DiscoverRepository(
     )
 
     /**
-     * 并发拉取发现页全部区块。
-     *
-     * [seedForGuess] 是"猜你喜欢"的搜索种子（如最近播放的歌手名），
-     * 为空时跳过该区块。单个区块失败不影响其他区块。
+     * 并发拉取发现页各榜单预览（每榜前 20 首）。
+     * 单个榜单失败不影响其他榜单。
      */
-    suspend fun homeSections(
-        songsPerSection: Int = 20,
-        seedForGuess: String? = null,
-    ): List<Section> = coroutineScope {
-        val jobs = toplists.map { ref ->
+    suspend fun homeSections(songsPerSection: Int = 20): List<Section> = coroutineScope {
+        toplists.map { ref ->
             async {
                 val songs = runCatching { toplistSongs(ref.id, songsPerSection) }
                     .getOrDefault(emptyList())
                 Section(ref.id, ref.name, ref.updateFreq, songs)
             }
-        }.toMutableList()
-
-        if (!seedForGuess.isNullOrBlank()) {
-            jobs += async {
-                val songs = runCatching { guessYouLike(listOf(seedForGuess), songsPerSection) }
-                    .getOrDefault(emptyList())
-                Section("guess", "猜你喜欢", "根据你的最近播放推荐", songs)
-            }
-        }
-
-        jobs.mapNotNull { job ->
-            val section = job.await()
-            section.takeIf { it.songs.isNotEmpty() }
-        }
+        }.mapNotNull { job -> job.await().takeIf { it.songs.isNotEmpty() } }
     }
+
+    /**
+     * 拉取单个榜单完整曲目（发现页二级菜单用）。
+     *
+     * 注意：这里只负责"拿到歌曲元数据"，播放一律走用户导入的自定义音源，
+     * 本仓库不做任何预设取流。
+     */
+    suspend fun discoverSongs(listId: String, limit: Int = 50): List<Song> =
+        runCatching { toplistSongs(listId, limit) }.getOrDefault(emptyList())
 
     /** 拉取单个榜单的完整曲目。 */
     suspend fun toplistSongs(listId: String, limit: Int = 50): List<Song> {
@@ -86,16 +75,6 @@ class DiscoverRepository(
         val playlist = root.optJSONObject("playlist") ?: return emptyList()
         val tracks = playlist.optJSONArray("tracks") ?: return emptyList()
         return buildTracks(tracks, limit)
-    }
-
-    /** 猜你喜欢：依次尝试种子关键词，命中即返回打散的结果。 */
-    suspend fun guessYouLike(seedQueries: List<String>, limit: Int = 20): List<Song> {
-        seedQueries.filter { it.isNotBlank() }.forEach { query ->
-            val songs = runCatching { searchDelegate(query.trim(), 1, limit) }
-                .getOrDefault(emptyList())
-            if (songs.isNotEmpty()) return songs.shuffled().take(limit)
-        }
-        return emptyList()
     }
 
     /** 把平台 track JSON 数组映射成 Song 列表（payload 原样保留供脚本取流）。 */

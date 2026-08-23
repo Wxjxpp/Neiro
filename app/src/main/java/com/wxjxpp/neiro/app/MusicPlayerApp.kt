@@ -7,6 +7,7 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -107,23 +108,33 @@ fun MusicPlayerApp(container: AppContainer) {
         else -> 0f
     }
 
-    /** 程序化打开/关闭：写入目标进度，由下面的 animateFloatAsState 平滑过渡。 */
+    /**
+     * Sheet 进度引擎：
+     * - 拖拽中（dragging=true）：动画规格为 snap（零时长），进度即手指位置，全程跟手；
+     * - 松手/程序化：tween 平滑收敛到锚点，同时每帧回写 VM，
+     *   保证下次按下时起点就是当前视觉位置（不跳变）。
+     */
     var programmaticTarget by remember { mutableStateOf(0f) }
     var dragging by remember { mutableStateOf(false) }
     val sheetProgress by animateFloatAsState(
         targetValue = if (dragging) rawProgress else programmaticTarget,
-        animationSpec = tween(320),
+        animationSpec = if (dragging) snap() else tween(320),
         label = "sheetProgress",
     )
-    // 拖拽结束：把当前进度收敛到最近的锚点（0/1/2）
-    LaunchedEffect(rawProgress, dragging) {
-        if (!dragging && rawProgress != programmaticTarget) {
+    // 松手边沿：把当前进度收敛到最近锚点（只在 dragging true→false 时触发一次，
+    // 绝不干扰程序化目标——否则“显示歌词”按钮的 2f 目标会被立刻拉回当前锚点）
+    var wasDragging by remember { mutableStateOf(false) }
+    LaunchedEffect(dragging) {
+        if (wasDragging && !dragging) {
             programmaticTarget = snapTargetOf(rawProgress)
         }
+        wasDragging = dragging
     }
-    // 程序化目标变化时同步底层值（避免拖拽中途切换目标错乱）
-    LaunchedEffect(programmaticTarget) {
-        if (!dragging) viewModel.setSheetProgress(programmaticTarget)
+    // 非拖拽期间持续回写 VM（动画中途按下也能从正确位置继续）
+    LaunchedEffect(sheetProgress, dragging) {
+        if (!dragging && rawProgress != sheetProgress) {
+            viewModel.setSheetProgress(sheetProgress)
+        }
     }
 
     val hasSong = playback.current != null
@@ -142,7 +153,9 @@ fun MusicPlayerApp(container: AppContainer) {
     val dimens = AppTheme.dimens
 
     // 弹层状态（提前声明，供播放栏等回调引用）
-    var showPlaylistPicker by remember { mutableStateOf(false) }
+    var showBatchSheet by remember { mutableStateOf(false) }
+    /** 批量操作目标歌曲（首页多选 or 搜索页在线多选）。 */
+    var batchSongs by remember { mutableStateOf<List<com.wxjxpp.neiro.core.model.Song>>(emptyList()) }
     var showQueueSheet by remember { mutableStateOf(false) }
 
     // 运行时权限：Android 13+ 请求 READ_MEDIA_AUDIO，更低版本回退到读外部存储。
@@ -229,6 +242,7 @@ fun MusicPlayerApp(container: AppContainer) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(WindowInsets.statusBars.asPaddingValues())
                     .graphicsLayer {
                         scaleX = depthScale
                         scaleY = depthScale
@@ -247,6 +261,7 @@ fun MusicPlayerApp(container: AppContainer) {
                     ) {
                         RouteContent(
                             route = route,
+                            container = container,
                             viewModel = viewModel,
                             uiState = uiState,
                             hasMediaPermission = hasMediaPermission,
@@ -254,12 +269,19 @@ fun MusicPlayerApp(container: AppContainer) {
                             onScan = scanLibrary,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onNavigate = { target -> route = target },
-                            onAddSelectedToPlaylist = { showPlaylistPicker = true },
+                            onBatchOperate = { songs ->
+                                batchSongs = songs
+                                showBatchSheet = true
+                            },
+                            onAddSelectedToPlaylist = {
+                                batchSongs = viewModel.selectedSongs()
+                                showBatchSheet = true
+                            },
                             contentPadding = PaddingValues(bottom = scaffoldPadding.calculateBottomPadding()),
                             modifier = Modifier.fillMaxSize(),
                         )
-                        // 浮动播放栏（有歌且播放页未展开时可见）
-                        if (hasSong && uiState.floatingPlayerBar) {
+                        // 播放栏：floating=浮动样式；关闭开关后仍显示（底部贴合的紧凑条）
+                        if (hasSong) {
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !playerOpen,
                                 enter = slideInVertically(tween(280)) { it } + fadeIn(tween(280)),
@@ -268,7 +290,7 @@ fun MusicPlayerApp(container: AppContainer) {
                             ) {
                                 PlayerBar(
                                     state = playback,
-                                    floating = true,
+                                    floating = uiState.floatingPlayerBar,
                                     onExpand = { programmaticTarget = 1f },
                                     onTogglePlay = viewModel::togglePlay,
                                     onNext = viewModel::next,
@@ -344,23 +366,35 @@ fun MusicPlayerApp(container: AppContainer) {
                         onSpeedChange = viewModel::setSpeed,
                         currentQuality = uiState.preferredQuality,
                         onQualityChange = viewModel::setPreferredQuality,
+                        isFavorite = playback.current?.id in uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
+                        onToggleFavorite = {
+                            playback.current?.let { viewModel.toggleFavorite(it) }
+                        },
+                        isDownloading = playback.current?.id in uiState.downloadingIds,
+                        onDownload = {
+                            playback.current?.let { viewModel.downloadSongs(listOf(it)) }
+                        },
                     )
                 }
             }
         }
     }
 
-    if (showPlaylistPicker) {
-        PickPlaylistDialog(
+    if (showBatchSheet) {
+        SongBatchSheet(
             playlists = uiState.playlists,
-            onDismiss = { showPlaylistPicker = false },
-            onPick = { playlistId ->
-                viewModel.addSelectedToPlaylist(playlistId)
-                showPlaylistPicker = false
+            songs = batchSongs,
+            favoriteIds = uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
+            onDismiss = { showBatchSheet = false },
+            onAddToPlaylist = { playlistId, songs ->
+                viewModel.addSongsToPlaylist(playlistId, songs)
             },
-            onCreateNew = { name ->
-                viewModel.createPlaylistWithSelected(name)
-                showPlaylistPicker = false
+            onCreatePlaylistAndAdd = { name, songs ->
+                viewModel.createPlaylistWithSongs(name, songs)
+            },
+            onFavorite = { songs ->
+                viewModel.addFavorites(songs)
+                showBatchSheet = false
             },
         )
     }
@@ -374,6 +408,10 @@ fun MusicPlayerApp(container: AppContainer) {
                 viewModel.playQueueItem(index)
                 showQueueSheet = false
             },
+            onDownload = { song -> viewModel.downloadSongs(listOf(song)) },
+            downloadingIds = uiState.downloadingIds,
+            favoriteIds = uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
+            onToggleFavorite = { song -> viewModel.toggleFavorite(song) },
         )
     }
 }
@@ -441,6 +479,7 @@ private fun ErrorBanner(
 @Composable
 private fun RouteContent(
     route: String,
+    container: AppContainer,
     viewModel: AppViewModel,
     uiState: ShellUiState,
     hasMediaPermission: Boolean,
@@ -449,6 +488,8 @@ private fun RouteContent(
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
     onAddSelectedToPlaylist: () -> Unit,
+    /** 搜索页等处的批量入口（打开批量弹层）。 */
+    onBatchOperate: (List<com.wxjxpp.neiro.core.model.Song>) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -520,12 +561,19 @@ private fun RouteContent(
 
                 Destination.Albums.route -> AlbumsScreen(
                     songs = uiState.songs,
+                    extraSongs = uiState.favoriteSongs + run {
+                        val byId = uiState.songs.associateBy { it.id }
+                        uiState.playlists.flatMap { pl -> pl.songIds.mapNotNull { id -> byId[id] } }
+                    },
+                    favoriteIds = uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
+                    downloadingIds = uiState.downloadingIds,
+                    onDownloadSong = { song -> viewModel.downloadSongs(listOf(song)) },
                     sortField = uiState.albumSortField,
                     sortDescending = uiState.albumSortDescending,
                     onSortFieldChange = viewModel::setAlbumSortField,
                     onSortDirectionToggle = { viewModel.setAlbumSortDescending(!uiState.albumSortDescending) },
                     onOpenDrawer = onOpenDrawer,
-                    onPlayAlbum = { album -> album.songs.firstOrNull()?.let(viewModel::play) },
+                    onSongClick = viewModel::play,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -533,9 +581,18 @@ private fun RouteContent(
                 Destination.Discover.route -> DiscoverScreen(
                     sections = uiState.discoverSections,
                     isLoading = uiState.isDiscoverLoading,
+                    detailId = uiState.discoverDetailId,
+                    detailSongs = uiState.discoverDetailSongs,
+                    isDetailLoading = uiState.isDiscoverDetailLoading,
+                    toplists = container.discoverRepository.toplists,
                     onOpenDrawer = onOpenDrawer,
                     onSongClick = viewModel::play,
-                    onPlaySection = viewModel::playSection,
+                    onOpenDetail = viewModel::loadDiscoverDetail,
+                    onCloseDetail = viewModel::closeDiscoverDetail,
+                    onPlayList = viewModel::playDiscoverList,
+                    favoriteIds = uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
+                    downloadingIds = uiState.downloadingIds,
+                    onDownloadSong = { song -> viewModel.downloadSongs(listOf(song)) },
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )
@@ -555,6 +612,12 @@ private fun RouteContent(
                     onDownloadSong = viewModel::downloadSong,
                     onDownloadLyrics = viewModel::downloadLyrics,
                     onOnlinePlatformChange = viewModel::setOnlineSearchPlatform,
+                    onFavorites = viewModel::addFavorites,
+                    onDownloadMany = viewModel::downloadSongs,
+                    onBatchToPlaylist = { songs ->
+                        batchSongs = songs
+                        showBatchSheet = true
+                    },
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )

@@ -1,6 +1,9 @@
 package com.wxjxpp.neiro.feature.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -25,7 +28,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SearchBar
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -66,12 +71,22 @@ fun SearchScreen(
     onOnlinePlatformChange: (String) -> Unit,
     onDownloadSong: ((Song) -> Unit)? = null,
     onDownloadLyrics: ((Song) -> Unit)? = null,
+    /** 在线结果长按多选后的批量操作。 */
+    onFavorites: ((List<Song>) -> Unit)? = null,
+    onDownloadMany: ((List<Song>) -> Unit)? = null,
+    onBatchToPlaylist: ((List<Song>) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
     // 在线/本地 Tab 状态：仅聚合模式下有意义；默认先看在线结果。
     var showLocalTab by remember(query, onlineResults) { mutableStateOf(false) }
+    // 在线结果多选（长按触发）
+    val selectedOnline = remember { androidx.compose.runtime.mutableStateListOf<String>() }
+    fun toggleSelect(song: Song) {
+        if (!selectedOnline.remove(song.id)) selectedOnline.add(song.id)
+    }
+    val selectedSongsList = onlineResults.filter { it.id in selectedOnline }
     val allLocalEmpty = localResults.isEmpty() && !isLoadingOnline && onlineResults.isEmpty()
     Column(
         modifier = modifier
@@ -209,15 +224,37 @@ fun SearchScreen(
                 val showOnline = if (currentOnlinePlatform == OnlineSearchRepository.ALL) !showLocalTab else true
                 val showLocalList = if (currentOnlinePlatform == OnlineSearchRepository.ALL) showLocalTab else false
                 if (showOnline && onlineResults.isNotEmpty()) {
-                    item {
+                    item(key = "online_header") {
                         SectionHeader("在线结果（${onlineResults.size}）")
+                    }
+                    if (selectedOnline.isNotEmpty()) {
+                        item(key = "online_batchbar") {
+                            BatchActionBar(
+                                count = selectedOnline.size,
+                                onFavorite = {
+                                    onFavorites?.invoke(selectedSongsList)
+                                    selectedOnline.clear()
+                                },
+                                onDownload = {
+                                    onDownloadMany?.invoke(selectedSongsList)
+                                    selectedOnline.clear()
+                                },
+                                onAddToPlaylist = {
+                                    onBatchToPlaylist?.invoke(selectedSongsList)
+                                    selectedOnline.clear()
+                                },
+                                onCancel = { selectedOnline.clear() },
+                            )
+                        }
                     }
                     items(onlineResults, key = { "online_${it.id}" }) { song ->
                         SearchResultRow(
                             song = song,
                             onClick = { onSongClick(song) },
-                            onDownloadSong = onDownloadSong,
-                            onDownloadLyrics = onDownloadLyrics,
+                            onDownloadSong = onDownloadSong.takeIf { selectedOnline.isEmpty() },
+                            onDownloadLyrics = onDownloadLyrics.takeIf { selectedOnline.isEmpty() },
+                            selected = song.id in selectedOnline,
+                            onLongClick = { toggleSelect(song) },
                         )
                     }
                 }
@@ -280,17 +317,28 @@ private fun NoSourceHint() {
 }
 
 @Composable
+@OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun SearchResultRow(
     song: Song,
     onClick: () -> Unit,
     onDownloadSong: ((Song) -> Unit)? = null,
     onDownloadLyrics: ((Song) -> Unit)? = null,
+    selected: Boolean = false,
+    onLongClick: (() -> Unit)? = null,
 ) {
     val dimens = AppTheme.dimens
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .height(dimens.listItemHeight)
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick,
+            )
+            .background(
+                if (selected) MaterialTheme.colorScheme.secondaryContainer
+                else Color.Transparent,
+            )
             .clickable(onClick = onClick)
             .padding(horizontal = dimens.spaceLg),
         verticalAlignment = Alignment.CenterVertically,
@@ -331,6 +379,34 @@ private fun SearchResultRow(
                         )
                     }
                 }
+            }
+        }
+    }
+}@Composable
+private fun BatchActionBar(
+    count: Int,
+    onFavorite: () -> Unit,
+    onDownload: () -> Unit,
+    onAddToPlaylist: () -> Unit,
+    onCancel: () -> Unit,
+) {
+    Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        shape = MaterialTheme.shapes.medium,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = AppTheme.dimens.spaceLg, vertical = AppTheme.dimens.spaceXs),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(horizontal = AppTheme.dimens.spaceMd),
+        ) {
+            Text("已选 $count 首", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            TextButton(onClick = onFavorite) { Text("收藏") }
+            TextButton(onClick = onDownload) { Text("下载") }
+            TextButton(onClick = onAddToPlaylist) { Text("加歌单") }
+            IconButton(onClick = onCancel) {
+                Icon(Icons.Rounded.Close, contentDescription = "取消多选")
             }
         }
     }

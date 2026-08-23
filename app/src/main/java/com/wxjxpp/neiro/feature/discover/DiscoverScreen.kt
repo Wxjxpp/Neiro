@@ -1,5 +1,6 @@
 package com.wxjxpp.neiro.feature.discover
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -7,20 +8,24 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateBottomPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
@@ -28,7 +33,6 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
@@ -43,23 +47,37 @@ import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /**
- * 发现页：从一个稳定源（网易云公开榜单）获取内容，
- * 歌曲播放全部走用户导入的音源（自动换源回退）。
+ * 发现页。
  *
- * 区块：猜你喜欢（个性化种子）→ 热歌 → 新歌 → 飙升 → 原创。
- * 每个区块支持"全部播放"；单首点击即插播。
+ * 一级：榜单卡片横向预览（每榜前 20 首）；
+ * 二级：点榜单标题进入该榜完整曲目（最近 50 首），支持整榜播放。
+ *
+ * 歌曲元数据来自公开榜单接口；播放一律走用户导入的自定义音源，
+ * 未导入音源时点击播放会得到明确提示。
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun DiscoverScreen(
     sections: List<DiscoverRepository.Section>,
     isLoading: Boolean,
+    detailId: String?,
+    detailSongs: List<Song>,
+    isDetailLoading: Boolean,
+    toplists: List<DiscoverRepository.ToplistRef>,
     onOpenDrawer: () -> Unit,
     onSongClick: (Song) -> Unit,
-    onPlaySection: (DiscoverRepository.Section) -> Unit,
+    onOpenDetail: (String) -> Unit,
+    onCloseDetail: () -> Unit,
+    onPlayList: (List<Song>) -> Unit,
+    favoriteIds: Set<String> = emptySet(),
+    downloadingIds: Set<String> = emptySet(),
+    onDownloadSong: ((Song) -> Unit)? = null,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
+    val inDetail = detailId != null
+    // 二级菜单返回手势：先回一级，再走外壳的页面级返回
+    BackHandler(enabled = inDetail) { onCloseDetail() }
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             title = {
@@ -73,19 +91,33 @@ fun DiscoverScreen(
                 }
             },
             navigationIcon = {
-                IconButton(onClick = onOpenDrawer) {
-                    Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
+                IconButton(onClick = { if (inDetail) onCloseDetail() else onOpenDrawer() }) {
+                    Icon(
+                        if (inDetail) Icons.AutoMirrored.Rounded.ArrowBack else Icons.Rounded.Menu,
+                        contentDescription = if (inDetail) "返回" else "打开导航",
+                    )
                 }
             },
         )
         when {
+            inDetail -> DiscoverDetail(
+                title = toplists.firstOrNull { it.id == detailId }?.name.orEmpty(),
+                subtitle = toplists.firstOrNull { it.id == detailId }?.updateFreq.orEmpty(),
+                songs = detailSongs,
+                isLoading = isDetailLoading,
+                onPlayAll = { onPlayList(detailSongs) },
+                onSongClick = onSongClick,
+                favoriteIds = favoriteIds,
+                downloadingIds = downloadingIds,
+                onDownloadSong = onDownloadSong,
+                contentPadding = contentPadding,
+            )
             isLoading && sections.isEmpty() -> Box(
                 modifier = Modifier.fillMaxSize(),
                 contentAlignment = Alignment.Center,
             ) {
                 CircularWavyProgressIndicator()
             }
-
             sections.isEmpty() -> DiscoverEmpty()
             else -> LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -96,11 +128,11 @@ fun DiscoverScreen(
                         SectionHeader(
                             title = section.title,
                             subtitle = section.subtitle,
-                            onPlayAll = { onPlaySection(section) },
+                            onOpen = { onOpenDetail(section.id) },
+                            onPlayAll = { onPlayList(section.songs) },
                         )
                     }
                     item(key = "list_${section.id}") {
-                        // 横向滚动卡片：紧凑展示，不占纵向空间
                         LazyRow(
                             contentPadding = PaddingValues(horizontal = AppTheme.dimens.spaceLg),
                             horizontalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceMd),
@@ -119,7 +151,109 @@ fun DiscoverScreen(
     }
 }
 
-/** 无可用内容（通常是未导入音源导致搜索委托不可用）。 */
+/** 二级菜单：单个榜单的完整曲目（最近 50 首）。 */
+@Composable
+private fun DiscoverDetail(
+    title: String,
+    subtitle: String,
+    songs: List<Song>,
+    isLoading: Boolean,
+    onPlayAll: () -> Unit,
+    onSongClick: (Song) -> Unit,
+    favoriteIds: Set<String>,
+    downloadingIds: Set<String>,
+    onDownloadSong: ((Song) -> Unit)?,
+    contentPadding: PaddingValues,
+) {
+    Column(modifier = Modifier.fillMaxSize()) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = AppTheme.dimens.spaceLg, vertical = AppTheme.dimens.spaceXs),
+        ) {
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            FilledTonalButton(onClick = onPlayAll, enabled = songs.isNotEmpty()) {
+                Icon(Icons.Rounded.PlayArrow, contentDescription = null, modifier = Modifier.size(16.dp))
+                Text("播放全榜", modifier = Modifier.padding(start = AppTheme.dimens.spaceXs))
+            }
+        }
+        when {
+            isLoading -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                CircularWavyProgressIndicator()
+            }
+            songs.isEmpty() -> Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("暂时拉取不到该榜单", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+            ) {
+                items(songs, key = { it.id }) { song ->
+                    SongRowDetailed(
+                        song = song,
+                        onClick = { onSongClick(song) },
+                        isFavorite = song.id in favoriteIds,
+                        isDownloading = song.id in downloadingIds,
+                        onDownload = onDownloadSong?.takeIf { song.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote },
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SongRowDetailed(
+    song: Song,
+    onClick: () -> Unit,
+    isFavorite: Boolean,
+    isDownloading: Boolean,
+    onDownload: (() -> Unit)?,
+) {
+    val dimens = AppTheme.dimens
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs),
+    ) {
+        Text(
+            text = if (isFavorite) "♥" else "",
+            color = MaterialTheme.colorScheme.error,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(end = dimens.spaceXs),
+        )
+        SongCover(song = song, size = dimens.listCoverSize, radius = 8.dp)
+        Column(modifier = Modifier.weight(1f).padding(start = dimens.spaceMd)) {
+            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                song.artistName,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        if (isDownloading) {
+            CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+        } else if (onDownload != null) {
+            IconButton(onClick = onDownload) {
+                Icon(Icons.Rounded.Download, contentDescription = "下载", tint = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
+
+/** 无可用内容（网络异常等）。 */
 @Composable
 private fun DiscoverEmpty() {
     Column(
@@ -139,23 +273,26 @@ private fun DiscoverEmpty() {
     }
 }
 
+/** 一级区块头：点标题进入二级菜单，播放按钮播当前预览。 */
 @Composable
 private fun SectionHeader(
     title: String,
     subtitle: String,
+    onOpen: () -> Unit,
     onPlayAll: () -> Unit,
 ) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier
             .fillMaxWidth()
+            .clickable(onClick = onOpen)
             .padding(start = AppTheme.dimens.spaceLg, top = AppTheme.dimens.spaceMd, bottom = AppTheme.dimens.spaceSm)
             .padding(end = AppTheme.dimens.spaceSm),
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(
-                text = subtitle,
+                text = "$subtitle · 查看全部 ›",
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
