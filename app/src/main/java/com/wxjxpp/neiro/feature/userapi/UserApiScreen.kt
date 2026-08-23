@@ -2,20 +2,25 @@ package com.wxjxpp.neiro.feature.userapi
 
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
@@ -46,7 +51,7 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 /**
  * 自定义音源管理页。
  *
- * - 本地 `.js` 文件 / URL 两种导入方式
+ * - 导入入口合并为一个「添加音源」按钮 → ActionSheet 选择本地文件 / URL（紧凑，不占两颗按钮）
  * - 显示每个脚本初始化后上报的能力（支持的平台与音质）
  * - 启用失败时给出可读原因
  */
@@ -61,12 +66,14 @@ fun UserApiScreen(
     onDeactivate: () -> Unit,
     onUpdate: (String) -> Unit,
     onRemove: (String) -> Unit,
+    onOpenDrawer: () -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
     val context = LocalContext.current
     var showUrlDialog by remember { mutableStateOf(false) }
+    var showImportSheet by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<UserApiInfo?>(null) }
 
     val picker = rememberLauncherForActivityResult(
@@ -80,10 +87,15 @@ fun UserApiScreen(
             }.getOrNull()?.let(onImportScript)
         }
     }
-
     Column(modifier = modifier.fillMaxSize().padding(contentPadding)) {
         Column(modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm)) {
-            Text("自定义音源", style = MaterialTheme.typography.titleMedium)
+            // 导航入口：打开侧边栏
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
+                }
+                Text("自定义音源", style = MaterialTheme.typography.titleMedium)
+            }
             Text(
                 text = "支持 LX 格式的 .js 脚本，在 QuickJS 沙箱内执行，网络请求由宿主代发。" +
                     "在线搜索无需音源；音源脚本负责解析各平台的播放地址。",
@@ -105,13 +117,10 @@ fun UserApiScreen(
                 modifier = Modifier.padding(top = dimens.spaceSm),
                 horizontalArrangement = Arrangement.spacedBy(dimens.spaceSm),
             ) {
-                FilledTonalButton(onClick = { picker.launch(arrayOf("*/*")) }) {
-                    Icon(Icons.Rounded.FileOpen, contentDescription = null)
-                    Text("本地文件", modifier = Modifier.padding(start = dimens.spaceXs))
-                }
-                FilledTonalButton(onClick = { showUrlDialog = true }) {
-                    Icon(Icons.Rounded.Link, contentDescription = null)
-                    Text("从 URL", modifier = Modifier.padding(start = dimens.spaceXs))
+                // 合并导入入口：一个按钮 → ActionSheet（本地文件 / URL）
+                FilledTonalButton(onClick = { showImportSheet = true }) {
+                    Icon(Icons.Rounded.Add, contentDescription = null)
+                    Text("添加音源", modifier = Modifier.padding(start = dimens.spaceXs))
                 }
                 if (engineStatus is UserApiStatus.Ready) {
                     FilledTonalButton(onClick = onDeactivate) {
@@ -174,6 +183,32 @@ fun UserApiScreen(
         }
     }
 
+    // 导入方式 ActionSheet
+    if (showImportSheet) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showImportSheet = false }) {
+            Column(modifier = Modifier.padding(horizontal = dimens.spaceLg)) {
+                Text("添加音源", style = MaterialTheme.typography.titleMedium)
+                Spacer(Modifier.height(dimens.spaceSm))
+                SheetActionRow(
+                    icon = Icons.Rounded.FileOpen,
+                    label = "从本地文件导入",
+                    description = "选择设备上的 .js 脚本",
+                ) {
+                    showImportSheet = false
+                    picker.launch(arrayOf("*/*"))
+                }
+                SheetActionRow(
+                    icon = Icons.Rounded.Link,
+                    label = "从 URL 导入",
+                    description = "输入脚本链接下载",
+                ) {
+                    showImportSheet = false
+                    showUrlDialog = true
+                }
+                Spacer(Modifier.height(dimens.spaceXl))
+            }
+        }
+    }
     if (showUrlDialog) {
         var url by remember { mutableStateOf("") }
         AlertDialog(
@@ -233,4 +268,31 @@ private fun StatusText(text: String, color: androidx.compose.ui.graphics.Color) 
         color = color,
         modifier = Modifier.padding(top = dimens.spaceXs),
     )
+}
+
+/** ActionSheet 里的一行操作：图标 + 标题 + 描述。 */
+@Composable
+private fun SheetActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    description: String,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(onClick = onClick)
+            .padding(vertical = AppTheme.dimens.spaceMd),
+    ) {
+        Icon(icon, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+        Column(modifier = Modifier.padding(start = AppTheme.dimens.spaceLg)) {
+            Text(label, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }

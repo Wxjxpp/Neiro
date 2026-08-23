@@ -83,21 +83,18 @@ data class AppDimens(
     val spaceMd: Dp = 12.dp,
     val spaceLg: Dp = 16.dp,
     val spaceXl: Dp = 24.dp,
-
-    val playerBarHeight: Dp = 72.dp,
-    val playerBarCoverSize: Dp = 52.dp,
-    val playerBarCoverRadius: Dp = 14.dp,
-
+    val playerBarHeight: Dp = 64.dp,
+    val playerBarCoverSize: Dp = 46.dp,
+    val playerBarCoverRadius: Dp = 12.dp,
     val floatingBarMargin: Dp = 12.dp,
     val floatingBarBottomMargin: Dp = 16.dp,
     val floatingBarRadius: Dp = 28.dp,
     val floatingBarElevation: Dp = 6.dp,
-
     val detailCoverSize: Dp = 240.dp,
     val detailCoverRadius: Dp = 28.dp,
-
-    val listItemHeight: Dp = 68.dp,
-    val listCoverSize: Dp = 48.dp,
+    // 紧凑布局：行高与封面同步缩小，一屏可见更多内容
+    val listItemHeight: Dp = 58.dp,
+    val listCoverSize: Dp = 44.dp,
 )
 
 @Immutable

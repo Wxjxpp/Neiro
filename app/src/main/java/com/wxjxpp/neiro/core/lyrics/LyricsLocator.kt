@@ -112,16 +112,26 @@ class LyricsLocator(
     /**
      * 问在线音源要歌词。
      *
-     * 在线歌曲交给它自己的音源；本地歌曲则遍历所有声明 [SourceCapability.Lyrics]
-     * 的在线音源，命中即用（自定义音源可能只支持部分平台）。
+     * 在线歌曲优先问它自己的音源；失败或没歌词时**继续遍历其余声明
+     * [SourceCapability.Lyrics] 的在线音源**——单个源缺歌词很常见，
+     * 换个源往往就有（用户反馈："这个源没有歌词，另一个源有"）。
+     * 本地歌曲则直接遍历所有在线音源，按"歌名 + 歌手"匹配。
      */
     private suspend fun fetchFromSources(song: Song): Lyrics? {
         val registry = sourceRegistry() ?: return null
         val candidates = when (val location = song.location) {
-            is MediaLocation.Remote -> listOfNotNull(
-                registry.find(location.sourceId)
-                    ?: registry.sources.firstOrNull { it.id.endsWith(":${location.sourceId}") }
-            ).ifEmpty { registry.sourcesWith(SourceCapability.Lyrics) }
+            is MediaLocation.Remote -> {
+                // 自己的源优先（歌词接口依赖 payload，命中率最高）
+                val own = listOfNotNull(
+                    registry.find(location.sourceId)
+                        ?: registry.sources.firstOrNull { it.id.endsWith(":${location.sourceId}") }
+                )
+                // 其余支持歌词的在线源兜底（排除本地源，避免拿本地文件去匹配在线接口）
+                val others = registry.sourcesWith(SourceCapability.Lyrics)
+                    .filter { it !in own }
+                    .filterNot { SourceCapability.Offline in it.capabilities }
+                own + others
+            }
 
             // 本地歌曲兜底：能按歌名匹配到在线歌词也算收获
             else -> registry.sourcesWith(SourceCapability.Lyrics)

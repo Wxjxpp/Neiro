@@ -134,6 +134,20 @@ class Media3PlayerController(
     private val _queue = MutableStateFlow<List<Song>>(emptyList())
     override val queue: StateFlow<List<Song>> = _queue.asStateFlow()
 
+    /**
+     * 播放页/歌词页 Sheet 进度（拖拽跟手）。
+     *
+     * 0f = 收起（仅播放栏）→ 1f = 播放页完全展开 → 2f = 歌词页完全展开。
+     * 手指拖动时由 UI 实时写入，松手后由动画收敛到 0/1/2；
+     * 播放页始终渲染在这条连续进度上，而不是"手势结束后才弹出"。
+     */
+    private val _sheetProgress = MutableStateFlow(0f)
+    override val sheetProgress: StateFlow<Float> = _sheetProgress.asStateFlow()
+
+    fun setSheetProgress(value: Float) {
+        _sheetProgress.value = value.coerceIn(0f, 2f)
+    }
+
     private var shuffleOrder: List<Int> = emptyList()
     private var shuffleCursor: Int = 0
     private var progressJob: Job? = null
@@ -460,9 +474,29 @@ class Media3PlayerController(
             return
         }
 
-        val currentIndex = list.indexOfFirst { it.id == _state.value.current?.id }.coerceAtLeast(0)
+        // 在线优先：队列由本地歌曲与在线歌曲混合时（例如搜索后点播了在线歌曲 F），
+        // 下一首只从在线歌曲中选——用户点播在线歌曲的意图是"接着听在线内容"，
+        // 不应被本地列表 ABCDE 截断。纯本地或纯在线队列行为不变。
+        val currentId = _state.value.current?.id
+        val currentIndex = list.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+        val onlineIds = list.withIndex()
+            .filter { it.value.location is MediaLocation.Remote }
+            .map { it.index }
+            .toSet()
         val targetIndex = when {
             _state.value.shuffle -> nextShuffleIndex(list.size, currentIndex, forward)
+            // 在线优先：当前是在线歌，且队列里还有其他在线歌曲 → 只在在线歌曲间推进
+            currentId?.let { id -> list.getOrNull(currentIndex)?.location is MediaLocation.Remote } == true &&
+                onlineIds.size > 1 -> {
+                val sortedOnline = onlineIds.sorted()
+                val pos = sortedOnline.indexOfFirst { list[it].id == currentId }
+                val nextPos = if (forward) {
+                    (pos + 1).mod(sortedOnline.size)
+                } else {
+                    (pos - 1 + sortedOnline.size).mod(sortedOnline.size)
+                }
+                sortedOnline[nextPos]
+            }
             forward -> (currentIndex + 1) % list.size
             else -> (currentIndex - 1 + list.size) % list.size
         }

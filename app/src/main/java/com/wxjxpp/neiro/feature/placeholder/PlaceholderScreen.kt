@@ -23,6 +23,7 @@ fun PlaceholderScreen(
     title: String,
     description: String,
     modifier: Modifier = Modifier,
+    onOpenDrawer: () -> Unit = {},
 ) {
     val dimens = AppTheme.dimens
     Column(
@@ -32,6 +33,12 @@ fun PlaceholderScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
+        androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
+            androidx.compose.material3.Icon(
+                androidx.compose.material.icons.Icons.Rounded.Menu,
+                contentDescription = "打开导航",
+            )
+        }
         if (title.isNotBlank()) {
             Text(
                 text = title,

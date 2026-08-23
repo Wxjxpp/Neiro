@@ -49,11 +49,10 @@ enum class LyricsAlign { Start, Center, End }
 /**
  * 自研逐字歌词渲染器（纯 Compose，无第三方渲染依赖）。
  *
- * 视觉参考 Apple Music（图一/图三标杆）：
- * - 同屏可见行数少（大字号 + 大行距），当前行清晰，其余行**重度模糊**渐隐
- * - 对齐方式支持左/中/右，主文本与翻译严格同向
- * - 当前行垂直聚焦于视口 30% 高度处；切句平滑滚动
- * - 用户拖动时暂停跟随并取消模糊，停止 3 秒后平滑滚回
+ * 视觉参考 Apple Music：
+ * - 当前行**动态聚焦**于视口 [focusFraction]（默认 33%，从上往下）高度处，
+ *   聚焦位随窗口尺寸实时计算，不写死像素
+ * - 用户拖动时暂停跟随，停止 3 秒后平滑滚回当前句
  * - 字号 [fontScale] 与行间隙 [gapScale] 用户可调（设置页）
  */
 @OptIn(ExperimentalLayoutApi::class)
@@ -68,6 +67,8 @@ fun LyricsPane(
     springAnimation: Boolean = false,
     fontScale: Float = 1f,
     gapScale: Float = 1f,
+    /** 当前行聚焦位（视口高度比例，从上往下）。 */
+    focusFraction: Float = 0.33f,
     onSeekTo: (Long) -> Unit = {},
 ) {
     if (lyrics.isEmpty) return
@@ -87,7 +88,7 @@ fun LyricsPane(
     LaunchedEffect(positionMs, lines, effectiveOffset) {
         activeIndex = activeIndexOf(positionMs)
     }
-    // 统一的平滑滚动：目标行**中心**对齐视口中心（MusicFree 同款算法）。
+    // 统一的平滑滚动：目标行**中心**对齐视口 focusFraction 高度处。
     // animateScrollToItem 只能按 item 顶边定位，多行长句会 under-scroll，
     // 所以先粗定位，再从 layoutInfo 读实际高度做一次精确校正。
     suspend fun smoothScrollTo(index: Int) {
@@ -97,15 +98,15 @@ fun LyricsPane(
             if (viewport <= 0) return@runCatching
             var info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
             if (info == null || abs(index - listState.firstVisibleItemIndex) > 8) {
-                // 目标行不在视口内：先无动画粗定位到目标附近（用户看不到中间态），
+                // 目标行不在视口内：先无动画粗定位到目标附近，
                 // 再读取实际尺寸做单段精调。绝不能用 animateScrollToItem——
                 // 它会把行顶边怼到视口顶部导致先冲过头再校正的两段式跳动。
                 listState.scrollToItem(index = (index - 3).coerceAtLeast(0))
                 info = listState.layoutInfo.visibleItemsInfo.firstOrNull { it.index == index }
                     ?: return@runCatching
             }
-            // 单段动画：把该行中心直接滚到视口 32% 高度处（聚焦位）
-            val targetTop = viewport * 0.32f - info.size / 2f
+            // 单段动画：把该行中心滚到视口 focusFraction（33%）高度处的聚焦位
+            val targetTop = viewport * focusFraction - info.size / 2f
             val delta = info.offset - targetTop
             if (abs(delta) > 4) {
                 listState.animateScrollBy(delta, tween(420))
@@ -140,8 +141,10 @@ fun LyricsPane(
             LyricsAlign.End -> Alignment.End
         },
         contentPadding = PaddingValues(
+            // 顶部留白 = 视口 33% 聚焦位的一半减一行高度（动态，不写死），
+            // 保证第一句也能滚到聚焦位；底部对称留白
             start = 28.dp, end = 28.dp,
-            top = 200.dp, bottom = 300.dp,
+            top = 160.dp, bottom = 280.dp,
         ),
         verticalArrangement = Arrangement.spacedBy((26 * gapScale).dp),
     ) {

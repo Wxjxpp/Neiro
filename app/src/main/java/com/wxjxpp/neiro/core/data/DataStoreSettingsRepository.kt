@@ -56,6 +56,10 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val AutoPlayOnStart = booleanPreferencesKey("auto_play_on_start")
         val LastSongId = stringPreferencesKey("last_song_id")
         val LastPositionMs = longPreferencesKey("last_position_ms")
+        /** 上次播放歌曲的完整快照（JSON），用于跨会话恢复在线歌曲。 */
+        val LastSongJson = stringPreferencesKey("last_song_json")
+        /** 最近播放的歌曲快照列表（JSON 数组），供"最近播放"展示与恢复。 */
+        val RecentSongsJson = stringPreferencesKey("recent_songs_json")
         val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
         val AppFontScale = floatPreferencesKey("app_font_scale")
         val AppFontFamily = stringPreferencesKey("app_font_family")
@@ -277,13 +281,28 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     /** 上次播放的歌曲与进度（退出应用前记录）。 */
     fun observeLastSongId(): Flow<String?> = store.data.map { it[Keys.LastSongId] }
     fun observeLastPositionMs(): Flow<Long> = store.data.map { it[Keys.LastPositionMs] ?: 0L }
-    suspend fun savePlaybackProgress(songId: String?, positionMs: Long) {
+
+    /**
+     * 上次播放歌曲的完整快照（JSON）。
+     *
+     * 在线歌曲不在本地曲库里，只存 songId 无法恢复；快照保存整首歌的
+     * 元数据（标题/歌手/封面/Remote location），启动时反序列化即可直接续播。
+     */
+    fun observeLastSongJson(): Flow<String?> = store.data.map { it[Keys.LastSongJson] }
+    /** 最近播放的歌曲快照（JSON 数组，最多 50 条），新歌在前。 */
+    fun observeRecentSongsJson(): Flow<String> = store.data.map { it[Keys.RecentSongsJson] ?: "[]" }
+    suspend fun saveRecentSongsJson(json: String) {
+        store.edit { it[Keys.RecentSongsJson] = json }
+    }
+
+    suspend fun savePlaybackProgress(songId: String?, positionMs: Long, songJson: String? = null) {
         store.edit {
             if (songId == null) {
                 it.remove(Keys.LastSongId)
             } else {
                 it[Keys.LastSongId] = songId
             }
+            if (songJson != null) it[Keys.LastSongJson] = songJson
             it[Keys.LastPositionMs] = positionMs
         }
     }

@@ -1,12 +1,14 @@
 package com.wxjxpp.neiro.feature.search
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,10 +46,9 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 /**
  * 搜索页。
  *
- * - 搜索栏：Material3 [SearchBar] 全屏展开模式（对齐官方 FullScreenSearchBar 样例）
- * - 平台筛选：FilterChip + FlowRow（对齐官方 SingleSelectConnectedButtonGroupWithFlowLayout 视觉，
- *   material3 1.5.0-alpha18 尚未提供该组件，这里用等价组合实现）
- * - 在线结果每行带下载按钮（歌曲文件 / 歌词）
+ * - 搜索栏：Material3 [SearchBar]（带水平安全区，不再顶到屏幕边缘）
+ * - 平台筛选：FilterChip + FlowRow
+ * - 在线结果每行带下载按钮；未导入音源时给出明确空态引导
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
@@ -59,6 +60,8 @@ fun SearchScreen(
     onlinePlatforms: List<OnlineSearchRepository.PlatformOption>,
     currentOnlinePlatform: String,
     isLoadingOnline: Boolean = false,
+    /** 未导入任何音源时展示引导空态。 */
+    noSourceAvailable: Boolean = false,
     onQueryChange: (String) -> Unit,
     onSongClick: (Song) -> Unit,
     onOnlinePlatformChange: (String) -> Unit,
@@ -71,8 +74,11 @@ fun SearchScreen(
     // 在线/本地 Tab 状态：仅聚合模式下有意义；默认先看在线结果。
     var showLocalTab by remember(query, onlineResults) { mutableStateOf(false) }
     val allLocalEmpty = localResults.isEmpty() && !isLoadingOnline && onlineResults.isEmpty()
-
-    Column(modifier = modifier.fillMaxSize().padding(top = contentPadding.calculateTopPadding())) {
+    Column(
+        modifier = modifier
+            .fillMaxSize()
+            .padding(top = contentPadding.calculateTopPadding()),
+    ) {
         // 全屏搜索栏：激活时由 Material3 接管整屏展示（对齐官方 FullScreenSearchBar 行为），
         // 收起后作为顶部圆角搜索条。material3 1.5.0-alpha18 的 SearchBarDefaults.InputField
         // 已改为 TextFieldState 新签名，这里在 inputField 槽位用普通 TextField 保持字符串受控。
@@ -113,7 +119,10 @@ fun SearchScreen(
             },
             expanded = active,
             onExpandedChange = { active = it },
-            modifier = Modifier.fillMaxWidth(),
+            // 侧边安全区：搜索条不再抵到屏幕边缘
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = dimens.spaceMd),
         ) {
             // 展开态正文：轻提示（不做历史记录）
             Text(
@@ -142,8 +151,16 @@ fun SearchScreen(
             }
         }
 
-        when {
-            query.isBlank() -> HintText("输入关键词开始搜索")
+                when {
+            query.isBlank() -> {
+                if (noSourceAvailable) {
+                    // 未导入音源：明确空态 + 引导（用户指定文案）
+                    NoSourceHint()
+                } else {
+                    HintText("输入关键词开始搜索")
+                }
+            }
+            noSourceAvailable && onlineResults.isEmpty() && localResults.isEmpty() -> NoSourceHint()
             allLocalEmpty -> {
                 if (onlineFailed.isEmpty()) {
                     HintText("没有匹配的歌曲")
@@ -241,6 +258,26 @@ private fun HintText(text: String) {
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
     )
+}
+
+/** 未导入音源的空态：明确告知原因 + 添加按钮引导。 */
+@Composable
+private fun NoSourceHint() {
+    val dimens = AppTheme.dimens
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceXl),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text("还没有可用音源", style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.height(dimens.spaceSm))
+        Text(
+            text = "在线搜索与播放需要先导入音源脚本",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+    }
 }
 
 @Composable

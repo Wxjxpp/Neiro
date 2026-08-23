@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.calculateBottomPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -70,10 +71,10 @@ import java.util.Date
 import java.util.Locale
 
 /**
- * 歌曲主页。
+ * 歌曲主页（紧凑布局）。
  *
  * 点击播放，长按进入多选。多选态下点击即切换选中，不会误触播放。
- * 行尾「⋮」打开歌曲详情面板（技术参数 / 文件信息 / 移除与删除）。
+ * 行尾「⋮」打开歌曲详情面板。顶栏由外壳传入（含导航按钮，安全区内）。
  */
 @OptIn(
     ExperimentalMaterial3Api::class,
@@ -85,6 +86,7 @@ fun HomeScreen(
     songs: List<Song>,
     isRefreshing: Boolean,
     selectedIds: Set<String>,
+    topBar: @Composable () -> Unit = {},
     onRefresh: () -> Unit,
     onSongClick: (Song) -> Unit,
     onSongLongPress: (Song) -> Unit,
@@ -96,7 +98,6 @@ fun HomeScreen(
 ) {
     val refreshState = rememberPullToRefreshState()
     val inSelectionMode = selectedIds.isNotEmpty()
-
     // 歌曲详情面板 & 删除确认
     var detailSong by remember { mutableStateOf<Song?>(null) }
     var confirmDelete by remember { mutableStateOf<Song?>(null) }
@@ -112,33 +113,35 @@ fun HomeScreen(
             onFinalizeDeleteFile(target)
         }
     }
-
-    PullToRefreshBox(
-        isRefreshing = isRefreshing,
-        onRefresh = onRefresh,
-        modifier = modifier.fillMaxSize(),
-        state = refreshState,
-        indicator = {
-            PullToRefreshDefaults.LoadingIndicator(
-                state = refreshState,
-                isRefreshing = isRefreshing,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
-        },
-    ) {
-        LazyColumn(
+    Column(modifier = modifier.fillMaxSize()) {
+        topBar()
+        PullToRefreshBox(
+            isRefreshing = isRefreshing,
+            onRefresh = onRefresh,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = contentPadding,
-        ) {
-            items(songs, key = { it.id }) { song ->
-                SongRow(
-                    song = song,
-                    selected = song.id in selectedIds,
-                    inSelectionMode = inSelectionMode,
-                    onClick = { onSongClick(song) },
-                    onLongClick = { onSongLongPress(song) },
-                    onOpenDetail = { detailSong = song },
+            state = refreshState,
+            indicator = {
+                PullToRefreshDefaults.LoadingIndicator(
+                    state = refreshState,
+                    isRefreshing = isRefreshing,
+                    modifier = Modifier.align(Alignment.TopCenter),
                 )
+            },
+        ) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+            ) {
+                items(songs, key = { it.id }) { song ->
+                    SongRow(
+                        song = song,
+                        selected = song.id in selectedIds,
+                        inSelectionMode = inSelectionMode,
+                        onClick = { onSongClick(song) },
+                        onLongClick = { onSongLongPress(song) },
+                        onOpenDetail = { detailSong = song },
+                    )
+                }
             }
         }
     }

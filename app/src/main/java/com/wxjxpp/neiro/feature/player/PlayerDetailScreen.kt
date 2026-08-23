@@ -1,16 +1,7 @@
 package com.wxjxpp.neiro.feature.player
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -24,16 +15,16 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
-
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -60,9 +51,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -77,23 +71,24 @@ import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /**
- * 播放详情页。
+ * 播放详情页（Sheet 形态）。
  *
- * - 顶部尊重状态栏安全区（[WindowInsets.statusBars]）
- * - 标题置顶（大字），歌手在标题下方小字，过长跑马灯滚动
- * - 封面/歌词双模式：右下角按钮 + **带滑动动画**的 [AnimatedContent] 切换（无手势，防误触）
- * - 封面模式底部同时显示当前歌词行，与控制台之间用渐隐+模糊自然过渡
- * - 歌词模式：渐进式模糊、点击跳转、紧凑偏移面板（±50ms）
- * - 动态流光背景：封面位图模糊铺底 + 光斑漂移（可选）
+ * 由连续的 [sheetProgress] 驱动（0=收起 1=播放页 2=歌词页）：
+ * - 封面 ↔ 歌词的过渡不是页面切换，而是同一进度上的**连续变换**：
+ *   进度 1→1.5 封面缩小上移淡出，1.5→2 歌词从下方滑入聚焦；
+ *   反向拖拽完全对称。手指停在哪，画面就停在哪（跟手）。
+ * - 封面定位：顶部约 25% 屏高，尺寸比常规放大 ~10%（用户指定比例）
+ * - 歌词聚焦位：视口 33% 高度处（由 LyricsPane 内部处理）
+ * - 手势层级：顶部区域下滑 = 整体收起；封面/标题上滑 = 进入歌词页；
+ *   歌词页仅在小封面上做手势（不与歌词滚动冲突），返回按钮逐层回退。
  */
 @OptIn(
-    ExperimentalSharedTransitionApi::class,
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3ExpressiveApi::class,
     ExperimentalFoundationApi::class,
 )
 @Composable
-fun SharedTransitionScope.PlayerDetailScreen(
+fun PlayerDetailScreen(
     state: PlaybackState,
     lyrics: Lyrics,
     showTranslation: Boolean,
@@ -105,8 +100,13 @@ fun SharedTransitionScope.PlayerDetailScreen(
     lyricsFontScale: Float = 1f,
     lyricsGapScale: Float = 1f,
     pureModeDefault: Boolean = false,
-    animatedVisibilityScope: AnimatedVisibilityScope,
-    onBack: () -> Unit,
+    /** Sheet 连续进度：0 收起 / 1 播放页 / 2 歌词页。 */
+    sheetProgress: Float = 1f,
+    onCollapseToPlayer: () -> Unit = {},
+    onExpandLyrics: () -> Unit = {},
+    /** 垂直拖拽增量回调（px，向上为负）：交给外壳换算进度。 */
+    onDrag: (Float) -> Unit = {},
+    onDragEnd: () -> Unit = {},
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
     onPrevious: () -> Unit,
@@ -125,32 +125,31 @@ fun SharedTransitionScope.PlayerDetailScreen(
     val song = state.current ?: return
     val dimens = AppTheme.dimens
     var dragging by remember { mutableStateOf(false) }
-    var showLyrics by remember { mutableStateOf(false) }
     // 翻译显示开关：默认开启，可在播放页直接切换（同时通知设置持久化）
     var translationOn by remember(showTranslation) { mutableStateOf(showTranslation) }
-    // 纯净模式：设置页默认值 + 长按播放键临时开启。
-    // 退出方式只有"再点一次暂停键"（点暂停=退出纯净并暂停）或关闭页面；
-    // 页面内切换不回写设置，避免"点一下就永久改配置"。
     var pureModeOverride by remember { mutableStateOf<Boolean?>(null) }
     val pureMode = pureModeOverride ?: pureModeDefault
     var showQueue by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
-    // 音质选择弹窗：仅在线歌曲可打开
     var showQualityPicker by remember { mutableStateOf(false) }
     val isRemoteSong = song.location is MediaLocation.Remote
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
-    // 返回键优先级：歌词页 → 播放页；播放页 → 退出播放页
-    BackHandler(enabled = showLyrics) { showLyrics = false }
+
+    // 播放页(0..1) 与 歌词段(1..2) 的局部进度，用于连续变换
+    val toPlayer = sheetProgress.coerceIn(0f, 1f)
+    val lyricPhase = ((sheetProgress - 1f) / 1f).coerceIn(0f, 1f)
+    // 歌词模式判定阈值（内容切换在过半时发生，避免中途闪烁）
+    val lyricsMode = lyricPhase > 0.5f
+
     Box(modifier = Modifier.fillMaxSize()) {
         // 动态流光背景（封面位图铺底 + 光斑漂移）
         AmbientGlowBackground(
             baseColor = Color(song.coverSeedColor),
             coverUri = song.coverUri,
-            enabled = ambientGlow,
+            enabled = ambientGlow && !lyricsMode,
             modifier = Modifier.fillMaxSize(),
         )
-        // 顶部红线外区域实心填充（含状态栏），只在交界处留小段过渡；
-        // 同时承担"按住顶部下滑关闭播放页"的手势区
+        // 顶部安全区实心填充 + 下滑整体收起的手势区
         Spacer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -163,11 +162,13 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                     ),
                 )
-                // 按住上部下滑关闭播放页（Sheet 式）；上滑无动作避免误触
                 .pointerInput(Unit) {
-                    detectVerticalDragGestures { change, dragAmount ->
+                    detectVerticalDragGestures(
+                        onDragEnd = onDragEnd,
+                        onDragCancel = onDragEnd,
+                    ) { change, dragAmount ->
                         change.consume()
-                        if (dragAmount > 80f) onBack()
+                        if (dragAmount.y > 0f) onDrag(dragAmount.y) // 下滑收起
                     }
                 },
         )
@@ -177,8 +178,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 .padding(top = statusBarPadding.calculateTopPadding()),
         ) {
             Spacer(Modifier.height(dimens.spaceSm))
-            // 顶部：播放页=标题+歌手居中；歌词页=左侧小封面+右侧标题歌手（Apple Music 风格）
-            if (!showLyrics) {
+            // 标题区：播放页居中大字；过渡到歌词页时缩小让位给小封面行
+            if (!lyricsMode) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -201,6 +202,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     )
                 }
             } else {
+                // 歌词页头部：左侧小封面（按住上滑回播放页）+ 右侧标题歌手
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -212,15 +214,17 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         size = 52.dp,
                         radius = 9.dp,
                         modifier = Modifier
-                            .sharedElement(
-                                sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
-                                animatedVisibilityScope = animatedVisibilityScope,
-                            )
-                            // 歌词页按住小封面上滑回到播放页
+                            // 仅这个小封面响应手势：上滑回播放页、下滑进歌词页，
+                            // 其余区域全部留给歌词列表滚动
                             .pointerInput(Unit) {
-                                detectVerticalDragGestures { change, dragAmount ->
+                                detectVerticalDragGestures(
+                                    onDragEnd = onDragEnd,
+                                    onDragCancel = onDragEnd,
+                                ) { change, dragAmount ->
                                     change.consume()
-                                    if (dragAmount < -40f) showLyrics = false
+                                    if (dragAmount.y < -30f || dragAmount.y > 30f) {
+                                        onDrag(dragAmount.y)
+                                    }
                                 }
                             },
                     )
@@ -245,27 +249,47 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                 }
             }
-            // 主区域：封面 / 歌词，AnimatedContent 滑动切换动画
+            // 主区域：封面与歌词在同一连续进度上的变换
             Box(
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentAlignment = Alignment.Center,
             ) {
-                AnimatedContent(
-                    targetState = showLyrics,
-                    transitionSpec = {
-                        if (targetState) {
-                            // 进入歌词：从右滑入；退出到封面：向左滑出
-                            (slideInVertically(tween(380)) { it / 6 } + fadeIn(tween(380))) togetherWith
-                                (slideOutVertically(tween(380)) { -it / 6 } + fadeOut(tween(280)))
-                        } else {
-                            (slideInVertically(tween(380)) { -it / 6 } + fadeIn(tween(380))) togetherWith
-                                (slideOutVertically(tween(380)) { it / 6 } + fadeOut(tween(280)))
-                        }
-                    },
-                    label = "coverLyricsSwitch",
-                ) { lyricsMode ->
-                    if (lyricsMode) {
-                        Box(modifier = Modifier.fillMaxSize()) {
+                if (!lyricsMode) {
+                    // 封面：屏幕最佳位置——图片顶边约在屏高 25%，尺寸放大 ~10%
+                    val configuration = androidx.compose.ui.platform.LocalConfiguration.current
+                    val density = LocalDensity.current
+                    val coverTarget = (dimens.detailCoverSize * 1.10f)
+                    val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
+                    val coverTopOffset = with(density) { (screenH * 0.25f).toDp() } -
+                        statusBarPadding.calculateTopPadding() - dimens.spaceSm
+                    Box(modifier = Modifier.fillMaxSize()) {
+                        SongCover(
+                            song = song,
+                            size = coverTarget,
+                            radius = dimens.detailCoverRadius,
+                            modifier = Modifier
+                                .align(Alignment.TopCenter)
+                                .offset(y = coverTopOffset.coerceAtLeast(0.dp))
+                                // 拖拽跟手：上滑进入歌词（连续），点击直接展开
+                                .pointerInput(Unit) {
+                                    detectVerticalDragGestures(
+                                        onDragEnd = onDragEnd,
+                                        onDragCancel = onDragEnd,
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        if (dragAmount.y < 0f) {
+                                            onExpandLyrics()
+                                            onDrag(dragAmount.y)
+                                        }
+                                    }
+                                }
+                                .pointerInput(Unit) {
+                                    detectTapGestures(onTap = { onExpandLyrics() })
+                                },
+                        )
+                    }
+                } else {
+                    Box(modifier = Modifier.fillMaxSize()) {
                         if (lyrics.isEmpty) {
                             Column(
                                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -298,33 +322,11 @@ fun SharedTransitionScope.PlayerDetailScreen(
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
-                        }
-                    } else {
-                        Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {
-                            SongCover(
-                                song = song,
-                                size = dimens.detailCoverSize,
-                                radius = dimens.detailCoverRadius,
-                                modifier = Modifier
-                                    // 按住封面上滑打开歌词页
-                                    .pointerInput(Unit) {
-                                        detectVerticalDragGestures { change, dragAmount ->
-                                            change.consume()
-                                            if (dragAmount < -40f) showLyrics = true
-                                        }
-                                    }
-                                    .sharedElement(
-                                    sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
-                                    animatedVisibilityScope = animatedVisibilityScope,
-                                ),
-                            )
-                        }
                     }
                 }
             }
         }
         // ---- 控制台 ----
-        // 红线外区域实心填充，只在与歌词交接处留一小段渐变过渡（不做大面积半透明）
         Column(
             modifier = Modifier
                 .align(Alignment.BottomCenter)
@@ -337,14 +339,14 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     ),
                 ),
         ) {
-            // 封面模式下：控制台上方显示当前歌词行（单行，随播放更新）
-            if (!showLyrics && !lyrics.isEmpty) {
+            // 封面模式下：控制台上方显示当前歌词横幅
+            if (!lyricsMode && !lyrics.isEmpty) {
                 CurrentLineBanner(
                     lyrics = lyrics,
                     positionMs = state.positionMs,
                     offsetMs = lyricsOffsetMs,
                     showTranslation = showTranslation,
-                    onClick = { showLyrics = true },
+                    onClick = onExpandLyrics,
                     modifier = Modifier.fillMaxWidth(),
                 )
             }
@@ -382,22 +384,19 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // 播放控制行：左侧随机/循环合一，中间上一首/播放/下一首，右侧播放列表
+            // 播放控制行
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceMd),
+                    .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceSm),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween,
             ) {
                 if (!pureMode) {
-                    // 左侧：随机/循环合一（短按=随机开关；长按=循环三态）
                     IconButton(
                         onClick = onToggleShuffle,
                         modifier = Modifier.pointerInput(Unit) {
-                            detectTapGestures(
-                                onLongPress = { onCycleRepeat() },
-                            )
+                            detectTapGestures(onLongPress = { onCycleRepeat() })
                         },
                     ) {
                         Icon(
@@ -426,16 +425,13 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                     IconButton(
                         onClick = {
-                            // 纯净模式下点暂停即退出纯净模式
                             if (pureMode && state.isPlaying) pureModeOverride = false
                             onTogglePlay()
                         },
                         modifier = Modifier
                             .size(56.dp)
                             .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onLongPress = { pureModeOverride = true },
-                                )
+                                detectTapGestures(onLongPress = { pureModeOverride = true })
                             },
                     ) {
                         Icon(
@@ -449,7 +445,6 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                 }
                 if (!pureMode) {
-                    // 右侧：播放列表
                     IconButton(onClick = { showQueue = true }) {
                         Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
                     }
@@ -457,7 +452,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     Spacer(Modifier.size(48.dp))
                 }
             }
-            // 功能按钮行：歌词偏移 / 翻译开关 / 歌词切换（播放列表已移到控制行右侧）
+            // 功能按钮行（紧凑：间距收窄）
             if (!pureMode) {
                 Row(
                     modifier = Modifier
@@ -493,18 +488,17 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             )
                         }
                     }
-                    IconButton(onClick = { showLyrics = !showLyrics }) {
+                    IconButton(onClick = onExpandLyrics) {
                         Icon(
                             Icons.Rounded.Lyrics,
-                            contentDescription = if (showLyrics) "显示封面" else "显示歌词",
-                            tint = if (showLyrics) {
+                            contentDescription = "显示歌词",
+                            tint = if (lyricsMode) {
                                 MaterialTheme.colorScheme.primary
                             } else {
                                 MaterialTheme.colorScheme.onSurfaceVariant
                             },
                         )
                     }
-                    // 倍速：循环 1x → 1.25x → 1.5x → 2x → 1x
                     IconButton(
                         onClick = {
                             val next = when (state.speed) {
@@ -526,7 +520,6 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             },
                         )
                     }
-                    // 音质：仅在线歌曲可点（本地歌曲无音质概念，置灰）
                     IconButton(
                         onClick = { showQualityPicker = true },
                         enabled = isRemoteSong,
@@ -544,8 +537,8 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 }
             }
         }
-        // 歌词偏移调节面板：紧凑版，±50ms
-        if (showOffsetPanel && showLyrics && !pureMode) {
+        // 歌词偏移调节面板
+        if (showOffsetPanel && lyricsMode && !pureMode) {
             LyricsOffsetPanel(
                 offsetMs = lyricsOffsetMs,
                 onChange = onLyricsOffsetChange,
@@ -555,10 +548,10 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     .padding(bottom = 120.dp),
             )
         }
-        // 返回按钮：悬浮左上角（安全区内，纯净模式隐藏）
+        // 返回按钮：悬浮左上角（安全区内，纯净模式隐藏）；歌词页返回到播放页
         if (!pureMode) {
             IconButton(
-                onClick = onBack,
+                onClick = onCollapseToPlayer,
                 modifier = Modifier
                     .align(Alignment.TopStart)
                     .padding(start = 4.dp, top = statusBarPadding.calculateTopPadding() + 4.dp),
@@ -578,7 +571,6 @@ fun SharedTransitionScope.PlayerDetailScreen(
             },
         )
     }
-    // 音质选择：单选当前偏好音质，选择后持久化并对下一次取流生效
     if (showQualityPicker && isRemoteSong) {
         QualityPickerDialog(
             current = currentQuality,
@@ -613,7 +605,7 @@ private fun QualityPickerDialog(
         text = {
             Column {
                 Text(
-                    text = "取流失败时会按设置中的回退方向自动换源 / 调整音质。",
+                    text = "取流失败时会自动换源 / 调整音质重试。",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -651,6 +643,7 @@ private fun QualityPickerDialog(
         },
     )
 }
+
 /** 封面模式下的当前歌词横幅：单行居中，点击进入完整歌词页。 */
 @Composable
 private fun CurrentLineBanner(
@@ -685,7 +678,7 @@ private fun CurrentLineBanner(
             )
             if (showTranslation && !line.translation.isNullOrBlank()) {
                 Text(
-                    text = line.translation,
+                    text = line.translation!!,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
@@ -696,6 +689,7 @@ private fun CurrentLineBanner(
         }
     }
 }
+
 /** 歌词偏移调节面板：紧凑版，±50ms。 */
 @Composable
 private fun LyricsOffsetPanel(
@@ -706,7 +700,7 @@ private fun LyricsOffsetPanel(
 ) {
     androidx.compose.material3.Surface(
         modifier = modifier.padding(horizontal = 56.dp),
-        shape = RoundedCornerShape(16.dp),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
         tonalElevation = 4.dp,
         shadowElevation = 8.dp,
     ) {
@@ -742,10 +736,12 @@ private fun LyricsOffsetPanel(
         }
     }
 }
-/** 文本超长时启用跑马灯滚动（basicMarquee）。 */
+
+/** 文本超长时启用跑马灯滚动。 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun Modifier.marqueeIfLong(): Modifier =
     this.then(Modifier.basicMarquee(iterations = Int.MAX_VALUE))
+
 private fun formatDuration(ms: Long): String {
     val totalSeconds = (ms / 1000).coerceAtLeast(0)
     val minutes = totalSeconds / 60

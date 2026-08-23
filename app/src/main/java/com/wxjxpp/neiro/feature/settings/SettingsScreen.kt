@@ -15,6 +15,12 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.GraphicEq
+import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.PlayCircle
+import androidx.compose.material.icons.rounded.Science
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -33,6 +39,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.data.QualityFallbackDirection
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.ShuffleMode
@@ -83,12 +90,15 @@ fun SettingsScreen(
     appFontFamily: String = "default",
     onAppFontFamilyChange: (String) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
+    onOpenDrawer: () -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
     // 二级菜单：null=根列表；否则进入对应子页
     var subsection by remember { mutableStateOf<String?>(null) }
+    // 子页返回手势：先回设置根页，再走外壳的页面级返回
+    androidx.activity.compose.BackHandler(enabled = subsection != null) { subsection = null }
     if (subsection != null) {
         SettingsSubsection(
             title = when (subsection) {
@@ -362,11 +372,18 @@ fun SettingsScreen(
             .padding(contentPadding)
             .padding(horizontal = dimens.spaceLg),
     ) {
-        SubsectionEntry(title = "歌词", subtitle = "翻译 / 偏移 / 对齐方式") { subsection = "lyrics" }
-        SubsectionEntry(title = "播放", subtitle = "随机模式 / 耳机与音频焦点") { subsection = "playback" }
-        SubsectionEntry(title = "音源", subtitle = "在线音质 / 自动换源回退策略") { subsection = "source" }
-        SubsectionEntry(title = "外观", subtitle = "悬浮播放栏 / 字体样式") { subsection = "appearance" }
-        SubsectionEntry(title = "实验室", subtitle = "流光背景 / 弹簧动效 / 纯净模式") { subsection = "lab" }
+        // 导航入口：打开侧边栏（每个页面必须有导航方式）
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
+            }
+            Text("设置", style = MaterialTheme.typography.titleLarge)
+        }
+        SubsectionEntry(title = "歌词", icon = Icons.Rounded.Lyrics) { subsection = "lyrics" }
+        SubsectionEntry(title = "播放", icon = Icons.Rounded.PlayCircle) { subsection = "playback" }
+        SubsectionEntry(title = "音源", icon = Icons.Rounded.GraphicEq) { subsection = "source" }
+        SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
+        SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
         SectionTitle("在线播放")
         Text(
@@ -429,24 +446,28 @@ internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.HiRes -> "Hi"
 }
 
-/** 根列表里的一行菜单入口。 */
+/** 根列表里的一行菜单入口：只写名称 + 前置图标（不写解释，紧凑）。 */
 @Composable
-private fun SubsectionEntry(title: String, subtitle: String, onClick: () -> Unit) {
+private fun SubsectionEntry(
+    title: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    onClick: () -> Unit,
+) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onClick)
-            .padding(vertical = AppTheme.dimens.spaceMd),
+            .padding(vertical = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Column(modifier = Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.padding(end = AppTheme.dimens.spaceLg),
+        )
+        Text(title, style = MaterialTheme.typography.titleMedium)
+        Spacer(Modifier.weight(1f))
         Icon(
             Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,

@@ -1,9 +1,5 @@
 package com.wxjxpp.neiro.feature.player
 
-import androidx.compose.animation.AnimatedVisibilityScope
-import androidx.compose.animation.ExperimentalSharedTransitionApi
-import androidx.compose.animation.SharedTransitionScope
-import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
@@ -27,51 +23,47 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /**
- * 底部播放栏。
+ * 底部播放栏（悬浮卡片态）。
  *
- * 常规态与悬浮态是同一份布局，靠 [floating] 驱动 token 插值切换。
- * 进度条固定高度容器 + 波幅归零，播放/暂停切换不改变整栏高度。
+ * 上滑唤起播放页是**拖拽跟手**的：手指移动量实时回调给外壳写入 Sheet 进度，
+ * 播放页像一张 Sheet 从播放栏背后连续展开，停在手指所在的位置。
+ * 点击 = 程序化展开（带动画）。松手后由外壳把进度收敛到最近锚点。
  */
-@OptIn(ExperimentalSharedTransitionApi::class, ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
-fun SharedTransitionScope.PlayerBar(
+fun PlayerBar(
     state: PlaybackState,
     floating: Boolean,
-    animatedVisibilityScope: AnimatedVisibilityScope,
     onExpand: () -> Unit,
     onTogglePlay: () -> Unit,
     onNext: () -> Unit,
     onOpenQueue: () -> Unit,
+    /** 上滑拖拽：deltaPx 为本帧位移（向上为负），由外壳换算成 Sheet 进度。 */
+    onDragProgress: (Float) -> Unit = {},
+    /** 拖拽结束（松手）：外壳据此收敛到最近锚点。 */
+    onDragEnd: () -> Unit = {},
     modifier: Modifier = Modifier,
 ) {
     val song = state.current ?: return
     val dimens = AppTheme.dimens
-    val spatial = MaterialTheme.motionScheme.defaultSpatialSpec<Dp>()
-    val horizontalMargin by animateDpAsState(if (floating) dimens.floatingBarMargin else 0.dp, spatial, label = "barHorizontalMargin")
-    val bottomMargin by animateDpAsState(if (floating) dimens.floatingBarBottomMargin else 0.dp, spatial, label = "barBottomMargin")
-    val corner by animateDpAsState(if (floating) dimens.floatingBarRadius else 0.dp, spatial, label = "barCorner")
-    val elevation by animateDpAsState(if (floating) dimens.floatingBarElevation else 0.dp, spatial, label = "barElevation")
-
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = horizontalMargin)
-            .padding(bottom = bottomMargin),
-        shape = RoundedCornerShape(corner),
+            .padding(horizontal = dimens.floatingBarMargin)
+            .padding(bottom = dimens.floatingBarBottomMargin),
+        shape = RoundedCornerShape(dimens.floatingBarRadius),
         color = MaterialTheme.colorScheme.surfaceContainer,
-        shadowElevation = elevation,
+        shadowElevation = dimens.floatingBarElevation,
     ) {
         Column {
             // 固定高度容器：播放/暂停切换不改变播放栏总高度；
@@ -92,11 +84,17 @@ fun SharedTransitionScope.PlayerBar(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(dimens.playerBarHeight)
-                    // 上滑手势打开播放页（点击也可）
+                    // 上滑跟手展开播放页；点击也可
                     .pointerInput(Unit) {
-                        detectVerticalDragGestures { change, dragAmount ->
+                        detectVerticalDragGestures(
+                            onDragEnd = { onDragEnd() },
+                            onDragCancel = { onDragEnd() },
+                        ) { change, dragAmount ->
                             change.consume()
-                            if (dragAmount < -40f) onExpand()
+                            if (dragAmount.y < 0f) {
+                                onExpand()
+                                onDragProgress(dragAmount.y)
+                            }
                         }
                     }
                     .clickable(onClick = onExpand)
@@ -108,10 +106,6 @@ fun SharedTransitionScope.PlayerBar(
                     song = song,
                     size = dimens.playerBarCoverSize,
                     radius = dimens.playerBarCoverRadius,
-                    modifier = Modifier.sharedElement(
-                        sharedContentState = rememberSharedContentState(key = PlayerSharedKeys.Cover),
-                        animatedVisibilityScope = animatedVisibilityScope,
-                    ),
                 )
                 Column(modifier = Modifier.weight(1f)) {
                     Text(song.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -138,10 +132,4 @@ fun SharedTransitionScope.PlayerBar(
             }
         }
     }
-}
-
-/** 共享元素 key。新增跨页共享元素时在这里登记。 */
-object PlayerSharedKeys {
-    const val Cover = "player-cover"
-    const val Title = "player-title"
 }

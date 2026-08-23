@@ -58,6 +58,7 @@ fun DiaryScreen(
     isLoading: Boolean,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
+    onOpenDrawer: () -> Unit = {},
 ) {
     val dimens = AppTheme.dimens
     var rangeMonths by remember { mutableStateOf(12) }
@@ -94,6 +95,12 @@ fun DiaryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
             ) {
+                androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
+                    androidx.compose.material3.Icon(
+                        androidx.compose.material.icons.Icons.Rounded.Menu,
+                        contentDescription = "打开导航",
+                    )
+                }
                 Text(
                     text = "听歌日记",
                     style = MaterialTheme.typography.titleLarge,

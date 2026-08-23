@@ -110,6 +110,8 @@ enum class SongSortField(val displayName: String) {
     AddedTime("文件时间"),
     /** 播放次数（按播放统计）。 */
     PlayCount("播放次数"),
+    /** 按专辑分组排序。 */
+    Album("专辑"),
 }
 
 /** 歌单。本地歌单、云端歌单、每日推荐都用它。 */

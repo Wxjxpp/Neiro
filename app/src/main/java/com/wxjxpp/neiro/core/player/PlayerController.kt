@@ -16,7 +16,13 @@ import kotlinx.coroutines.flow.StateFlow
 interface PlayerController {
     val state: StateFlow<PlaybackState>
     val queue: StateFlow<List<Song>>
-
+    /**
+     * 播放页/歌词页 Sheet 进度（0 收起 / 1 播放页 / 2 歌词页）。
+     * 拖拽跟手时由 UI 实时写入，程序化开合时由动画驱动收敛。
+     */
+    val sheetProgress: StateFlow<Float>
+    /** 实时写入 Sheet 进度（拖拽跟手）。 */
+    fun setSheetProgress(value: Float)
     /** 拔出耳机（含蓝牙断开）时是否自动暂停。 */
     var pauseOnHeadphoneDisconnect: Boolean
     /** 其他应用抢占音频焦点时是否暂停。 */

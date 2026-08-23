@@ -68,6 +68,10 @@ data class ShellUiState(
     /** 歌曲列表排序。 */
     val songSortField: SongSortField = SongSortField.Title,
     val songSortDescending: Boolean = false,
+    /** 专辑页排序（内存态，独立于歌曲列表的持久化设置）。 */
+    val albumSortField: com.wxjxpp.neiro.feature.albums.AlbumSortField =
+        com.wxjxpp.neiro.feature.albums.AlbumSortField.Title,
+    val albumSortDescending: Boolean = false,
 
     /** 听歌热力图（最近一年）。 */
     val heatmapDays: List<HeatmapDay> = emptyList(),
@@ -111,6 +115,14 @@ data class ShellUiState(
     val appFontScale: Float = 1f,
     /** 字体样式：default / serif / mono / cursive。 */
     val appFontFamily: String = "default",
+
+    /** 发现页区块数据。 */
+    val discoverSections: List<com.wxjxpp.neiro.core.discover.DiscoverRepository.Section> = emptyList(),
+    val isDiscoverLoading: Boolean = false,
+    /** 最近播放（快照反序列化，新歌在前）。 */
+    val recentSongs: List<Song> = emptyList(),
+    /** 全局错误提示：顶部横幅展示，可关闭 / 上滑关闭。 */
+    val errorMessage: String? = null,
 )
 
 class AppViewModel(
@@ -122,6 +134,13 @@ class AppViewModel(
 
     val playbackState: StateFlow<PlaybackState> = container.playerController.state
     val queue: StateFlow<List<Song>> = container.playerController.queue
+    /** 播放页 Sheet 进度（0 收起 / 1 播放页 / 2 歌词页），拖拽跟手。 */
+    val sheetProgress: StateFlow<Float> = container.playerController.sheetProgress
+
+    /** 拖拽过程中实时写入 Sheet 进度（跟手，无动画）。 */
+    fun setSheetProgress(value: Float) {
+        container.playerController.setSheetProgress(value)
+    }
 
     /** 记录当前歌曲的开始时间，用于生成播放事件。 */
     private var currentSongStartedAt: Long = 0L
@@ -261,22 +280,32 @@ class AppViewModel(
         container.appSettings.observeAppFontFamily()
             .onEach { family -> _uiState.update { it.copy(appFontFamily = family) } }
             .launchIn(viewModelScope)
-        // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录
+        // 顶部错误横幅（取流失败等）
+        container.errorBanner
+            .onEach { message -> _uiState.update { it.copy(errorMessage = message) } }
+            .launchIn(viewModelScope)
+        // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录（含歌曲快照，跨会话可恢复）
         container.playerController.state
             .sample(5_000L)
             .onEach { state ->
                 val id = state.current?.id
                 if (id != null && state.positionMs > 0L) {
-                    container.appSettings.savePlaybackProgress(id, state.positionMs)
+                    container.appSettings.savePlaybackProgress(
+                        id,
+                        state.positionMs,
+                        com.wxjxpp.neiro.core.serialization.SongJson.toJson(state.current!!),
+                    )
                     lastSavedSongId = id
                 }
             }
             .launchIn(viewModelScope)
         restoreLastPlayback()
-        // 切歌时记录上一首的播放事件并加载新歌词
+        // 切歌时：结算上一首收听时长 → 写最近播放快照 → 加载新歌词
         playbackState
             .onEach { state -> onSongChanged(state.current) }
             .launchIn(viewModelScope)
+        // 最近播放：启动即加载（猜你喜欢需要推荐种子）
+        launchRecentLoad()
     }
 
     // ---- 曲库 ----
@@ -302,6 +331,12 @@ class AppViewModel(
             SongSortField.Title -> songs.sortedWith(compareBy(java.text.Collator.getInstance()) { it.title })
             SongSortField.AddedTime -> songs.sortedBy { it.addedAt }
             SongSortField.PlayCount -> songs.sortedByDescending { playCounts[it.id] ?: 0 }
+            // 专辑排序：专辑名 → 曲目号 → 标题，同专辑歌曲自然聚在一起
+            SongSortField.Album -> songs.sortedWith(
+                compareBy(java.text.Collator.getInstance()) { it.albumTitle }
+                    .thenBy { it.trackNumber ?: Int.MAX_VALUE }
+                    .thenBy(java.text.Collator.getInstance()) { it.title },
+            )
         }
         return if (state.songSortDescending) sorted.asReversed() else sorted
     }
@@ -317,6 +352,13 @@ class AppViewModel(
 
     fun setSongSortDescending(descending: Boolean) {
         viewModelScope.launch { container.appSettings.setSongSortDescending(descending) }
+    }
+    /** 专辑页排序（仅内存态，不写设置、不影响歌曲页）。 */
+    fun setAlbumSortField(field: com.wxjxpp.neiro.feature.albums.AlbumSortField) {
+        _uiState.update { it.copy(albumSortField = field) }
+    }
+    fun setAlbumSortDescending(descending: Boolean) {
+        _uiState.update { it.copy(albumSortDescending = descending) }
     }
 
     /** 加载听歌热力图（最近一年）。 */
@@ -357,7 +399,6 @@ class AppViewModel(
     fun downloadLyrics(song: Song) {
         viewModelScope.launch { notifyVia(container.downloadManager.downloadLyrics(song)) }
     }
-
     private suspend fun notifyVia(message: String) { container.notify(message) }
     fun togglePlay() = container.playerController.togglePlay()
     fun next() = container.playerController.next()
@@ -470,7 +511,7 @@ class AppViewModel(
         viewModelScope.launch { container.appSettings.setQualityFallbackDirection(direction) }
     }
 
-    /** 全局字号缩放（0.8~1.4），实时生效。 */
+        /** 全局字号缩放（0.8~1.4），实时生效。 */
     fun setAppFontScale(scale: Float) {
         viewModelScope.launch { container.appSettings.setAppFontScale(scale) }
     }
@@ -480,17 +521,72 @@ class AppViewModel(
         viewModelScope.launch { container.appSettings.setAppFontFamily(id) }
     }
 
-    /** 歌曲页"随机一发"：从当前曲库随机抽一首立即播放。 */
+    // ---- 发现页 ----
+
+    /** 拉取发现页数据：榜单 + 猜你喜欢（以最近播放的歌手为种子）。 */
+    fun loadDiscover() {
+        if (_uiState.value.isDiscoverLoading) return
+        _uiState.update { it.copy(isDiscoverLoading = true) }
+        viewModelScope.launch {
+            val seed = _uiState.value.recentSongs.firstOrNull()?.artistName
+            val sections = runCatching {
+                container.discoverRepository.homeSections(songsPerSection = 20, seedForGuess = seed)
+            }.getOrDefault(emptyList())
+            _uiState.update { it.copy(discoverSections = sections, isDiscoverLoading = false) }
+        }
+    }
+
+    /** 发现页"全部播放"：整个区块加入队列并从第一首开始。 */
+    fun playSection(section: com.wxjxpp.neiro.core.discover.DiscoverRepository.Section) {
+        if (section.songs.isEmpty()) return
+        container.playerController.setQueue(section.songs, autoPlay = true)
+    }
+
+    /** 拉取最近播放快照（进入发现页时刷新）。 */
+    fun loadRecentSongs() {
+        viewModelScope.launch {
+            val json = container.appSettings.observeRecentSongsJson().first()
+            val arr = runCatching { org.json.JSONArray(json) }.getOrDefault(org.json.JSONArray())
+            val songs = (0 until arr.length()).mapNotNull { i ->
+                com.wxjxpp.neiro.core.serialization.SongJson.fromJson(
+                    arr.optJSONObject(i)?.toString() ?: return@mapNotNull null,
+                )
+            }
+            _uiState.update { it.copy(recentSongs = songs) }
+        }
+    }
+
+    /** 启动时加载最近播放（供猜你喜欢做推荐种子）。 */
+    fun launchRecentLoad() = loadRecentSongs()
+
+    // ---- 错误横幅 ----
+
+    /** 关闭顶部错误横幅。 */
+    fun dismissError() {
+        _uiState.update { it.copy(errorMessage = null) }
+    }
+
+    /** 歌曲页"随机一发"：优先在线歌曲，无在线结果时回退本地曲库。 */
     fun playRandom() {
-        val songs = _uiState.value.songs
-        if (songs.isEmpty()) return
-        container.playerController.play(songs.random())
+        val online = _uiState.value.onlineResults
+        if (online.isNotEmpty()) {
+            container.playerController.play(online.random())
+        } else {
+            val songs = _uiState.value.songs
+            if (songs.isEmpty()) return
+            container.playerController.play(songs.random())
+        }
     }
 
     private var lastSavedSongId: String? = null
     private var restoreAttempted = false
 
-    /** 恢复上次播放进度（应用启动时调用一次）。 */
+    /**
+     * 恢复上次播放进度（应用启动时调用一次）。
+     *
+     * 优先用歌曲快照（在线歌曲不在本地曲库，只能靠快照恢复），
+     * 快照不存在或损坏时退回旧的 songId 查找逻辑。
+     */
     private fun restoreLastPlayback() {
         if (restoreAttempted) return
         restoreAttempted = true
@@ -500,12 +596,17 @@ class AppViewModel(
             val autoPlay = settings.observeAutoPlayOnStart().first()
             // 两个开关都关着就不恢复
             if (!resumeEnabled && !autoPlay) return@launch
-            val songId = settings.observeLastSongId().first() ?: return@launch
             val positionMs = settings.observeLastPositionMs().first()
-            // 等曲库加载完成再找歌（数据库为空说明还没扫完）
-            val song = container.songRepository.observeSongs()
-                .first { it.isNotEmpty() }
-                .find { it.id == songId }
+            // 1) 快照优先：能恢复任何来源的歌（含搜索后点播的在线歌曲）
+            val song = settings.observeLastSongJson().first()
+                ?.let { com.wxjxpp.neiro.core.serialization.SongJson.fromJson(it) }
+                ?: run {
+                    // 2) 旧逻辑兜底：按 songId 在本地曲库里找
+                    val songId = settings.observeLastSongId().first() ?: return@launch
+                    container.songRepository.observeSongs()
+                        .first { it.isNotEmpty() }
+                        .find { it.id == songId }
+                }
                 ?: return@launch
             container.playerController.setQueue(listOf(song), autoPlay = false)
             if (positionMs > 0L) container.playerController.seekTo(positionMs)
@@ -764,7 +865,7 @@ class AppViewModel(
 
     // ---- 内部 ----
 
-    /** 切歌：结算上一首的收听时长，并载入新歌词。 */
+    /** 切歌：结算上一首的收听时长，写最近播放快照，并载入新歌词。 */
     private fun onSongChanged(song: Song?) {
         val previousId = currentSongId
         if (song?.id == previousId) return
@@ -794,10 +895,28 @@ class AppViewModel(
             _uiState.update { it.copy(lyrics = Lyrics.Empty) }
             return
         }
+        recordRecentSong(song)
         viewModelScope.launch {
             val lyrics = runCatching { container.lyricsRepository.lyricsFor(song) }
                 .getOrDefault(Lyrics.Empty)
             _uiState.update { it.copy(lyrics = lyrics) }
+        }
+    }
+
+    /** 最近播放：歌曲快照写入 DataStore（在线歌曲不在曲库，只能存快照）。 */
+    private fun recordRecentSong(song: Song) {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val json = container.appSettings.observeRecentSongsJson().first()
+                val arr = org.json.JSONArray(json)
+                val newList = org.json.JSONArray()
+                newList.put(org.json.JSONObject(com.wxjxpp.neiro.core.serialization.SongJson.toJson(song)))
+                for (i in 0 until arr.length()) {
+                    val item = arr.optJSONObject(i) ?: continue
+                    if (item.optString("id") != song.id && newList.length() < 50) newList.put(item)
+                }
+                container.appSettings.saveRecentSongsJson(newList.toString())
+            }
         }
     }
 

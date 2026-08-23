@@ -93,7 +93,8 @@ interface AppContainer {
 
     /** 面向用户的一次性提示（音源导入失败、取流失败等）。 */
     val messages: SharedFlow<String>
-
+    /** 发现页数据仓库（榜单 / 猜你喜欢）。 */
+    val discoverRepository: com.wxjxpp.neiro.core.discover.DiscoverRepository
     /** 启用某个自定义音源脚本。 */
     fun activateUserApi(id: String)
 
@@ -102,6 +103,16 @@ interface AppContainer {
 
     /** 发一条提示。 */
     fun notify(message: String)
+    /** 顶部错误横幅（可关闭，替代 Snackbar 展示取流失败等错误）。 */
+    val errorBanner: kotlinx.coroutines.flow.MutableStateFlow<String?>
+    fun showError(message: String) {
+        errorBanner.value = message
+        // 防止横幅永久残留：15 秒后自动清除（用户提前关掉则无副作用）
+        appScope.launch {
+            kotlinx.coroutines.delay(15_000L)
+            if (errorBanner.value == message) errorBanner.value = null
+        }
+    }
 }
 
 class DefaultAppContainer(
@@ -114,7 +125,8 @@ class DefaultAppContainer(
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 16)
     override val messages: SharedFlow<String> = _messages.asSharedFlow()
-
+    /** 顶部错误横幅状态（null = 隐藏）。 */
+    override val errorBanner = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     override fun notify(message: String) {
         _messages.tryEmit(message)
     }
@@ -222,13 +234,22 @@ private val registry = DefaultMusicSourceRegistry(
     }
 
     override val togetherTransport: TogetherTransport = NoopTogetherTransport()
-
+    /** 发现页：榜单直连网易云公开接口；猜你喜欢复用聚合搜索。 */
+    override val discoverRepository: com.wxjxpp.neiro.core.discover.DiscoverRepository by lazy {
+        com.wxjxpp.neiro.core.discover.DiscoverRepository(
+            http = httpClient,
+            searchDelegate = { keyword, page, pageSize ->
+                activeOnlineSources.firstOrNull()?.search(keyword, page, pageSize).orEmpty()
+            },
+        )
+    }
     init {
         // 记录一次应用启动（听歌热力图的"启动次数"维度）
         appScope.launch { runCatching { statsRepository.recordAppLaunch() } }
         // 在线歌曲取流：交给对应平台的音源
         media3Controller.remoteUrlResolver = { song -> resolveRemoteUrl(song) }
-        media3Controller.onPlaybackError = { message -> notify(message) }
+        // 取流/播放错误改为顶部横幅（可关闭），不再用底部 Snackbar
+        media3Controller.onPlaybackError = { message -> showError(message) }
 
         // 脚本发起的 HTTP 请求交给宿主执行
         appScope.launch {

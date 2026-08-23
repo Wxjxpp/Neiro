@@ -9,7 +9,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Book
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Insights
@@ -22,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalDrawerSheet
 import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.NavigationDrawerItemDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
@@ -48,8 +51,9 @@ fun isAnnualReportAvailable(today: LocalDate = LocalDate.now()): Boolean {
 
 fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildList {
     add(DrawerItem(Destination.Home, "歌曲", Icons.Rounded.MusicNote, DrawerGroup.Library))
-    add(DrawerItem(Destination.Library, "本地曲库", Icons.Rounded.LibraryMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.Albums, "专辑", Icons.Rounded.Album, DrawerGroup.Library))
     add(DrawerItem(Destination.Playlists, "歌单", Icons.Rounded.QueueMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.Discover, "发现", Icons.Rounded.Explore, DrawerGroup.Library))
     add(DrawerItem(Destination.MusicSources, "自定义音源", Icons.Rounded.Extension, DrawerGroup.Library))
     add(DrawerItem(Destination.Diary, "听歌日记", Icons.Rounded.Book, DrawerGroup.Personal))
     add(DrawerItem(Destination.Together, "一起听", Icons.Rounded.Groups, DrawerGroup.Personal))
@@ -59,6 +63,14 @@ fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildLis
     add(DrawerItem(Destination.Settings, "设置", Icons.Rounded.Settings, DrawerGroup.System))
 }
 
+/**
+ * 侧边抽屉。
+ *
+ * 紧凑布局：条目高度压缩（vertical padding 0 + 默认 item 高度），
+ * 分组之间只用一条细分割线，不再留大段空白。
+ * 安全区由 ModalNavigationDrawerSheet 自带的 insets 处理（windowInsets=WindowInsets(0)
+ * 只去掉水平多余边距，顶部状态栏间距仍保留）。
+ */
 @Composable
 fun AppDrawerSheet(
     currentRoute: String?,
@@ -68,32 +80,36 @@ fun AppDrawerSheet(
     val grouped = drawerItems().groupBy { it.group }
 
     ModalDrawerSheet(
-        // 侧边栏宽度：默认 360dp 太宽，收窄为屏幕宽度的 70%
         drawerContainerColor = MaterialTheme.colorScheme.surfaceContainer,
         windowInsets = WindowInsets(0),
-        modifier = Modifier.fillMaxWidth(0.7f),
+        modifier = Modifier.fillMaxWidth(0.72f),
     ) {
         Column(
             modifier = Modifier
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = dimens.spaceMd),
         ) {
-            Spacer(Modifier.height(dimens.spaceXl))
-            DrawerGroup.entries.forEachIndexed { index, group ->
+            Spacer(Modifier.height(dimens.spaceLg))
+            var firstGroup = true
+            DrawerGroup.entries.forEach { group ->
                 val items = grouped[group].orEmpty()
-                if (items.isEmpty()) return@forEachIndexed
-                if (index > 0) {
-                    Spacer(Modifier.height(dimens.spaceSm))
+                if (items.isEmpty()) return@forEach
+                if (!firstGroup) {
+                    Spacer(Modifier.height(dimens.spaceXs))
                     HorizontalDivider()
-                    Spacer(Modifier.height(dimens.spaceSm))
+                    Spacer(Modifier.height(dimens.spaceXs))
                 }
+                firstGroup = false
                 items.forEach { item ->
                     NavigationDrawerItem(
                         label = { Text(item.label) },
                         icon = { Icon(item.icon, contentDescription = null) },
                         selected = currentRoute == item.destination.route,
                         onClick = { onNavigate(item.destination) },
-                        modifier = Modifier.padding(vertical = dimens.spaceXs),
+                        // 紧凑：去掉条目间垂直间距，默认形状已是全圆角胶囊
+                        colors = NavigationDrawerItemDefaults.colors(
+                            unselectedContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        ),
                     )
                 }
             }

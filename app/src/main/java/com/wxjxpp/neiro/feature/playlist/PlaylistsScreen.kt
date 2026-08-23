@@ -60,13 +60,13 @@ fun PlaylistsScreen(
     onRemoveSongs: (String, List<String>) -> Unit,
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
+    onOpenDrawer: () -> Unit = {},
 ) {
     val dimens = AppTheme.dimens
     var showCreateDialog by remember { mutableStateOf(false) }
     var renameTarget by remember { mutableStateOf<Playlist?>(null) }
     var deleteTarget by remember { mutableStateOf<Playlist?>(null) }
     var openedId by remember { mutableStateOf<String?>(null) }
-
     val opened = playlists.firstOrNull { it.id == openedId }
 
     if (opened != null) {
@@ -82,7 +82,6 @@ fun PlaylistsScreen(
         )
         return
     }
-
     Column(modifier = modifier.fillMaxSize().padding(contentPadding)) {
         Row(
             modifier = Modifier
@@ -90,6 +89,12 @@ fun PlaylistsScreen(
                 .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
+            androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
+                androidx.compose.material3.Icon(
+                    androidx.compose.material.icons.Icons.Rounded.Menu,
+                    contentDescription = "打开导航",
+                )
+            }
             Text(
                 text = "共 ${playlists.size} 个歌单",
                 style = MaterialTheme.typography.bodyMedium,
