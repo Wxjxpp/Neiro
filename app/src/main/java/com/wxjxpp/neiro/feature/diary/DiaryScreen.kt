@@ -2,6 +2,7 @@ package com.wxjxpp.neiro.feature.diary
 
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -11,24 +12,32 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.clickable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.HeatmapDay
 import com.wxjxpp.neiro.ui.theme.AppTheme
+import kotlinx.coroutines.flow.first
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -37,11 +46,11 @@ import java.util.Locale
 /**
  * 听歌热力图（听歌日记）。
  *
- * - GitHub 风格年历色块，五级深浅按当天播放数划分：
+ * - GitHub 风格日历色块，五级深浅按当天播放数划分：
  *   0 首 / 1-4 / 5-9 / 10-19 / 20-39 / 40+
- * - 色相取自主题 primary（莫奈动态取色）
+ * - 支持切换「最近一年 / 最近一个月」跨度；月份标注直接叠在网格上方对应位置
+ * - 默认滚动到今天（最右端），未来日期不渲染空格子
  * - 点击色块查看当天详情：播放数 / 启动次数 / 收听时长 / 高频标签
- * - 底部为最近有听歌记录的日期明细列表
  */
 @Composable
 fun DiaryScreen(
@@ -51,21 +60,56 @@ fun DiaryScreen(
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
+    var rangeMonths by remember { mutableStateOf(12) }
     val dayMap = remember(days) { days.associateBy { it.dateMs } }
-    val calendarDays = remember { buildYearDays() }
-    var selectedDay by remember(days) { mutableStateOf<HeatmapDay?>(null) }
+    // 网格数据：按范围生成，只保留 <= 今天 的日期（不再渲染未来空格子）
+    val calendarDays = remember(rangeMonths) { buildDays(rangeMonths) }
+    var selectedDay by remember(days, rangeMonths) { mutableStateOf<HeatmapDay?>(null) }
     val dateFormat = remember { SimpleDateFormat("M月d日", Locale.getDefault()) }
     val fullFormat = remember { SimpleDateFormat("yyyy年M月d日 EEEE", Locale.getDefault()) }
+
+    // 色块尺寸固定：月份标注按同一套尺寸计算偏移
+    val cellSize = 14.dp
+    val cellGap = 3.dp
+    val weekColumnWidth = cellSize + cellGap
+    val density = LocalDensity.current
+
+    // 热力图横向滚动容器：默认滚到最右端（今天）
+    val heatScrollState = rememberScrollState()
+    val gridMaxIndex = (calendarDays.size / 7).coerceAtLeast(0)
+    LaunchedEffect(rangeMonths, gridMaxIndex) {
+        // 等横向布局完成（maxValue>0）再滚到最右，否则首次 scrollTo(0) 无效
+        snapshotFlow { heatScrollState.maxValue }.first { it > 0 }
+        val targetPx = with(density) { (gridMaxIndex * weekColumnWidth.toPx()).toInt() }
+        heatScrollState.scrollTo(targetPx)
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize().padding(contentPadding),
     ) {
         item {
-            Text(
-                text = "听歌日记",
-                style = MaterialTheme.typography.titleLarge,
-                modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
+            ) {
+                Text(
+                    text = "听歌日记",
+                    style = MaterialTheme.typography.titleLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                SingleChoiceSegmentedButtonRow {
+                    listOf(1 to "一个月", 12 to "一年").forEachIndexed { index, (months, label) ->
+                        SegmentedButton(
+                            selected = rangeMonths == months,
+                            onClick = { rangeMonths = months },
+                            shape = SegmentedButtonDefaults.itemShape(index, 2),
+                            label = { Text(label, style = MaterialTheme.typography.labelMedium) },
+                        )
+                    }
+                }
+            }
         }
         item {
             // 年度概览
@@ -83,23 +127,53 @@ fun DiaryScreen(
         }
         item {
             Text(
-                text = if (isLoading) "加载中…" else "最近一年",
+                text = when {
+                    isLoading -> "加载中…"
+                    rangeMonths == 1 -> "最近一个月"
+                    else -> "最近一年"
+                },
                 style = MaterialTheme.typography.titleSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
             )
         }
         item {
-            // 热力图网格：横向可滚动（53 周 × 7 天）
+            // 月份标注行：与下方网格共用同一个横向滚动状态，偏移量逐像素对齐
+            val monthMarks = remember(calendarDays) { monthLabelOffsets(calendarDays) }
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = dimens.spaceLg),
+            ) {
+                Row(
+                    modifier = Modifier.horizontalScroll(heatScrollState),
+                ) {
+                    Spacer(Modifier.width(weekColumnWidth))
+                    monthMarks.forEachIndexed { index, label ->
+                        if (label != null) {
+                            Text(
+                                text = label,
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.width(weekColumnWidth * 4),
+                            )
+                        } else {
+                            Spacer(Modifier.width(weekColumnWidth))
+                        }
+                        if (index == monthMarks.lastIndex) Spacer(Modifier.width(cellGap))
+                    }
+                }
+            }
+        }
+        item {
+            // 热力图网格：横向可滚动（每周一列 × 7 天）
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState())
+                    .horizontalScroll(heatScrollState)
                     .padding(horizontal = dimens.spaceLg),
                 verticalAlignment = Alignment.Top,
             ) {
-                val cellSize = 14.dp
-                val cellGap = 3.dp
                 calendarDays.chunked(7).forEach { week ->
                     Column(
                         verticalArrangement = Arrangement.spacedBy(cellGap),
@@ -109,7 +183,7 @@ fun DiaryScreen(
                             val data = dayMap[day]
                             Surface(
                                 color = heatmapColor(data?.level ?: 0),
-                                shape = RoundedCornerShape(3.dp),
+                                shape = RoundedCornerShape(4.dp),
                                 modifier = Modifier
                                     .size(cellSize)
                                     .clickable { selectedDay = data },
@@ -130,7 +204,7 @@ fun DiaryScreen(
                 repeat(6) { level ->
                     Surface(
                         color = heatmapColor(level),
-                        shape = RoundedCornerShape(3.dp),
+                        shape = RoundedCornerShape(4.dp),
                         modifier = Modifier.padding(start = 4.dp).size(14.dp),
                     ) {}
                 }
@@ -219,7 +293,7 @@ fun DiaryScreen(
             ) {
                 Surface(
                     color = heatmapColor(day.level),
-                    shape = RoundedCornerShape(4.dp),
+                    shape = RoundedCornerShape(5.dp),
                     modifier = Modifier.size(18.dp),
                 ) {}
                 Column(modifier = Modifier.weight(1f).padding(start = 12.dp)) {
@@ -241,6 +315,32 @@ fun DiaryScreen(
         }
         item { Spacer(Modifier.height(dimens.spaceXl)) }
     }
+}
+
+/**
+ * 生成月份标注序列：与 [calendarDays] 的周列一一对应。
+ *
+ * 返回列表长度 = 周列数；某周的第一天开启了新月份，则该列标注「M月」。
+ */
+private fun monthLabelOffsets(calendarDays: List<Long>): List<String?> {
+    val cal = Calendar.getInstance()
+    val labels = mutableListOf<String?>()
+    var lastMonth = -1
+    calendarDays.chunked(7).forEach { week ->
+        if (week.isEmpty()) {
+            labels += null
+            return@forEach
+        }
+        cal.timeInMillis = week.first()
+        val month = cal.get(Calendar.MONTH)
+        if (month != lastMonth) {
+            labels += "${month + 1}月"
+            lastMonth = month
+        } else {
+            labels += null
+        }
+    }
+    return labels
 }
 
 @Composable
@@ -267,18 +367,27 @@ private fun formatMinutes(ms: Long): String {
     }
 }
 
-/** 生成从今天倒推一年的日期列表（按周对齐，每周从周一开始）。 */
-private fun buildYearDays(): List<Long> {
+/**
+ * 生成从今天倒推 [months] 个月的日期列表（按周对齐，每周从周一开始）。
+ *
+ * 只包含 <= 今天 的日期：未来日期不渲染，避免"上半截全是空格子"。
+ */
+private fun buildDays(months: Int): List<Long> {
     val calendar = Calendar.getInstance()
     val today = calendar.timeInMillis
     calendar.apply {
         set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
+    // 范围终点：本周的周一（含今天所在周，保证今天的格子存在）
     val dow = (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7 // 周一=0
     calendar.add(Calendar.DAY_OF_YEAR, -dow)
     val end = calendar.timeInMillis
-    calendar.add(Calendar.DAY_OF_YEAR, -(52 * 7))
+    // 范围起点：倒推 months 个月，再对齐到该周的周一
+    calendar.timeInMillis = end
+    calendar.add(Calendar.MONTH, -months)
+    val dowStart = (calendar.get(Calendar.DAY_OF_WEEK) + 5) % 7
+    calendar.add(Calendar.DAY_OF_YEAR, -dowStart)
     val days = mutableListOf<Long>()
     var cursor = calendar.timeInMillis
     while (cursor <= end && cursor <= today) {

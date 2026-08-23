@@ -342,7 +342,13 @@ private fun RouteContent(
                     }
                 },
                 onSongLongPress = { song -> viewModel.toggleSelection(song.id) },
+                onRemoveFromLibrary = { song -> viewModel.removeSongFromLibrary(song.id) },
+                onRequestDeleteFile = { song, launchConfirm ->
+                    viewModel.requestDeleteFile(song, onNeedSystemConfirm = launchConfirm, onFinalize = {})
+                },
+                onFinalizeDeleteFile = { songId -> viewModel.finalizeFileDeleted(songId) },
                 contentPadding = contentPadding,
+                modifier = modifier,
             )
         }
 
@@ -427,6 +433,10 @@ private fun RouteContent(
             onPreferredQualityChange = viewModel::setPreferredQuality,
             qualityFallbackDirection = uiState.qualityFallbackDirection,
             onQualityFallbackDirectionChange = viewModel::setQualityFallbackDirection,
+            appFontScale = uiState.appFontScale,
+            onAppFontScaleChange = viewModel::setAppFontScale,
+            appFontFamily = uiState.appFontFamily,
+            onAppFontFamilyChange = viewModel::setAppFontFamily,
             onLabSpringLyricsChange = viewModel::setLabSpringLyrics,
             contentPadding = contentPadding,
             modifier = modifier,

@@ -10,6 +10,7 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 
 private val DarkColors = darkColorScheme(
@@ -39,6 +40,10 @@ private val LightColors = lightColorScheme(
 fun MusicPlayerTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     dynamicColor: Boolean = true,
+    /** 全局字号缩放（0.8~1.4），设置页实时下发。 */
+    fontScale: Float = 1f,
+    /** 字体样式标识：default / serif / mono / cursive。 */
+    fontFamilyId: String = "default",
     /** 想要更克制的动效时传 MotionScheme.standard()。 */
     motionScheme: MotionScheme = MotionScheme.expressive(),
     content: @Composable () -> Unit,
@@ -52,13 +57,17 @@ fun MusicPlayerTheme(
         darkTheme -> DarkColors
         else -> LightColors
     }
+    // 字号/字族变化时重建 Typography，全局文本即时生效
+    val typography = remember(fontScale, fontFamilyId) {
+        appTypography(fontScale = fontScale, fontFamily = fontFamilyFor(fontFamilyId))
+    }
 
     ProvideAppTokens(darkTheme = darkTheme) {
         MaterialExpressiveTheme(
             colorScheme = colorScheme,
             motionScheme = motionScheme,
             shapes = AppShapes,
-            typography = AppTypography,
+            typography = typography,
             content = content,
         )
     }

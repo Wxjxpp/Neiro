@@ -21,6 +21,8 @@ import kotlinx.coroutines.flow.flowOn
  */
 class AndroidMediaScanner(
     private val resolver: ContentResolver,
+    /** 传入时对每首歌强制从文件重读标签（MediaStore 缓存的文本列可能过期）。 */
+    private val metadataReader: MetadataReader? = null,
 ) : MediaScanner {
 
     override fun scan(roots: List<String>): Flow<ScanProgress> = flow {
@@ -101,9 +103,12 @@ class AndroidMediaScanner(
                     format = AudioFormat(mimeType = cursor.getString(mimeCol)),
                     releaseDate = year?.toString(),
                 )
+                // 直接从文件重读最新标签：MediaStore 的文本列是入库时的缓存，
+                // 用户用外部工具改了标签但 MediaStore 未重新索引时会拿到旧值
+                val fresh = metadataReader?.readMetadata(song) ?: song
                 index++
                 total = index
-                emit(ScanProgress.Found(song, index, count))
+                emit(ScanProgress.Found(fresh, index, count))
             }
         }
 

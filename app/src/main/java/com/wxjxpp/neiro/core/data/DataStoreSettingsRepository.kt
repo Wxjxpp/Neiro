@@ -57,6 +57,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val LastSongId = stringPreferencesKey("last_song_id")
         val LastPositionMs = longPreferencesKey("last_position_ms")
         val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
+        val AppFontScale = floatPreferencesKey("app_font_scale")
+        val AppFontFamily = stringPreferencesKey("app_font_family")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -135,6 +137,20 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         }
     suspend fun setQualityFallbackDirection(direction: QualityFallbackDirection) {
         store.edit { it[Keys.QualityFallbackDirection] = direction.name }
+    }
+
+    /** 全局字号缩放（0.8~1.4），实时生效。 */
+    fun observeAppFontScale(): Flow<Float> =
+        store.data.map { it[Keys.AppFontScale] ?: 1f }
+    suspend fun setAppFontScale(scale: Float) {
+        store.edit { it[Keys.AppFontScale] = scale.coerceIn(0.8f, 1.4f) }
+    }
+
+    /** 字体样式：default / serif / mono / cursive。 */
+    fun observeAppFontFamily(): Flow<String> =
+        store.data.map { it[Keys.AppFontFamily] ?: "default" }
+    suspend fun setAppFontFamily(id: String) {
+        store.edit { it[Keys.AppFontFamily] = id }
     }
 
     /** 取流时需要立即读到当前音质，不适合走 Flow。 */

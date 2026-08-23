@@ -9,14 +9,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Book
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.Groups
-import androidx.compose.material.icons.filled.Insights
-import androidx.compose.material.icons.filled.LibraryMusic
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.rounded.Book
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Groups
+import androidx.compose.material.icons.rounded.Insights
+import androidx.compose.material.icons.rounded.LibraryMusic
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Settings
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -47,16 +47,16 @@ fun isAnnualReportAvailable(today: LocalDate = LocalDate.now()): Boolean {
 }
 
 fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildList {
-    add(DrawerItem(Destination.Home, "歌曲", Icons.Filled.MusicNote, DrawerGroup.Library))
-    add(DrawerItem(Destination.Library, "本地曲库", Icons.Filled.LibraryMusic, DrawerGroup.Library))
-    add(DrawerItem(Destination.Playlists, "歌单", Icons.Filled.QueueMusic, DrawerGroup.Library))
-    add(DrawerItem(Destination.MusicSources, "自定义音源", Icons.Filled.Extension, DrawerGroup.Library))
-    add(DrawerItem(Destination.Diary, "听歌日记", Icons.Filled.Book, DrawerGroup.Personal))
-    add(DrawerItem(Destination.Together, "一起听", Icons.Filled.Groups, DrawerGroup.Personal))
+    add(DrawerItem(Destination.Home, "歌曲", Icons.Rounded.MusicNote, DrawerGroup.Library))
+    add(DrawerItem(Destination.Library, "本地曲库", Icons.Rounded.LibraryMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.Playlists, "歌单", Icons.Rounded.QueueMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.MusicSources, "自定义音源", Icons.Rounded.Extension, DrawerGroup.Library))
+    add(DrawerItem(Destination.Diary, "听歌日记", Icons.Rounded.Book, DrawerGroup.Personal))
+    add(DrawerItem(Destination.Together, "一起听", Icons.Rounded.Groups, DrawerGroup.Personal))
     if (isAnnualReportAvailable(today)) {
-        add(DrawerItem(Destination.Report, "年度报告", Icons.Filled.Insights, DrawerGroup.Personal))
+        add(DrawerItem(Destination.Report, "年度报告", Icons.Rounded.Insights, DrawerGroup.Personal))
     }
-    add(DrawerItem(Destination.Settings, "设置", Icons.Filled.Settings, DrawerGroup.System))
+    add(DrawerItem(Destination.Settings, "设置", Icons.Rounded.Settings, DrawerGroup.System))
 }
 
 @Composable

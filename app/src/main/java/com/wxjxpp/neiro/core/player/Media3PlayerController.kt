@@ -391,7 +391,46 @@ class Media3PlayerController(
     /** 取流代际计数：每次切歌 +1，过期回调据此丢弃。 */
     private var resolveGeneration = 0
 
-    private fun playUri(song: Song, uri: String, playWhenReady: Boolean) {
+    /**
+     * 重新解析当前在线歌曲（音质变化后调用）。
+     *
+     * 保持当前进度：记住位置 → 重新取流 → 恢复播放状态与进度。
+     * 本地歌曲或没有当前歌曲时是空操作。
+     */
+    fun reloadCurrent() {
+        val song = _state.value.current ?: return
+        if (song.location !is MediaLocation.Remote) return
+        val resumePosition = _state.value.positionMs
+        val wasPlaying = _state.value.isPlaying
+        resolveJob?.cancel()
+        onPlayer { p ->
+            p.stop()
+            p.clearMediaItems()
+        }
+        val generation = ++resolveGeneration
+        _state.update { it.copy(isBuffering = true, positionMs = resumePosition) }
+        resolveJob = scope.launch {
+            val resolver = remoteUrlResolver
+            val result = if (resolver == null) {
+                RemoteUrl.Failure("未配置在线取流能力")
+            } else {
+                runCatching { resolver(song) }.getOrElse { error ->
+                    RemoteUrl.Failure(error.message ?: "取流失败")
+                }
+            }
+            if (generation != resolveGeneration || _state.value.current?.id != song.id) return@launch
+            _state.update { it.copy(isBuffering = false) }
+            when (result) {
+                is RemoteUrl.Success -> playUri(song, result.url, wasPlaying, startAtMs = resumePosition)
+                is RemoteUrl.Failure -> {
+                    _state.update { it.copy(isPlaying = false) }
+                    onPlaybackError?.invoke("「${song.title}」取流失败：${result.reason}")
+                }
+            }
+        }
+    }
+
+    private fun playUri(song: Song, uri: String, playWhenReady: Boolean, startAtMs: Long = 0L) {
         val item = MediaItem.Builder()
             .setUri(Uri.parse(uri))
             .setMediaId(song.id)
@@ -405,7 +444,7 @@ class Media3PlayerController(
             )
             .build()
         onPlayer { p ->
-            p.setMediaItem(item)
+            p.setMediaItem(item, startAtMs)
             p.prepare()
             p.playWhenReady = playWhenReady
         }

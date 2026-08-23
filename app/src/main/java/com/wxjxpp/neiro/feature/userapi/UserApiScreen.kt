@@ -12,13 +12,13 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Extension
-import androidx.compose.material.icons.filled.FileOpen
-import androidx.compose.material.icons.filled.Link
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Refresh
-import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.FileOpen
+import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -106,16 +106,16 @@ fun UserApiScreen(
                 horizontalArrangement = Arrangement.spacedBy(dimens.spaceSm),
             ) {
                 FilledTonalButton(onClick = { picker.launch(arrayOf("*/*")) }) {
-                    Icon(Icons.Filled.FileOpen, contentDescription = null)
+                    Icon(Icons.Rounded.FileOpen, contentDescription = null)
                     Text("本地文件", modifier = Modifier.padding(start = dimens.spaceXs))
                 }
                 FilledTonalButton(onClick = { showUrlDialog = true }) {
-                    Icon(Icons.Filled.Link, contentDescription = null)
+                    Icon(Icons.Rounded.Link, contentDescription = null)
                     Text("从 URL", modifier = Modifier.padding(start = dimens.spaceXs))
                 }
                 if (engineStatus is UserApiStatus.Ready) {
                     FilledTonalButton(onClick = onDeactivate) {
-                        Icon(Icons.Filled.Stop, contentDescription = null)
+                        Icon(Icons.Rounded.Stop, contentDescription = null)
                         Text("停用", modifier = Modifier.padding(start = dimens.spaceXs))
                     }
                 }
@@ -134,7 +134,7 @@ fun UserApiScreen(
                 items(apis, key = { it.id }) { api ->
                     val isActive = (engineStatus as? UserApiStatus.Ready)?.info?.id == api.id
                     ListItem(
-                        leadingContent = { Icon(Icons.Filled.Extension, contentDescription = null) },
+                        leadingContent = { Icon(Icons.Rounded.Extension, contentDescription = null) },
                         headlineContent = { Text(api.name + if (isActive) "（使用中）" else "") },
                         supportingContent = {
                             Text(
@@ -151,20 +151,20 @@ fun UserApiScreen(
                             Row {
                                 if (isActive) {
                                     IconButton(onClick = onDeactivate) {
-                                        Icon(Icons.Filled.Stop, contentDescription = "停用")
+                                        Icon(Icons.Rounded.Stop, contentDescription = "停用")
                                     }
                                 } else {
                                     IconButton(onClick = { onActivate(api.id) }) {
-                                        Icon(Icons.Filled.PlayArrow, contentDescription = "启用")
+                                        Icon(Icons.Rounded.PlayArrow, contentDescription = "启用")
                                     }
                                 }
                                 if (api.sourceUrl != null) {
                                     IconButton(onClick = { onUpdate(api.id) }) {
-                                        Icon(Icons.Filled.Refresh, contentDescription = "更新")
+                                        Icon(Icons.Rounded.Refresh, contentDescription = "更新")
                                     }
                                 }
                                 IconButton(onClick = { removeTarget = api }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "删除")
+                                    Icon(Icons.Rounded.Delete, contentDescription = "删除")
                                 }
                             }
                         },

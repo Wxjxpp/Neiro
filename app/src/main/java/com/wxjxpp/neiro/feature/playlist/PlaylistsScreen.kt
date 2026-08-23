@@ -12,12 +12,12 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.DriveFileRenameOutline
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.DriveFileRenameOutline
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
@@ -97,7 +97,7 @@ fun PlaylistsScreen(
                 modifier = Modifier.weight(1f),
             )
             FilledTonalButton(onClick = { showCreateDialog = true }) {
-                Icon(Icons.Filled.Add, contentDescription = null)
+                Icon(Icons.Rounded.Add, contentDescription = null)
                 Text("新建", modifier = Modifier.padding(start = dimens.spaceXs))
             }
         }
@@ -114,19 +114,19 @@ fun PlaylistsScreen(
                 items(playlists, key = { it.id }) { playlist ->
                     ListItem(
                         modifier = Modifier.clickable { openedId = playlist.id },
-                        leadingContent = { Icon(Icons.Filled.QueueMusic, contentDescription = null) },
+                        leadingContent = { Icon(Icons.Rounded.QueueMusic, contentDescription = null) },
                         headlineContent = { Text(playlist.name) },
                         supportingContent = { Text("${playlist.songIds.size} 首") },
                         trailingContent = {
                             Row(horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs)) {
                                 IconButton(onClick = { onPlay(playlist) }) {
-                                    Icon(Icons.Filled.PlayArrow, contentDescription = "播放歌单")
+                                    Icon(Icons.Rounded.PlayArrow, contentDescription = "播放歌单")
                                 }
                                 IconButton(onClick = { renameTarget = playlist }) {
-                                    Icon(Icons.Filled.DriveFileRenameOutline, contentDescription = "重命名")
+                                    Icon(Icons.Rounded.DriveFileRenameOutline, contentDescription = "重命名")
                                 }
                                 IconButton(onClick = { deleteTarget = playlist }) {
-                                    Icon(Icons.Filled.Delete, contentDescription = "删除歌单")
+                                    Icon(Icons.Rounded.Delete, contentDescription = "删除歌单")
                                 }
                             }
                         },
@@ -204,7 +204,7 @@ private fun PlaylistDetail(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回歌单列表")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回歌单列表")
             }
             Column(modifier = Modifier.weight(1f)) {
                 Text(playlist.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -215,7 +215,7 @@ private fun PlaylistDetail(
                 )
             }
             IconButton(onClick = onPlayAll) {
-                Icon(Icons.Filled.PlayArrow, contentDescription = "播放全部")
+                Icon(Icons.Rounded.PlayArrow, contentDescription = "播放全部")
             }
         }
 
@@ -250,7 +250,7 @@ private fun PlaylistDetail(
                     },
                     trailingContent = {
                         IconButton(onClick = { onRemoveSong(song.id) }) {
-                            Icon(Icons.Filled.Delete, contentDescription = "从歌单移除")
+                            Icon(Icons.Rounded.Delete, contentDescription = "从歌单移除")
                         }
                     },
                 )

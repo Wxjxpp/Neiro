@@ -62,6 +62,9 @@ import kotlinx.coroutines.launch
 interface AppContainer {
     val appScope: CoroutineScope
 
+    /** 应用上下文（需要 ContentResolver 等系统能力时用）。 */
+    val appContext: android.content.Context
+
     val songRepository: SongRepository
     val playlistRepository: PlaylistRepository
     val lyricsRepository: LyricsRepository
@@ -105,6 +108,8 @@ class DefaultAppContainer(
     private val application: Application,
 ) : AppContainer {
 
+    override val appContext: android.content.Context get() = application
+
     override val appScope = CoroutineScope(SupervisorJob())
 
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 16)
@@ -125,8 +130,8 @@ class DefaultAppContainer(
     ).fallbackToDestructiveMigration(dropAllTables = true).build()
 
     // === 扫描与元数据 ===
-    override val mediaScanner: MediaScanner = AndroidMediaScanner(application.contentResolver)
     override val metadataReader: MetadataReader = AndroidMetadataReader()
+    override val mediaScanner: MediaScanner = AndroidMediaScanner(application.contentResolver, metadataReader)
 
     // === 歌词 ===
     override val lyricsParsers: LyricsParserRegistry = defaultLyricsParserRegistry()

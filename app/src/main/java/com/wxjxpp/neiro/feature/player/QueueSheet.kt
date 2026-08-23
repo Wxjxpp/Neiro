@@ -8,7 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
@@ -74,7 +74,7 @@ fun QueueSheet(
                     leadingContent = {
                         if (isCurrent) {
                             Icon(
-                                Icons.Filled.GraphicEq,
+                                Icons.Rounded.GraphicEq,
                                 contentDescription = "正在播放",
                                 tint = MaterialTheme.colorScheme.primary,
                             )

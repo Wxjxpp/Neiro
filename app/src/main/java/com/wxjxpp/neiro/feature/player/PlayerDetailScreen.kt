@@ -32,19 +32,19 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 
-import androidx.compose.material.icons.filled.Lyrics
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Schedule
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Translate
+import androidx.compose.material.icons.rounded.Lyrics
+import androidx.compose.material.icons.rounded.Pause
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.QueueMusic
+import androidx.compose.material.icons.rounded.Repeat
+import androidx.compose.material.icons.rounded.RepeatOne
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.SkipNext
+import androidx.compose.material.icons.rounded.SkipPrevious
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Icon
@@ -401,10 +401,10 @@ fun SharedTransitionScope.PlayerDetailScreen(
                         },
                     ) {
                         Icon(
-                            imageVector = if (state.shuffle) Icons.Filled.Shuffle else when (state.repeatMode) {
-                                RepeatMode.One -> Icons.Filled.RepeatOne
-                                RepeatMode.All -> Icons.Filled.Repeat
-                                RepeatMode.Off -> Icons.Filled.Shuffle
+                            imageVector = if (state.shuffle) Icons.Rounded.Shuffle else when (state.repeatMode) {
+                                RepeatMode.One -> Icons.Rounded.RepeatOne
+                                RepeatMode.All -> Icons.Rounded.Repeat
+                                RepeatMode.Off -> Icons.Rounded.Shuffle
                             },
                             contentDescription = "随机/循环（长按切循环）",
                             tint = if (state.shuffle || state.repeatMode != RepeatMode.Off) {
@@ -422,7 +422,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
                 ) {
                     IconButton(onClick = onPrevious) {
-                        Icon(Icons.Filled.SkipPrevious, contentDescription = "上一首")
+                        Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一首")
                     }
                     IconButton(
                         onClick = {
@@ -439,19 +439,19 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             },
                     ) {
                         Icon(
-                            imageVector = if (state.isPlaying) Icons.Filled.Pause else Icons.Filled.PlayArrow,
+                            imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
                             modifier = Modifier.size(44.dp),
                         )
                     }
                     IconButton(onClick = onNext) {
-                        Icon(Icons.Filled.SkipNext, contentDescription = "下一首")
+                        Icon(Icons.Rounded.SkipNext, contentDescription = "下一首")
                     }
                 }
                 if (!pureMode) {
                     // 右侧：播放列表
                     IconButton(onClick = { showQueue = true }) {
-                        Icon(Icons.Filled.QueueMusic, contentDescription = "播放列表")
+                        Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
                     }
                 } else {
                     Spacer(Modifier.size(48.dp))
@@ -468,7 +468,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                 ) {
                     IconButton(onClick = { showOffsetPanel = !showOffsetPanel }) {
                         Icon(
-                            Icons.Filled.Schedule,
+                            Icons.Rounded.Schedule,
                             contentDescription = "歌词偏移",
                             tint = if (showOffsetPanel || lyricsOffsetMs != 0L) {
                                 MaterialTheme.colorScheme.primary
@@ -483,7 +483,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                             onToggleTranslation()
                         }) {
                             Icon(
-                                Icons.Filled.Translate,
+                                Icons.Rounded.Translate,
                                 contentDescription = if (translationOn) "关闭翻译" else "开启翻译",
                                 tint = if (translationOn) {
                                     MaterialTheme.colorScheme.primary
@@ -495,7 +495,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     }
                     IconButton(onClick = { showLyrics = !showLyrics }) {
                         Icon(
-                            Icons.Filled.Lyrics,
+                            Icons.Rounded.Lyrics,
                             contentDescription = if (showLyrics) "显示封面" else "显示歌词",
                             tint = if (showLyrics) {
                                 MaterialTheme.colorScheme.primary
@@ -563,7 +563,7 @@ fun SharedTransitionScope.PlayerDetailScreen(
                     .align(Alignment.TopStart)
                     .padding(start = 4.dp, top = statusBarPadding.calculateTopPadding() + 4.dp),
             ) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
             }
         }
     }

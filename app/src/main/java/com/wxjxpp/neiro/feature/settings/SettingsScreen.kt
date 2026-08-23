@@ -1,6 +1,7 @@
 package com.wxjxpp.neiro.feature.settings
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -12,8 +13,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -77,6 +78,10 @@ fun SettingsScreen(
     onPreferredQualityChange: (Quality) -> Unit = {},
     qualityFallbackDirection: QualityFallbackDirection = QualityFallbackDirection.LOWER,
     onQualityFallbackDirectionChange: (QualityFallbackDirection) -> Unit = {},
+    appFontScale: Float = 1f,
+    onAppFontScaleChange: (Float) -> Unit = {},
+    appFontFamily: String = "default",
+    onAppFontFamilyChange: (String) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -211,6 +216,50 @@ fun SettingsScreen(
                         checked = floatingPlayerBar,
                         onCheckedChange = onFloatingPlayerBarChange,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    Text(
+                        text = "字体样式（全应用生效）",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
+                    )
+                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                        listOf(
+                            "default" to "默认",
+                            "serif" to "衬线",
+                            "mono" to "等宽",
+                        ).forEachIndexed { index, (id, label) ->
+                            SegmentedButton(
+                                selected = appFontFamily == id,
+                                onClick = { onAppFontFamilyChange(id) },
+                                shape = SegmentedButtonDefaults.itemShape(index, 3),
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                    var fontScaleValue by remember(appFontScale) { mutableStateOf(appFontScale) }
+                    Text(
+                        text = "字号大小：%.0f%%".format(fontScaleValue * 100),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(top = AppTheme.dimens.spaceMd),
+                    )
+                    Slider(
+                        value = fontScaleValue,
+                        onValueChange = { fontScaleValue = it },
+                        onValueChangeFinished = { onAppFontScaleChange(fontScaleValue) },
+                        valueRange = 0.8f..1.4f,
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("80%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        androidx.compose.material3.TextButton(onClick = {
+                            fontScaleValue = 1f
+                            onAppFontScaleChange(1f)
+                        }) { Text("重置") }
+                        Text("140%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 "source" -> {
                     Text(
@@ -316,7 +365,7 @@ fun SettingsScreen(
         SubsectionEntry(title = "歌词", subtitle = "翻译 / 偏移 / 对齐方式") { subsection = "lyrics" }
         SubsectionEntry(title = "播放", subtitle = "随机模式 / 耳机与音频焦点") { subsection = "playback" }
         SubsectionEntry(title = "音源", subtitle = "在线音质 / 自动换源回退策略") { subsection = "source" }
-        SubsectionEntry(title = "外观", subtitle = "悬浮播放栏") { subsection = "appearance" }
+        SubsectionEntry(title = "外观", subtitle = "悬浮播放栏 / 字体样式") { subsection = "appearance" }
         SubsectionEntry(title = "实验室", subtitle = "流光背景 / 弹簧动效 / 纯净模式") { subsection = "lab" }
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
         SectionTitle("在线播放")
@@ -362,7 +411,7 @@ private fun SettingsSubsection(
             modifier = Modifier.fillMaxWidth(),
         ) {
             IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
+                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
             }
             Text(title, style = MaterialTheme.typography.titleLarge)
         }
@@ -399,7 +448,7 @@ private fun SubsectionEntry(title: String, subtitle: String, onClick: () -> Unit
             )
         }
         Icon(
-            Icons.AutoMirrored.Filled.KeyboardArrowRight,
+            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
             contentDescription = null,
             tint = MaterialTheme.colorScheme.onSurfaceVariant,
         )

@@ -107,6 +107,10 @@ data class ShellUiState(
     val preferredQuality: Quality = Quality.Standard,
     /** 取流失败时的音质回退方向。 */
     val qualityFallbackDirection: QualityFallbackDirection = QualityFallbackDirection.LOWER,
+    /** 全局字号缩放（0.8~1.4）。 */
+    val appFontScale: Float = 1f,
+    /** 字体样式：default / serif / mono / cursive。 */
+    val appFontFamily: String = "default",
 )
 
 class AppViewModel(
@@ -249,6 +253,13 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeQualityFallbackDirection()
             .onEach { direction -> _uiState.update { it.copy(qualityFallbackDirection = direction) } }
+            .launchIn(viewModelScope)
+        // 全局字体设置
+        container.appSettings.observeAppFontScale()
+            .onEach { scale -> _uiState.update { it.copy(appFontScale = scale) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeAppFontFamily()
+            .onEach { family -> _uiState.update { it.copy(appFontFamily = family) } }
             .launchIn(viewModelScope)
         // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录
         container.playerController.state
@@ -438,14 +449,35 @@ class AppViewModel(
         viewModelScope.launch { container.appSettings.setAutoPlayOnStart(enabled) }
     }
 
-    /** 在线播放偏好音质（持久化，取流层立即生效）。 */
+    /** 在线播放偏好音质（持久化；正在播放的在线歌曲会立即重新取流）。 */
     fun setPreferredQuality(quality: Quality) {
-        viewModelScope.launch { container.appSettings.setPreferredQuality(quality) }
+        viewModelScope.launch {
+            val old = _uiState.value.preferredQuality
+            container.appSettings.setPreferredQuality(quality)
+            if (old == quality) return@launch
+            // 正在播在线歌曲：按新音质重新取流（保持进度），否则下一首歌才生效
+            val current = playbackState.value.current
+            if (current?.location is com.wxjxpp.neiro.core.model.MediaLocation.Remote) {
+                (container.playerController as? com.wxjxpp.neiro.core.player.Media3PlayerController)
+                    ?.reloadCurrent()
+                container.notify("音质已切换，正在按新档位重新取流…")
+            }
+        }
     }
 
     /** 取流失败时的音质回退方向。 */
     fun setQualityFallbackDirection(direction: QualityFallbackDirection) {
         viewModelScope.launch { container.appSettings.setQualityFallbackDirection(direction) }
+    }
+
+    /** 全局字号缩放（0.8~1.4），实时生效。 */
+    fun setAppFontScale(scale: Float) {
+        viewModelScope.launch { container.appSettings.setAppFontScale(scale) }
+    }
+
+    /** 字体样式切换（default/serif/mono/cursive），实时生效。 */
+    fun setAppFontFamily(id: String) {
+        viewModelScope.launch { container.appSettings.setAppFontFamily(id) }
     }
 
     /** 歌曲页"随机一发"：从当前曲库随机抽一首立即播放。 */
@@ -515,6 +547,67 @@ class AppViewModel(
             (container.songRepository as? RoomSongRepository)?.delete(ids)
             clearSelection()
         }
+    }
+
+    /** 单曲移除出曲库（不删除磁盘文件）。 */
+    fun removeSongFromLibrary(songId: String) {
+        viewModelScope.launch {
+            (container.songRepository as? RoomSongRepository)?.delete(listOf(songId))
+            container.notify("已从曲库移除")
+        }
+    }
+
+    /**
+     * 发起系统级文件删除请求。
+     *
+     * Android 11+ 走 MediaStore createDeleteRequest（弹系统确认框）；
+     * Android 10 及以下直接按路径删除。[onNeedSystemConfirm] 拿到 IntentSender
+     * 后由 UI 层启动确认页，用户同意后回调 [onFinalize] 收尾。
+     */
+    fun requestDeleteFile(
+        song: Song,
+        onNeedSystemConfirm: (android.content.IntentSender) -> Unit,
+        onFinalize: () -> Unit,
+    ) {
+        val local = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Local
+        val mediaId = song.id.removePrefix("media:").toLongOrNull()
+        if (local == null || mediaId == null) {
+            container.notify("无法定位文件，仅支持本地扫描的歌曲")
+            return
+        }
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.R) {
+            val pending = runCatching {
+                android.provider.MediaStore.createDeleteRequest(
+                    container.appContext.contentResolver,
+                    listOf(android.content.ContentUris.withAppendedId(
+                        android.provider.MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, mediaId,
+                    )),
+                )
+            }.getOrNull()
+            if (pending != null) {
+                onNeedSystemConfirm(pending.intentSender)
+                return
+            }
+            container.notify("系统拒绝了删除请求")
+            return
+        }
+        // Android 10 及以下：有存储权限时可直接删
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            val file = java.io.File(local.filePath ?: "")
+            val ok = file.exists() && file.delete()
+            if (ok) {
+                removeSongFromLibrary(song.id)
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) { onFinalize() }
+                container.notify("文件已删除")
+            } else {
+                container.notify("文件删除失败")
+            }
+        }
+    }
+
+    /** 文件已由系统删除后调用：清理曲库记录并提示。 */
+    fun finalizeFileDeleted(songId: String) {
+        removeSongFromLibrary(songId)
     }
 
     fun addSelectedToPlaylist(playlistId: String) {
