@@ -31,6 +31,12 @@ class OnlineMusicSource(
     override val id: String = platform.id
     override val displayName: String = platform.displayName
 
+    /**
+     * 脚本能力表的查询键：LX 派生源（id 形如 "wy-lx"）剥掉后缀，
+     * 与脚本 init 时上报的协议平台标识（wy/kw/kg/tx/mg）对齐。
+     */
+    val scriptPlatformId: String get() = id.removeSuffix("-lx")
+
     override val capabilities: Set<SourceCapability> = buildSet {
         add(SourceCapability.Search)
         add(SourceCapability.QualitySelection)

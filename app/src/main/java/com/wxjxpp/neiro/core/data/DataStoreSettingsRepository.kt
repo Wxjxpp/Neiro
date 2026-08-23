@@ -56,6 +56,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val AutoPlayOnStart = booleanPreferencesKey("auto_play_on_start")
         val LastSongId = stringPreferencesKey("last_song_id")
         val LastPositionMs = longPreferencesKey("last_position_ms")
+        val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
     }
 
     override fun observeFloatingPlayerBar(): Flow<Boolean> =
@@ -124,11 +125,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     }
 
     /** 失败重试时的音质调整方向：降低（默认）或升高。 */
-    val QualityFallbackDirection = stringPreferencesKey("quality_fallback_direction")
     fun observeQualityFallbackDirection(): Flow<QualityFallbackDirection> =
         store.data.map { prefs ->
             runCatching {
-                QualityFallbackDirection.valueOf(prefs[Keys.QualityFallbackDirection] ?: QualityFallbackDirection.LOWER.name)
+                QualityFallbackDirection.valueOf(
+                    prefs[Keys.QualityFallbackDirection] ?: QualityFallbackDirection.LOWER.name,
+                )
             }.getOrDefault(QualityFallbackDirection.LOWER)
         }
     suspend fun setQualityFallbackDirection(direction: QualityFallbackDirection) {

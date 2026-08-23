@@ -302,7 +302,7 @@ private val registry = DefaultMusicSourceRegistry(
         for (quality in qualities) {
             for (source in orderedSources) {
                 // 只试脚本声明支持的源；换源时用目标源的 id 构造请求
-                val actions = activeCapabilities[source.platform.id] ?: continue
+                val actions = activeCapabilities[source.scriptPlatformId] ?: continue
                 if ("musicUrl" !in actions) continue
                 val targetSong = if (source.id == location.sourceId) song else song.copy(
                     id = "${source.id}:${location.songId}",
