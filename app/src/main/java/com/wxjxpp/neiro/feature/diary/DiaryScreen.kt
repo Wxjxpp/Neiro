@@ -16,6 +16,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -95,11 +99,8 @@ fun DiaryScreen(
                     .fillMaxWidth()
                     .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
             ) {
-                androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
-                    androidx.compose.material3.Icon(
-                        androidx.compose.material.icons.Icons.Rounded.Menu,
-                        contentDescription = "打开导航",
-                    )
+                IconButton(onClick = onOpenDrawer) {
+                    Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
                 }
                 Text(
                     text = "听歌日记",

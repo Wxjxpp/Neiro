@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DriveFileRenameOutline
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -89,11 +90,8 @@ fun PlaylistsScreen(
                 .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
-                androidx.compose.material3.Icon(
-                    androidx.compose.material.icons.Icons.Rounded.Menu,
-                    contentDescription = "打开导航",
-                )
+            IconButton(onClick = onOpenDrawer) {
+                Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
             }
             Text(
                 text = "共 ${playlists.size} 个歌单",

@@ -112,7 +112,13 @@ class DiscoverRepository(
         return Song(
             id = "wy:$songId",
             title = title,
-            artists = info.optJSONArray("ar").joinNames(),
+            artists = info.optJSONArray("ar")?.let { arr ->
+                    (0 until arr.length()).mapNotNull { i ->
+                        arr.optJSONObject(i)?.let { o ->
+                            Artist(id = o.optString("id"), name = o.optString("name"))
+                        }
+                    }
+                } ?: emptyList(),
             album = Album(
                 id = "album:${album?.optLong("id") ?: title}",
                 title = album?.optString("name") ?: "未知专辑",

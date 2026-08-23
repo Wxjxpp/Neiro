@@ -144,7 +144,7 @@ class Media3PlayerController(
     private val _sheetProgress = MutableStateFlow(0f)
     override val sheetProgress: StateFlow<Float> = _sheetProgress.asStateFlow()
 
-    fun setSheetProgress(value: Float) {
+    override fun setSheetProgress(value: Float) {
         _sheetProgress.value = value.coerceIn(0f, 2f)
     }
 

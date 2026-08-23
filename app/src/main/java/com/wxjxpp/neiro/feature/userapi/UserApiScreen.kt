@@ -55,7 +55,7 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
  * - 显示每个脚本初始化后上报的能力（支持的平台与音质）
  * - 启用失败时给出可读原因
  */
-@OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UserApiScreen(
     apis: List<UserApiInfo>,

@@ -4,6 +4,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,11 +37,8 @@ fun PlaceholderScreen(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        androidx.compose.material3.IconButton(onClick = onOpenDrawer) {
-            androidx.compose.material3.Icon(
-                androidx.compose.material.icons.Icons.Rounded.Menu,
-                contentDescription = "打开导航",
-            )
+        IconButton(onClick = onOpenDrawer) {
+            Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
         }
         if (title.isNotBlank()) {
             Text(

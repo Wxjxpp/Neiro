@@ -333,7 +333,7 @@ class AppViewModel(
             SongSortField.PlayCount -> songs.sortedByDescending { playCounts[it.id] ?: 0 }
             // 专辑排序：专辑名 → 曲目号 → 标题，同专辑歌曲自然聚在一起
             SongSortField.Album -> songs.sortedWith(
-                compareBy(java.text.Collator.getInstance()) { it.albumTitle }
+                compareBy<Song>(java.text.Collator.getInstance()) { it.albumTitle }
                     .thenBy { it.trackNumber ?: Int.MAX_VALUE }
                     .thenBy(java.text.Collator.getInstance()) { it.title },
             )

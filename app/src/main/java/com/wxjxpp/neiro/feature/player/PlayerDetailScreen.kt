@@ -15,7 +15,6 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -168,7 +167,7 @@ fun PlayerDetailScreen(
                         onDragCancel = onDragEnd,
                     ) { change, dragAmount ->
                         change.consume()
-                        if (dragAmount.y > 0f) onDrag(dragAmount.y) // 下滑收起
+                        if (dragAmount > 0f) onDrag(dragAmount) // 下滑收起
                     }
                 },
         )
@@ -222,8 +221,8 @@ fun PlayerDetailScreen(
                                     onDragCancel = onDragEnd,
                                 ) { change, dragAmount ->
                                     change.consume()
-                                    if (dragAmount.y < -30f || dragAmount.y > 30f) {
-                                        onDrag(dragAmount.y)
+                                    if (dragAmount < -30f || dragAmount > 30f) {
+                                        onDrag(dragAmount)
                                     }
                                 }
                             },
@@ -277,9 +276,9 @@ fun PlayerDetailScreen(
                                         onDragCancel = onDragEnd,
                                     ) { change, dragAmount ->
                                         change.consume()
-                                        if (dragAmount.y < 0f) {
+                                        if (dragAmount < 0f) {
                                             onExpandLyrics()
-                                            onDrag(dragAmount.y)
+                                            onDrag(dragAmount)
                                         }
                                     }
                                 }

@@ -91,9 +91,9 @@ fun PlayerBar(
                             onDragCancel = { onDragEnd() },
                         ) { change, dragAmount ->
                             change.consume()
-                            if (dragAmount.y < 0f) {
+                            if (dragAmount < 0f) {
                                 onExpand()
-                                onDragProgress(dragAmount.y)
+                                onDragProgress(dragAmount)
                             }
                         }
                     }

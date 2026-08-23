@@ -20,8 +20,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
-import androidx.compose.foundation.layout.calculateBottomPadding
-import androidx.compose.foundation.layout.calculateTopPadding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -53,6 +51,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.app.navigation.AppDrawerSheet
@@ -261,7 +260,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         )
                         // 浮动播放栏（有歌且播放页未展开时可见）
                         if (hasSong && uiState.floatingPlayerBar) {
-                            AnimatedVisibility(
+                            androidx.compose.animation.AnimatedVisibility(
                                 visible = !playerOpen,
                                 enter = slideInVertically(tween(280)) { it } + fadeIn(tween(280)),
                                 exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
@@ -278,7 +277,7 @@ fun MusicPlayerApp(container: AppContainer) {
                                     onDragProgress = { deltaPx ->
                                         dragging = true
                                         val step = with(density) { deltaPx.toDp() } / dimens.playerBarHeight
-                                        viewModel.setSheetProgress((rawProgress - step.value).coerceIn(0f, 2f))
+                                        viewModel.setSheetProgress((rawProgress - step).coerceIn(0f, 2f))
                                     },
                                     onDragEnd = {
                                         dragging = false
@@ -325,7 +324,7 @@ fun MusicPlayerApp(container: AppContainer) {
                         onDrag = { deltaPx ->
                             dragging = true
                             val step = with(density) { deltaPx.toDp() } / (dimens.playerBarHeight * 1.4f)
-                            viewModel.setSheetProgress((rawProgress - step.value).coerceIn(0f, 2f))
+                            viewModel.setSheetProgress((rawProgress - step).coerceIn(0f, 2f))
                         },
                         onDragEnd = {
                             dragging = false
@@ -454,11 +453,11 @@ private fun RouteContent(
     modifier: Modifier = Modifier,
 ) {
     // 页面间切换：淡入淡出（Expressive motionScheme 由主题统一下发节奏）
+    val rootMotionSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     AnimatedContent(
         targetState = route,
         transitionSpec = {
-            fadeIn(MaterialTheme.motionScheme.defaultEffectsSpec<Float>()) togetherWith
-                fadeOut(MaterialTheme.motionScheme.defaultEffectsSpec<Float>())
+            fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
         },
         label = "rootRoute",
         modifier = modifier,
