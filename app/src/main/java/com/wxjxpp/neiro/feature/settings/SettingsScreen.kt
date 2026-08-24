@@ -123,16 +123,16 @@ fun SettingsScreen(
                     )
                     var offsetValue by remember(lyricsOffsetMs) { mutableStateOf(lyricsOffsetMs.toFloat()) }
                     Text(
-                        text = "歌词偏移：%+d ms（正数提前 / 负数延后）".format(offsetValue.toInt()),
+                        text = "歌词偏移：%+.1f 秒（正数提前 / 负数延后）".format(offsetValue / 1000f),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = AppTheme.dimens.spaceSm),
                     )
                     Slider(
-                        value = offsetValue.coerceIn(-50f, 50f),
+                        value = offsetValue.coerceIn(-5000f, 5000f),
                         onValueChange = { offsetValue = it },
                         onValueChangeFinished = { onLyricsOffsetChange(offsetValue.toLong()) },
-                        valueRange = -50f..50f,
+                        valueRange = -5000f..5000f,
                     )
                     Text(
                         text = "对齐方式",

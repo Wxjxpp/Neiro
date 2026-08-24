@@ -1008,17 +1008,22 @@ class AppViewModel(
         currentSongId = song?.id
         currentSongStartedAt = if (song != null) System.currentTimeMillis() else 0L
 
-        if (song == null) {
-            _uiState.update { it.copy(lyrics = Lyrics.Empty) }
-            return
-        }
+        // 切歌瞬间先清掉上一首的歌词（避免加载期间残留旧歌词）
+        _uiState.update { it.copy(lyrics = Lyrics.Empty) }
+        if (song == null) return
         recordRecentSong(song)
+        val requestId = ++lyricsRequestId
         viewModelScope.launch {
             val lyrics = runCatching { container.lyricsRepository.lyricsFor(song) }
                 .getOrDefault(Lyrics.Empty)
-            _uiState.update { it.copy(lyrics = lyrics) }
+            // 竞态保护：加载期间又切了歌 → 丢弃过期结果
+            if (requestId == lyricsRequestId) {
+                _uiState.update { it.copy(lyrics = lyrics) }
+            }
         }
     }
+    /** 歌词加载请求序号（防切歌竞态）。 */
+    private var lyricsRequestId = 0L
 
     /** 最近播放：歌曲快照写入 DataStore（在线歌曲不在曲库，只能存快照）。 */
     private fun recordRecentSong(song: Song) {

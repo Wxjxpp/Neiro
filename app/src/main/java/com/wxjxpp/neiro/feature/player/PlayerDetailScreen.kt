@@ -747,7 +747,7 @@ private fun LyricsOffsetPanel(
             Slider(
                 value = offsetMs.toFloat().coerceIn(-50f, 50f),
                 onValueChange = { onChange(it.toLong()) },
-                valueRange = -50f..50f,
+                valueRange = -5000f..5000f,
             )
             Row(
                 horizontalArrangement = Arrangement.SpaceBetween,

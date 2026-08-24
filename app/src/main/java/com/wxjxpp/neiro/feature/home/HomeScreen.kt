@@ -352,6 +352,7 @@ fun SongsTopBar(
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     TopAppBar(
+        windowInsets = WindowInsets(0),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.MusicNote, contentDescription = null)
@@ -433,6 +434,7 @@ fun SelectionTopBar(
     onAddToPlaylist: () -> Unit,
 ) {
     TopAppBar(
+        windowInsets = WindowInsets(0),
         colors = TopAppBarDefaults.topAppBarColors(
             containerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
         ),

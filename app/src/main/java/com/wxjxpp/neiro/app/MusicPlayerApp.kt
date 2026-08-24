@@ -7,7 +7,6 @@ import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalSharedTransitionApi
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.snap
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -98,48 +97,51 @@ fun MusicPlayerApp(container: AppContainer) {
     val uiState by viewModel.uiState.collectAsState()
     val playback by viewModel.playbackState.collectAsState()
     val queue by viewModel.queue.collectAsState()
-    // Sheet 进度：0 收起 / 1 播放页 / 2 歌词页。直接驱动渲染层，天然跟手。
-    val rawProgress by viewModel.sheetProgress.collectAsState()
-    val density = LocalDensity.current
-
-    fun snapTargetOf(progress: Float): Float = when {
-        progress >= 1.5f -> 2f
-        progress >= 0.5f -> 1f
-        else -> 0f
-    }
-
+    val scope = rememberCoroutineScope()
     /**
-     * Sheet 进度引擎：
-     * - 拖拽中（dragging=true）：动画规格为 snap（零时长），进度即手指位置，全程跟手；
-     * - 松手/程序化：tween 平滑收敛到锚点，同时每帧回写 VM，
-     *   保证下次按下时起点就是当前视觉位置（不跳变）。
+     * 播放页位移引擎（像素级，非 Sheet 进度）：
+     * - offsetFraction：0=收起（仅播放栏） 1=播放页全开 2=歌词页全开；
+     * - 拖拽：手指动多少像素，页面就位移多少像素（1:1 跟手，无任何映射/动画介入）；
+     * - 松手：只允许收敛到【相邻】锚点——从收起最多到播放页，从播放页最多到歌词页，
+     *   物理上不可能"一把拉到歌词页"；本帧位移方向参与判定（甩动手势）；
+     * - 程序化（点按钮/返回键）：Animatable 平滑动画到目标锚点。
      */
-    var programmaticTarget by remember { mutableStateOf(0f) }
+    val density = LocalDensity.current
+    val offsetAnim = remember { androidx.compose.animation.core.Animatable(0f) }
     var dragging by remember { mutableStateOf(false) }
-    val sheetProgress by animateFloatAsState(
-        targetValue = if (dragging) rawProgress else programmaticTarget,
-        animationSpec = if (dragging) snap() else tween(320),
-        label = "sheetProgress",
-    )
-    // 松手边沿：把当前进度收敛到最近锚点（只在 dragging true→false 时触发一次，
-    // 绝不干扰程序化目标——否则“显示歌词”按钮的 2f 目标会被立刻拉回当前锚点）
-    var wasDragging by remember { mutableStateOf(false) }
-    LaunchedEffect(dragging) {
-        if (wasDragging && !dragging) {
-            programmaticTarget = snapTargetOf(rawProgress)
-        }
-        wasDragging = dragging
+    var lastDragDelta by remember { mutableStateOf(0f) }
+    val offsetFraction = offsetAnim.value
+    val playerOpen = offsetFraction > 0.02f
+    val lyricsOpen = offsetFraction > 1.5f
+    /** 程序化跳转到锚点（带动画）。 */
+    fun animateTo(target: Float) {
+        scope.launch { offsetAnim.animateTo(target, tween(300)) }
     }
-    // 非拖拽期间持续回写 VM（动画中途按下也能从正确位置继续）
-    LaunchedEffect(sheetProgress, dragging) {
-        if (!dragging && rawProgress != sheetProgress) {
-            viewModel.setSheetProgress(sheetProgress)
+    /** 松手收敛：只允许移动到【相邻】锚点（±1），甩动手势可强化方向选择。 */
+    fun settleAfterDrag() {
+        val cur = offsetAnim.value
+        val lower = cur.toInt().coerceIn(0, 1)          // 下邻锚点
+        val upper = (lower + 1).coerceAtMost(2)         // 上邻锚点（最多 +1，绝无跨级）
+        var target = if (cur - lower > upper - cur) upper else lower
+        // 最后一帧位移较大 = 甩动：顺着手势方向去相邻锚点
+        if (lastDragDelta < -10f && target < upper) target = upper
+        if (lastDragDelta > 10f && target > lower) target = lower
+        dragging = false
+        lastDragDelta = 0f
+        animateTo(target.toFloat())
+    }
+    /** 拖拽中：像素 1:1 跟手（deltaPx 为本帧位移，向上为负；1 屏高度 = 1 单位）。 */
+    val screenHdp = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp
+    fun onDragDelta(deltaPx: Float) {
+        if (!dragging) dragging = true
+        lastDragDelta = deltaPx
+        val dpDelta = with(density) { deltaPx.toDp() }.value
+        scope.launch {
+            offsetAnim.snapTo((offsetAnim.value - dpDelta / screenHdp.coerceAtLeast(1)).coerceIn(0f, 2f))
         }
     }
 
     val hasSong = playback.current != null
-    val playerOpen = sheetProgress > 0.01f
-    val lyricsOpen = sheetProgress > 1.01f
 
     // 全局一次性提示（音源导入失败等轻提示保留 Snackbar）
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
@@ -149,7 +151,6 @@ fun MusicPlayerApp(container: AppContainer) {
 
     var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val scope = rememberCoroutineScope()
     val dimens = AppTheme.dimens
 
     // 弹层状态（提前声明，供播放栏等回调引用）
@@ -198,8 +199,8 @@ fun MusicPlayerApp(container: AppContainer) {
     BackHandler(enabled = inSelectionMode || lyricsOpen || playerOpen || drawerState.isOpen || route != Destination.Home.route) {
         when {
             inSelectionMode -> viewModel.clearSelection()
-            lyricsOpen -> programmaticTarget = 1f          // 歌词页 → 播放页
-            playerOpen -> programmaticTarget = 0f          // 播放页 → 播放栏
+            lyricsOpen -> animateTo(1f)                    // 歌词页 → 播放页
+            playerOpen -> animateTo(0f)                    // 播放页 → 播放栏
             drawerState.isOpen -> scope.launch { drawerState.close() }
             route != Destination.Home.route -> route = Destination.Home.route
         }
@@ -291,20 +292,12 @@ fun MusicPlayerApp(container: AppContainer) {
                                 PlayerBar(
                                     state = playback,
                                     floating = uiState.floatingPlayerBar,
-                                    onExpand = { programmaticTarget = 1f },
+                                    onExpand = { animateTo(1f) },
                                     onTogglePlay = viewModel::togglePlay,
                                     onNext = viewModel::next,
                                     onOpenQueue = { showQueueSheet = true },
-                                    // 上滑跟手：把手指位移映射为 Sheet 进度（0→1）
-                                    onDragProgress = { deltaPx ->
-                                        dragging = true
-                                        val step = with(density) { deltaPx.toDp() } / dimens.playerBarHeight
-                                        viewModel.setSheetProgress((rawProgress - step).coerceIn(0f, 2f))
-                                    },
-                                    onDragEnd = {
-                                        dragging = false
-                                        programmaticTarget = snapTargetOf(rawProgress)
-                                    },
+                                    onDragProgress = { deltaPx -> onDragDelta(deltaPx) },
+                                    onDragEnd = { settleAfterDrag() },
                                 )
                             }
                         }
@@ -318,14 +311,14 @@ fun MusicPlayerApp(container: AppContainer) {
                 }
             }
 
-            // ---- 播放页/歌词页 Sheet：一条连续进度驱动，拖拽全程跟手 ----
+            // ---- 播放页/歌词页：像素级偏移，拖拽 1:1 跟手 ----
             if (hasSong) {
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            translationY = size.height * (1f - (sheetProgress / 2f).coerceIn(0f, 1f))
-                            alpha = (sheetProgress * 8f).coerceIn(0f, 1f)
+                            translationY = size.height * (1f - (offsetFraction / 2f).coerceIn(0f, 1f))
+                            alpha = (offsetFraction * 8f).coerceIn(0f, 1f)
                         },
                 ) {
                     PlayerDetailScreen(
@@ -340,18 +333,11 @@ fun MusicPlayerApp(container: AppContainer) {
                         lyricsFontScale = uiState.lyricsFontScale,
                         lyricsGapScale = uiState.lyricsGapScale,
                         pureModeDefault = uiState.pureModeDefault,
-                        sheetProgress = sheetProgress,
-                        onCollapseToPlayer = { programmaticTarget = 1f },
-                        onExpandLyrics = { programmaticTarget = 2f },
-                        onDrag = { deltaPx ->
-                            dragging = true
-                            val step = with(density) { deltaPx.toDp() } / (dimens.playerBarHeight * 1.4f)
-                            viewModel.setSheetProgress((rawProgress - step).coerceIn(0f, 2f))
-                        },
-                        onDragEnd = {
-                            dragging = false
-                            programmaticTarget = snapTargetOf(rawProgress)
-                        },
+                        sheetProgress = offsetFraction,
+                        onCollapseToPlayer = { animateTo(1f) },
+                        onExpandLyrics = { animateTo(2f) },
+                        onDrag = { deltaPx -> onDragDelta(deltaPx) },
+                        onDragEnd = { settleAfterDrag() },
                         onTogglePlay = viewModel::togglePlay,
                         onNext = viewModel::next,
                         onPrevious = viewModel::previous,
