@@ -197,6 +197,8 @@ private fun RoomView(
     transport: LitTogetherTransport,
     player: PlayerController,
     onMessage: (String) -> Unit,
+    search: com.wxjxpp.neiro.core.search.OnlineSearchRepository,
+    resolveUrl: suspend (com.wxjxpp.neiro.core.model.Song) -> String?,
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
@@ -587,9 +589,6 @@ private fun SongPickDialog(
                     }
                 }
             }
-        },
-        neutralButton = {
-            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("关闭") }
         },
     )
 }
