@@ -2,6 +2,7 @@ package com.wxjxpp.neiro.feature.discover
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -24,6 +25,7 @@ import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.CircularWavyProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +34,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -161,11 +164,11 @@ fun DiscoverScreen(
                 // 榜单快捷入口（横向胶囊）
                 if (toplists.isNotEmpty()) {
                     item(key = "quick_toplists") {
-                        androidx.compose.foundation.lazy.LazyRow(
+                        LazyRow(
                             contentPadding = PaddingValues(horizontal = AppTheme.dimens.spaceLg),
                             horizontalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceXs),
                         ) {
-                            androidx.compose.foundation.lazy.items(toplists) { ref ->
+                            items(toplists, key = { it.id }) { ref ->
                                 Surface(
                                     shape = RoundedCornerShape(20.dp),
                                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),

@@ -55,12 +55,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
-import androidx.compose.ui.draw.compositingStrategy
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -714,7 +714,7 @@ private fun CurrentLineBanner(
                         blendMode = BlendMode.DstIn,
                     )
                 }
-                .compositingStrategy(CompositingStrategy.Offscreen),
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen),
         ) {
             for (i in window) {
                 if (i < 0 || i >= lines.size) continue
