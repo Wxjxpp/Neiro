@@ -85,9 +85,10 @@ interface AppContainer {
 
     val userApiStore: UserApiStore
     val userApiEngine: UserApiEngine
-
     /** 在线聚合搜索。 */
     val onlineSearch: OnlineSearchRepository
+    /** 用本机音源脚本解析在线歌曲的播放直链（一起听点歌用）。失败返回 Failure。 */
+    suspend fun resolveRemoteUrl(song: Song): com.wxjxpp.neiro.core.player.Media3PlayerController.RemoteUrl
 
     /** 在线歌曲/歌词下载。 */
     val downloadManager: com.wxjxpp.neiro.core.download.DownloadManager
