@@ -20,6 +20,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.ArrowDownward
 import androidx.compose.material.icons.rounded.ArrowUpward
@@ -53,6 +54,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -65,6 +67,7 @@ import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
+import kotlinx.coroutines.launch
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -86,6 +89,8 @@ fun HomeScreen(
     songs: List<Song>,
     isRefreshing: Boolean,
     selectedIds: Set<String>,
+    /** 当前正在播放的歌曲 id（用于高亮与"定位当前播放"）。 */
+    currentPlayingId: String? = null,
     topBar: @Composable () -> Unit = {},
     onRefresh: () -> Unit,
     onSongClick: (Song) -> Unit,
@@ -98,6 +103,8 @@ fun HomeScreen(
 ) {
     val refreshState = rememberPullToRefreshState()
     val inSelectionMode = selectedIds.isNotEmpty()
+    // 一键回顶 / 定位当前播放
+    val listState = rememberLazyListState()
     // 歌曲详情面板 & 删除确认
     var detailSong by remember { mutableStateOf<Song?>(null) }
     var confirmDelete by remember { mutableStateOf<Song?>(null) }
@@ -113,8 +120,9 @@ fun HomeScreen(
             onFinalizeDeleteFile(target)
         }
     }
-    Column(modifier = modifier.fillMaxSize()) {
+        Column(modifier = modifier.fillMaxSize()) {
         topBar()
+        Box(modifier = Modifier.fillMaxSize()) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
@@ -130,6 +138,7 @@ fun HomeScreen(
         ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = listState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
                 items(songs, key = { it.id }) { song ->
@@ -137,12 +146,26 @@ fun HomeScreen(
                         song = song,
                         selected = song.id in selectedIds,
                         inSelectionMode = inSelectionMode,
+                        isPlaying = song.id == currentPlayingId,
                         onClick = { onSongClick(song) },
                         onLongClick = { onSongLongPress(song) },
                         onOpenDetail = { detailSong = song },
                     )
                 }
             }
+        }
+        // 悬浮操作组：回顶 + 定位当前播放（右侧，避开播放栏）
+        val scope = rememberCoroutineScope()
+        com.wxjxpp.neiro.ui.components.ScrollActions(
+            listState = listState,
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = AppTheme.dimens.spaceLg, bottom = AppTheme.dimens.spaceLg),
+            onLocate = {
+                val index = songs.indexOfFirst { it.id == currentPlayingId }
+                if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+            },
+        )
         }
     }
 
@@ -286,6 +309,7 @@ private fun SongRow(
     song: Song,
     selected: Boolean,
     inSelectionMode: Boolean,
+    isPlaying: Boolean = false,
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     onOpenDetail: () -> Unit,
@@ -316,7 +340,13 @@ private fun SongRow(
             }
         }
         Column(modifier = Modifier.weight(1f)) {
-            Text(song.title, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(
+                text = song.title + if (isPlaying) " ♪" else "",
+                style = MaterialTheme.typography.bodyLarge,
+                color = if (isPlaying) MaterialTheme.colorScheme.primary else Color.Unspecified,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
             Text(
                 text = "${song.artistName} · ${song.albumTitle}",
                 style = MaterialTheme.typography.bodySmall,

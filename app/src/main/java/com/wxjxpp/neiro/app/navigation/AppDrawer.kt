@@ -13,6 +13,7 @@ import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Book
 import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Extension
+import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.Groups
 import androidx.compose.material.icons.rounded.Insights
 import androidx.compose.material.icons.rounded.LibraryMusic
@@ -53,6 +54,7 @@ fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildLis
     add(DrawerItem(Destination.Home, "歌曲", Icons.Rounded.MusicNote, DrawerGroup.Library))
     add(DrawerItem(Destination.Albums, "专辑", Icons.Rounded.Album, DrawerGroup.Library))
     add(DrawerItem(Destination.Playlists, "歌单", Icons.Rounded.QueueMusic, DrawerGroup.Library))
+    add(DrawerItem(Destination.Favorites, "喜爱", Icons.Rounded.Favorite, DrawerGroup.Library))
     add(DrawerItem(Destination.Discover, "发现", Icons.Rounded.Explore, DrawerGroup.Library))
     add(DrawerItem(Destination.MusicSources, "自定义音源", Icons.Rounded.Extension, DrawerGroup.Library))
     add(DrawerItem(Destination.Diary, "听歌日记", Icons.Rounded.Book, DrawerGroup.Personal))

@@ -182,7 +182,10 @@ fun SearchScreen(
                     HintText("在线搜索失败：${onlineFailed.joinToString("、")}")
                 }
             }
-            else -> LazyColumn(modifier = Modifier.fillMaxSize()) {
+            else -> LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+            ) {
                 // 聚合模式下同时展示在线 + 本地，带切换开关
                 if (currentOnlinePlatform == OnlineSearchRepository.ALL) {
                     item {
@@ -339,7 +342,6 @@ private fun SearchResultRow(
                 if (selected) MaterialTheme.colorScheme.secondaryContainer
                 else Color.Transparent,
             )
-            .clickable(onClick = onClick)
             .padding(horizontal = dimens.spaceLg),
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),

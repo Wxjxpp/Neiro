@@ -376,14 +376,14 @@ class AppViewModel(
         _uiState.update { it.copy(albumSortDescending = descending) }
     }
 
-    /** 加载听歌热力图（最近一年）。 */
+    /** 加载听歌热力图（近两年，覆盖月视图向前翻页）。 */
     fun loadHeatmap() {
         if (_uiState.value.isHeatmapLoading) return
         _uiState.update { it.copy(isHeatmapLoading = true) }
         viewModelScope.launch {
             val now = System.currentTimeMillis()
-            val yearAgo = now - 365L * 24 * 60 * 60 * 1000
-            val days = runCatching { container.statsRepository.heatmap(yearAgo, now) }
+            val twoYearsAgo = now - 730L * 24 * 60 * 60 * 1000
+            val days = runCatching { container.statsRepository.heatmap(twoYearsAgo, now) }
                 .getOrDefault(emptyList<HeatmapDay>())
             _uiState.update { it.copy(heatmapDays = days, isHeatmapLoading = false) }
         }
@@ -405,16 +405,15 @@ class AppViewModel(
 
     fun play(song: Song) = container.playerController.play(song)
 
-    /** 下载在线歌曲文件到公共音乐目录。 */
+    /** 下载在线歌曲文件到公共音乐目录。开始/结束都走顶部横幅，进度可见。 */
     fun downloadSong(song: Song) {
-        viewModelScope.launch { notifyVia(container.downloadManager.downloadSong(song)) }
+        container.showError("开始下载「${song.title}」，请在通知栏查看进度")
+        viewModelScope.launch { container.showError(container.downloadManager.downloadSong(song)) }
     }
-
     /** 下载在线歌词到公共文档目录。 */
     fun downloadLyrics(song: Song) {
-        viewModelScope.launch { notifyVia(container.downloadManager.downloadLyrics(song)) }
+        viewModelScope.launch { container.showError(container.downloadManager.downloadLyrics(song)) }
     }
-    private suspend fun notifyVia(message: String) { container.notify(message) }
     fun togglePlay() = container.playerController.togglePlay()
     fun next() = container.playerController.next()
     fun previous() = container.playerController.previous()
@@ -641,6 +640,9 @@ class AppViewModel(
     /** 连续下载多首（逐首排队，失败不中断；完成一首移除一个进行中标记）。 */
     fun downloadSongs(songsToDownload: List<Song>) {
         if (songsToDownload.isEmpty()) return
+        container.showError(
+            "开始下载 ${songsToDownload.size} 首，请在通知栏查看进度",
+        )
         viewModelScope.launch {
             _uiState.update {
                 it.copy(downloadingIds = it.downloadingIds + songsToDownload.map { s -> s.id }.toSet())
@@ -650,13 +652,14 @@ class AppViewModel(
                 try {
                     container.downloadManager.downloadSong(s)
                     ok++
-                    notify("已下载：${s.title}")
                 } catch (e: Exception) {
-                    notify("下载失败：${s.title}（${e.message?.take(60)}）")
+                    container.showError("下载失败：${s.title}（${e.message?.take(60)}）")
                 }
                 _uiState.update { it.copy(downloadingIds = it.downloadingIds - s.id) }
             }
-            if (songsToDownload.size > 1) notify("批量下载完成 $ok/${songsToDownload.size}")
+            if (songsToDownload.size > 1) {
+                container.showError("批量下载完成 $ok/${songsToDownload.size}，请到 Music/Neiro 查看")
+            }
         }
     }
 

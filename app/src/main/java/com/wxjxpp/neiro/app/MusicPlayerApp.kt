@@ -67,6 +67,7 @@ import com.wxjxpp.neiro.feature.placeholder.PlaceholderScreen
 import com.wxjxpp.neiro.feature.player.PlayerBar
 import com.wxjxpp.neiro.feature.player.PlayerDetailScreen
 import com.wxjxpp.neiro.feature.diary.DiaryScreen
+import com.wxjxpp.neiro.feature.favorites.FavoritesScreen
 import com.wxjxpp.neiro.feature.player.QueueSheet
 import com.wxjxpp.neiro.feature.playlist.PickPlaylistDialog
 import com.wxjxpp.neiro.feature.playlist.PlaylistsScreen
@@ -317,7 +318,9 @@ fun MusicPlayerApp(container: AppContainer) {
                     modifier = Modifier
                         .fillMaxSize()
                         .graphicsLayer {
-                            translationY = size.height * (1f - (offsetFraction / 2f).coerceIn(0f, 1f))
+                            // 锚点语义：0=整页藏在屏幕下 1=播放页完全盖住屏幕 2=歌词页。
+                            // 注意分母必须是 1：除以 2 会让"播放页全开"仍停在半屏（Sheet 残留感）。
+                            translationY = size.height * (1f - offsetFraction.coerceIn(0f, 1f))
                             alpha = (offsetFraction * 8f).coerceIn(0f, 1f)
                         },
                 ) {
@@ -504,6 +507,7 @@ private fun RouteContent(
                         songs = uiState.songs,
                         isRefreshing = uiState.isRefreshing,
                         selectedIds = uiState.selectedSongIds,
+                        currentPlayingId = playback.current?.id,
                         topBar = {
                             if (inSelectionModeCompat(uiState)) {
                                 SelectionTopBar(
@@ -567,6 +571,8 @@ private fun RouteContent(
                 Destination.Discover.route -> DiscoverScreen(
                     sections = uiState.discoverSections,
                     isLoading = uiState.isDiscoverLoading,
+                    isRefreshing = uiState.isDiscoverLoading && uiState.discoverSections.isNotEmpty(),
+                    onRefresh = viewModel::loadDiscover,
                     detailId = uiState.discoverDetailId,
                     detailSongs = uiState.discoverDetailSongs,
                     isDetailLoading = uiState.isDiscoverDetailLoading,
@@ -684,6 +690,17 @@ private fun RouteContent(
                     days = uiState.heatmapDays,
                     isLoading = uiState.isHeatmapLoading,
                     onOpenDrawer = onOpenDrawer,
+                    contentPadding = contentPadding,
+                    modifier = Modifier.fillMaxSize(),
+                )
+
+                Destination.Favorites.route -> FavoritesScreen(
+                    songs = uiState.favoriteSongs,
+                    downloadingIds = uiState.downloadingIds,
+                    onOpenDrawer = onOpenDrawer,
+                    onSongClick = viewModel::play,
+                    onRemoveFavorite = viewModel::toggleFavorite,
+                    onDownloadSong = { song -> viewModel.downloadSongs(listOf(song)) },
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )

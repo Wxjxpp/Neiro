@@ -174,7 +174,7 @@ fun AlbumsScreen(
     }
 }
 
-/** 专辑详情：本专辑曲目（本地）+ 收藏/歌单中同专辑名的歌曲（去重），支持播放。 */
+/** 专辑详情：头部信息（封面/歌手/总时长）+ 本专辑曲目（本地）+ 收藏/歌单中同专辑名的歌曲（去重），支持播放。 */
 @Composable
 private fun AlbumDetailList(
     songs: List<Song>,
@@ -198,6 +198,9 @@ private fun AlbumDetailList(
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
     ) {
+        item(key = "album_header") {
+            AlbumHeader(entry = opened!!, songCount = merged.size)
+        }
         lazyItems(merged, key = { it.id }) { song ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
@@ -233,6 +236,52 @@ private fun AlbumDetailList(
             }
             HorizontalDivider()
         }
+    }
+}
+
+/** 专辑详情头部：小封面 + 歌手 + 总时长 + 曲目数。 */
+@Composable
+private fun AlbumHeader(entry: AlbumEntry, songCount: Int) {
+    val dimens = AppTheme.dimens
+    // 总时长：所有曲目 durationMs 求和（在线歌曲元数据缺失时按 0 计）
+    val totalMs = entry.songs.sumOf { it.durationMs }
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
+    ) {
+        AsyncImage(
+            model = entry.coverUri,
+            contentDescription = entry.title,
+            contentScale = ContentScale.Crop,
+            modifier = Modifier
+                .size(72.dp)
+                .clip(RoundedCornerShape(10.dp)),
+        )
+        Column(modifier = Modifier.weight(1f).padding(start = dimens.spaceMd)) {
+            Text(
+                text = entry.artistName.ifBlank { "未知歌手" },
+                style = MaterialTheme.typography.titleMedium,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                text = "$songCount 首 · ${formatTotalDuration(totalMs)}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+}
+
+/** 毫秒 → 「X时Y分」/「Y分钟」。 */
+private fun formatTotalDuration(ms: Long): String {
+    val minutes = ms / 60000
+    return when {
+        minutes >= 60 -> "${minutes / 60} 时 ${minutes % 60} 分"
+        minutes > 0 -> "$minutes 分钟"
+        else -> "时长未知"
     }
 }
 

@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
@@ -24,6 +25,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -70,7 +72,16 @@ fun QueueSheet(
             )
             return@ModalBottomSheet
         }
-        LazyColumn(modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) {
+        // 打开时自动定位到当前播放歌曲
+        val listState = rememberLazyListState()
+        LaunchedEffect(currentSongId, queue.size) {
+            val index = queue.indexOfFirst { it.id == currentSongId }
+            if (index > 0) listState.scrollToItem(index)
+        }
+        LazyColumn(
+            modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp),
+            state = listState,
+        ) {
             itemsIndexed(queue, key = { _, song -> song.id }) { index, song ->
                 val isCurrent = song.id == currentSongId
                 val isFavorite = song.id in favoriteIds

@@ -14,6 +14,8 @@ sealed class Destination(val route: String) {
     data object Discover : Destination("discover")
     /** 专辑墙：双列网格展示本地曲库专辑。 */
     data object Albums : Destination("albums")
+    /** 喜爱页：本地收藏夹。 */
+    data object Favorites : Destination("favorites")
     data object Search : Destination("search")
     data object Library : Destination("library")
     data object Playlists : Destination("playlists")

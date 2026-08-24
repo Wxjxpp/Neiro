@@ -113,7 +113,10 @@ fun PlaylistsScreen(
                 modifier = Modifier.padding(dimens.spaceLg),
             )
         } else {
-            LazyColumn(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
+                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+            ) {
                 items(playlists, key = { it.id }) { playlist ->
                     ListItem(
                         modifier = Modifier.clickable { openedId = playlist.id },

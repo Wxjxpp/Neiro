@@ -61,9 +61,25 @@ class Media3PlayerController(
             updateNoisyReceiver()
         }
 
+
     /** 其他应用抢占音频焦点时暂停。默认开。 */
     @Volatile
     override var pauseOnAudioFocusLoss: Boolean = true
+
+    /**
+     * 系统媒体通知（MediaSession）。
+     *
+     * 惰性创建：第一次真正开始播放时挂到共享会话上，
+     * 之后系统媒体通知/锁屏/耳机按钮都通过这个会话控制播放器。
+     */
+    fun ensureMediaSession() {
+        onPlayer { p ->
+            val session = PlaybackSessionHolder.getOrCreate(context)
+            if (session.player != p) {
+                PlaybackSessionHolder.attach(p)
+            }
+        }
+    }
 
     /** AUDIO_BECOMING_NOISY 广播接收器：拔出耳机/断开蓝牙时系统会发此广播。 */
     private val becomingNoisyReceiver = object : BroadcastReceiver() {
@@ -254,6 +270,7 @@ class Media3PlayerController(
             rebuildShuffleOrder()
         }
         _state.update { it.copy(current = song, durationMs = song.durationMs, positionMs = 0L) }
+        ensureMediaSession()
         prepare(song, playWhenReady = true)
     }
 

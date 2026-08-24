@@ -34,6 +34,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -59,6 +60,8 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 fun DiscoverScreen(
     sections: List<DiscoverRepository.Section>,
     isLoading: Boolean,
+    isRefreshing: Boolean = false,
+    onRefresh: () -> Unit = {},
     detailId: String?,
     detailSongs: List<Song>,
     isDetailLoading: Boolean,
@@ -118,7 +121,12 @@ fun DiscoverScreen(
                 CircularWavyProgressIndicator()
             }
             sections.isEmpty() -> DiscoverEmpty()
-            else -> LazyColumn(
+            else -> PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier.fillMaxSize(),
+            ) {
+            LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
@@ -145,6 +153,7 @@ fun DiscoverScreen(
                         Spacer(Modifier.height(AppTheme.dimens.spaceMd))
                     }
                 }
+            }
             }
         }
     }
