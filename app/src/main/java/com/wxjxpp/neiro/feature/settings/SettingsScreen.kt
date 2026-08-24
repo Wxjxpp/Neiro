@@ -288,14 +288,14 @@ fun SettingsScreen(
                         }
                     }
                     Text(
-                        text = "取流失败时自动换源；全部音源失败后再按下面的方向调整音质重试一轮。",
+                        text = "取流失败时按下面的方向逐级调整音质重试；只使用歌曲自身平台的音源，不会跨平台自动换源。",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = AppTheme.dimens.spaceSm),
                     )
                     HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     Text(
-                        text = "音质回退方向（全部换源失败后生效）",
+                        text = "音质回退方向（同一首歌逐级调整音质重试）",
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
                     )

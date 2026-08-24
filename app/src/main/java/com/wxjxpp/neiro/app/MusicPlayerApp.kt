@@ -647,6 +647,7 @@ private fun RouteContent(
                     onDeactivate = viewModel::deactivateUserApi,
                     onUpdate = viewModel::updateUserApi,
                     onRemove = viewModel::removeUserApi,
+                    onOpenDrawer = onOpenDrawer,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )

@@ -500,7 +500,7 @@ internal fun todayStart(): Long = Calendar.getInstance().apply {
     set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
 }.timeInMillis
 
-/** 该月日历格子（含前置补位 null）；未来日期不包含。 */
+/** 该月日历格子（含前后补位 null，保证每行都是 7 列）；全部日期都包含。 */
 internal fun buildMonthCells(monthCal: Calendar): List<Long?> {
     val today = todayStart()
     val cal = (monthCal.clone() as Calendar).apply {
@@ -514,6 +514,8 @@ internal fun buildMonthCells(monthCal: Calendar): List<Long?> {
         cal.set(Calendar.DAY_OF_MONTH, d)
         cells += cal.timeInMillis
     }
+    // 末行补 null 占位到 7 列：weight(1f) 均分行宽，否则末行格子被拉伸成大块
+    while (cells.size % 7 != 0) cells += null
     return cells
 }
 

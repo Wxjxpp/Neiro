@@ -291,11 +291,13 @@ private val registry = DefaultMusicSourceRegistry(
     }
 
     /**
-     * 在线歌曲取流，带两级自动回退：
-     * 1. 换源：当前平台失败 → 轮询其他 LX 平台（wy→kw→kg→tx→mg）找可用直链
-     * 2. 音质：全部平台失败 → 按设置方向调整音质重试一轮
+     * 在线歌曲取流：**仅使用歌曲自身平台的脚本**，绝不跨平台自动换源。
      *
-     * 换源成功的歌会临时改挂到实际取流的源上播放（不改曲库元数据）。
+     * （历史行为：当前平台失败后轮询其他 LX 平台搜同名歌——LX 脚本缺 hash 时
+     * 会按歌名模糊匹配，经常返回同名不同曲的直链，导致「封面 A 放出歌 B」。
+     * 已按产品要求移除。）
+     *
+     * 音质回退保留：同一首歌按设置方向逐级降/升音质重试，不会改变曲目本身。
      */
     private suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.RemoteUrl {
         val location = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Remote
@@ -315,31 +317,31 @@ private val registry = DefaultMusicSourceRegistry(
                 add(q)
             }
         }
-        // 平台顺序：当前源优先，其余按注册表顺序
-        val orderedSources = listOfNotNull(registry.find(location.sourceId) as? OnlineMusicSource) +
-            activeOnlineSources.filter { it.id != location.sourceId }
-
+        // 只用歌曲自身平台的脚本取流；绝不跨平台搜同名歌（防串歌）
+        val orderedSources = listOfNotNull(registry.find(location.sourceId) as? OnlineMusicSource)
         val failures = mutableListOf<String>()
         for (quality in qualities) {
             for (source in orderedSources) {
-                // 只试脚本声明支持的源；换源时用目标源的 id 构造请求
                 val actions = activeCapabilities[source.scriptPlatformId] ?: continue
-                if ("musicUrl" !in actions) continue
-                val targetSong = if (source.id == location.sourceId) song else song.copy(
-                    id = "${source.id}:${location.songId}",
-                    location = location.copy(sourceId = source.id),
-                )
-                val label = if (source.id == location.sourceId) "" else "（换源 ${source.displayName}）"
-                when (val r = source.resolvePlayUrlDetailed(targetSong, quality)) {
+                if ("musicUrl" !in actions) {
+                    failures += "[$quality] 音源脚本不支持${source.displayName}，请检查「自定义音源」"
+                    continue
+                }
+                when (val r = source.resolvePlayUrlDetailed(song, quality)) {
                     is OnlineMusicSource.PlayUrlResult.Success ->
                         return Media3PlayerController.RemoteUrl.Success(r.url)
                     is OnlineMusicSource.PlayUrlResult.Failure ->
-                        failures += "[$quality$label] ${r.reason.take(80)}"
+                        failures += "[$quality] ${r.reason.take(80)}"
                 }
             }
         }
+        if (orderedSources.isEmpty()) {
+            return Media3PlayerController.RemoteUrl.Failure(
+                "没有找到歌曲所属平台（${location.sourceId}）的音源"
+            )
+        }
         return Media3PlayerController.RemoteUrl.Failure(
-            "「${song.title}」所有音质/平台均失败：\n" + failures.takeLast(4).joinToString("\n")
+            "「${song.title}」各音质档位均取流失败：\n" + failures.takeLast(4).joinToString("\n")
         )
     }
 

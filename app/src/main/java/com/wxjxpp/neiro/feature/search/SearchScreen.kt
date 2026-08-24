@@ -137,10 +137,11 @@ fun SearchScreen(
             },
             expanded = active,
             onExpandedChange = { active = it },
-            // 侧边安全区：搜索条不再抵到屏幕边缘
+            // 收起态：水平边距让搜索条不抵屏幕边缘；展开态全屏接管（去掉 padding，
+            // 否则 M3 全屏 SearchBar 内容被挤到中间、顶部/两侧露白）
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = dimens.spaceMd),
+                .then(if (active) Modifier else Modifier.padding(horizontal = dimens.spaceMd)),
         ) {
             // 展开态正文：轻提示（不做历史记录）
             Text(

@@ -298,6 +298,7 @@ private fun AlbumsTopBar(
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     TopAppBar(
+        windowInsets = WindowInsets(0),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.Album, contentDescription = null)

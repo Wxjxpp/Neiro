@@ -18,7 +18,8 @@ import org.json.JSONObject
  * - 猜你喜欢：以"最近播放的歌手/歌名"为种子走搜索接口
  *
  * 返回的歌曲全部带 Remote location（payload 为平台原始 JSON），
- * 播放统一交给用户导入的音源（含自动换源回退），本仓库不做取流。
+ * 播放统一交给用户导入的音源脚本（仅限歌曲自身平台，绝不跨平台换源），
+ * 本仓库不做取流。
  */
 class DiscoverRepository(
     private val http: HttpClient,
