@@ -59,6 +59,13 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         /** 上次播放歌曲的完整快照（JSON），用于跨会话恢复在线歌曲。 */
         val LastSongJson = stringPreferencesKey("last_song_json")
         /** 最近播放的歌曲快照列表（JSON 数组），供"最近播放"展示与恢复。 */
+        // ---- 一起听 ----
+        val TogetherServerUrl = stringPreferencesKey("together_server_url")
+        val TogetherNickname = stringPreferencesKey("together_nickname")
+        val TogetherRoomId = stringPreferencesKey("together_room_id")
+        val TogetherMemberId = stringPreferencesKey("together_member_id")
+        val TogetherMemberSecret = stringPreferencesKey("together_member_secret")
+        val TogetherToken = stringPreferencesKey("together_token")
         val RecentSongsJson = stringPreferencesKey("recent_songs_json")
         /** 本地收藏夹（歌曲快照 JSON 数组，在线/本地均可）。 */
         val FavoriteSongsJson = stringPreferencesKey("favorite_songs_json")
@@ -173,6 +180,44 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     /** 网易云 Cookie（`MUSIC_U=xxx`），用于解锁 VIP / 无版权歌曲取流。 */
     fun observeNeteaseCookie(): Flow<String> =
         store.data.map { it[Keys.NeteaseCookie].orEmpty() }
+
+    // ---- 一起听 ----
+    /** 一起听服务端地址（如 https://wxjxpp.de5.net）。 */
+    fun observeTogetherServerUrl(): Flow<String> =
+        store.data.map { it[Keys.TogetherServerUrl].orEmpty() }
+    suspend fun setTogetherServerUrl(url: String) {
+        store.edit { it[Keys.TogetherServerUrl] = url.trim().trimEnd('/') }
+    }
+    fun observeTogetherNickname(): Flow<String> =
+        store.data.map { it[Keys.TogetherNickname].orEmpty() }
+    suspend fun setTogetherNickname(nickname: String) {
+        store.edit { it[Keys.TogetherNickname] = nickname }
+    }
+    /** 会话凭据：用于断线重连（memberSecret）与恢复房间。 */
+    fun observeTogetherSession(): Flow<List<String>> = store.data.map { prefs ->
+        listOf(
+            prefs[Keys.TogetherRoomId].orEmpty(),
+            prefs[Keys.TogetherMemberId].orEmpty(),
+            prefs[Keys.TogetherMemberSecret].orEmpty(),
+            prefs[Keys.TogetherToken].orEmpty(),
+        )
+    }
+    suspend fun setTogetherSession(roomId: String, memberId: String, memberSecret: String, token: String) {
+        store.edit {
+            it[Keys.TogetherRoomId] = roomId
+            it[Keys.TogetherMemberId] = memberId
+            it[Keys.TogetherMemberSecret] = memberSecret
+            it[Keys.TogetherToken] = token
+        }
+    }
+    suspend fun clearTogetherSession() {
+        store.edit {
+            it.remove(Keys.TogetherRoomId)
+            it.remove(Keys.TogetherMemberId)
+            it.remove(Keys.TogetherMemberSecret)
+            it.remove(Keys.TogetherToken)
+        }
+    }
     suspend fun setNeteaseCookie(cookie: String) {
         store.edit { it[Keys.NeteaseCookie] = cookie.trim() }
     }

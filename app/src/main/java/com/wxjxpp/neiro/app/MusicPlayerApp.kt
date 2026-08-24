@@ -55,6 +55,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.app.navigation.AppDrawerSheet
+import com.wxjxpp.neiro.feature.together.TogetherScreen
+import com.wxjxpp.neiro.core.together.LitTogetherTransport
 import com.wxjxpp.neiro.app.navigation.Destination
 import com.wxjxpp.neiro.feature.albums.AlbumSortField
 import com.wxjxpp.neiro.feature.albums.AlbumsScreen
@@ -719,10 +721,10 @@ private fun RouteContent(
                     modifier = Modifier.fillMaxSize(),
                 )
 
-                Destination.Together.route -> PlaceholderScreen(
-                    title = "",
-                    description = "一起听：实现 TogetherTransport 后可创建 / 加入房间",
-                    onOpenDrawer = onOpenDrawer,
+                Destination.Together.route -> TogetherScreen(
+                    transport = container.togetherTransport as LitTogetherTransport,
+                    player = container.playerController,
+                    onMessage = { scope.launch { snackbarHostState.showSnackbar(it) } },
                     modifier = Modifier.fillMaxSize(),
                 )
 

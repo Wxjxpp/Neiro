@@ -37,6 +37,7 @@ import com.wxjxpp.neiro.core.source.OnlineMusicSource
 import com.wxjxpp.neiro.core.source.online.defaultOnlinePlatforms
 import com.wxjxpp.neiro.core.source.online.lxSourceOf
 import com.wxjxpp.neiro.core.together.NoopTogetherTransport
+import com.wxjxpp.neiro.core.together.LitTogetherTransport
 import com.wxjxpp.neiro.core.together.TogetherTransport
 import com.wxjxpp.neiro.core.userapi.UserApiAction
 import com.wxjxpp.neiro.core.userapi.UserApiClient
@@ -233,7 +234,7 @@ private val registry = DefaultMusicSourceRegistry(
         activeOnlineSources = target
     }
 
-    override val togetherTransport: TogetherTransport = NoopTogetherTransport()
+    override val togetherTransport: TogetherTransport = LitTogetherTransport(appSettings, httpClient, appScope)
     /** 发现页：榜单直连网易云公开接口；猜你喜欢复用聚合搜索。 */
     override val discoverRepository: com.wxjxpp.neiro.core.discover.DiscoverRepository by lazy {
         com.wxjxpp.neiro.core.discover.DiscoverRepository(http = httpClient)
