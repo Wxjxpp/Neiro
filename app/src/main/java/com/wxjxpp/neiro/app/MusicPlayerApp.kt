@@ -273,6 +273,7 @@ fun MusicPlayerApp(container: AppContainer) {
                             onScan = scanLibrary,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onNavigate = { target -> route = target },
+                            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
                             currentPlayingId = playback.current?.id,
                             onBatchOperate = { songs ->
                                 batchSongs = songs
@@ -490,6 +491,8 @@ private fun RouteContent(
     onAddSelectedToPlaylist: () -> Unit,
     /** 搜索页等处的批量入口（打开批量弹层）。 */
     onBatchOperate: (List<com.wxjxpp.neiro.core.model.Song>) -> Unit = {},
+    /** 轻提示（一起听等页面的状态消息走 Snackbar）。 */
+    onToast: (String) -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
@@ -724,7 +727,7 @@ private fun RouteContent(
                 Destination.Together.route -> TogetherScreen(
                     transport = container.togetherTransport as LitTogetherTransport,
                     player = container.playerController,
-                    onMessage = { scope.launch { snackbarHostState.showSnackbar(it) } },
+                    onMessage = onToast,
                     modifier = Modifier.fillMaxSize(),
                 )
 

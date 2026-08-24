@@ -114,7 +114,7 @@ private fun LobbyView(
                 if (nick.isBlank()) { onMessage("请先填写昵称"); return@Button }
                 busy = true
                 scope.launch {
-                    val r = transport.createRoom(url, nick.trim())
+                    val r = transport.createRoomAt(url, nick.trim())
                     busy = false
                     onMessage(r.fold({ "房间已创建：$it（邀请密钥见下方）" }, { "创建失败：${it.message}" }))
                 }
@@ -144,7 +144,7 @@ private fun LobbyView(
                 }
                 busy = true
                 scope.launch {
-                    val r = transport.joinRoom(url, roomId.trim(), nick.trim(), secret.trim())
+                    val r = transport.joinRoomAt(url, roomId.trim(), nick.trim(), secret.trim())
                     busy = false
                     onMessage(r.fold({ "已加入房间 $it" }, { "加入失败：${it.message}" }))
                 }
