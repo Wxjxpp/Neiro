@@ -62,8 +62,8 @@ fun TogetherScreen(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    val connection by transport.connectionState
-    val room by transport.room
+    val connection by transport.connectionState.collectAsState()
+    val room by transport.room.collectAsState()
     val inRoom = room != null && connection != TogetherConnectionState.Disconnected
 
     if (inRoom) {
@@ -163,9 +163,9 @@ private fun RoomView(
     modifier: Modifier = Modifier,
 ) {
     val scope = rememberCoroutineScope()
-    val connection by transport.connectionState
-    val room by transport.room
-    val state by transport.roomStateJson
+    val connection by transport.connectionState.collectAsState()
+    val room by transport.room.collectAsState()
+    val state by transport.roomStateJson.collectAsState()
     val clipboard = LocalClipboardManager.current
     val r = room ?: return
 
