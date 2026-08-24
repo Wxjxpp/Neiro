@@ -233,7 +233,14 @@ class LitTogetherTransport(
     ): Result<Unit> {
         if (token.isEmpty()) return Result.failure(IllegalStateException("不在房间中"))
         clientSequence++
-        val evtType = if (!isController && !type.startsWith("REQUEST_")) "REQUEST_$type" else type
+        // 全员开放事件（投票/聊天/加歌/无效源上报）直接发；
+        // 其余控制类事件由群友发时加 REQUEST_ 前缀，服务端按 allowMemberControl 门控。
+        val openEvents = setOf("VOTE", "CHAT", "ADD_SONG", "TRACK_ERROR")
+        val evtType = if (!isController && type !in openEvents && !type.startsWith("REQUEST_")) {
+            "REQUEST_$type"
+        } else {
+            type
+        }
         val event = JSONObject()
             .put("type", evtType)
             .put("clientSequence", clientSequence)
@@ -271,6 +278,25 @@ class LitTogetherTransport(
             .put("title", title)
             .put("artist", artist)
             .put("cover", cover)
+        return sendControl("ADD_SONG") { put("track", track) }
+    }
+
+    /**
+     * 点歌：从聚合搜索结果添加平台曲目（payload 随当前曲目透传给听众取流）。
+     * 全员可用，受 lockAddSongs 门控。
+     */
+    suspend fun addSongFromPlatform(song: com.wxjxpp.neiro.core.model.Song): Result<Unit> {
+        val loc = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Remote
+            ?: return Result.failure(IllegalArgumentException("本地歌曲不能加入房间"))
+        val track = JSONObject()
+            .put("sourceId", loc.sourceId)
+            .put("songId", loc.songId)
+            .put("title", song.title)
+            .put("artist", song.artistName)
+            .put("album", song.albumTitle)
+            .put("durationMs", song.durationMs)
+            .put("cover", song.coverUri.orEmpty())
+            .put("payload", loc.payload.orEmpty())
         return sendControl("ADD_SONG") { put("track", track) }
     }
 
@@ -356,6 +382,14 @@ class LitTogetherTransport(
             resp.isSuccessful -> {
                 connectionState.value = TogetherConnectionState.Connected
                 onSnapshot(JSONObject(resp.body).getJSONObject("state"))
+            }
+            resp.statusCode == 403 -> {
+                // 被房主移出房间：提示并回到大厅
+                stopPolling()
+                settings.clearTogetherSession()
+                resetLocal()
+                _events.tryEmit(TogetherEvent.MemberChanged(emptyList()))
+                _events.tryEmit(TogetherEvent.Kicked)
             }
             resp.statusCode == 404 || resp.statusCode == 401 -> {
                 // 房间已销毁 / 凭据失效：清理会话回到大厅

@@ -1,6 +1,7 @@
 package com.wxjxpp.neiro.feature.together
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
@@ -23,6 +25,7 @@ import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Logout
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.ThumbDownAlt
 import androidx.compose.material.icons.rounded.ThumbUpAlt
@@ -74,13 +77,25 @@ fun TogetherScreen(
     transport: LitTogetherTransport,
     player: PlayerController,
     onMessage: (String) -> Unit,
+    search: com.wxjxpp.neiro.core.search.OnlineSearchRepository,
+    resolveUrl: suspend (com.wxjxpp.neiro.core.model.Song) -> String?,
     modifier: Modifier = Modifier,
 ) {
     val connection by transport.connectionState.collectAsState()
     val room by transport.room.collectAsState()
     val inRoom = room != null && connection != TogetherConnectionState.Disconnected
+
+    // 被踢提示（服务端 403「你已被移出房间」触发）
+    LaunchedEffect(Unit) {
+        transport.events().collect { e ->
+            if (e == com.wxjxpp.neiro.core.model.TogetherEvent.Kicked) {
+                onMessage("你已被房主移出房间")
+            }
+        }
+    }
+
     if (inRoom) {
-        RoomView(transport, player, onMessage, modifier)
+        RoomView(transport, player, onMessage, search, resolveUrl, modifier)
     } else {
         LobbyView(transport, onMessage, modifier)
     }
@@ -313,9 +328,14 @@ private fun RoomView(
             CurrentTrackCard(transport, player, onMessage)
         }
 
-        // ---- 加歌 ----
+        // ---- 加歌：搜索点歌（复用全局聚合搜索）----
         item {
-            AddSongRow(transport, onMessage)
+            AddSongRow(
+                transport,
+                onMessage,
+                search = search,
+                resolveUrl = resolveUrl,
+            )
         }
 
         // ---- 队列 ----
@@ -344,7 +364,8 @@ private fun RoomView(
         items(r.members, key = { it.id }) { m ->
             MemberRow(transport, m.id, m.name, m.isHost, onMessage)
         }
-        item { Spacer(Modifier.height(24.dp)) }
+        // 底部留白：避免最后一位成员名被播放栏/导航遮挡
+        item { Spacer(Modifier.height(96.dp)) }
     }
 }
 @Composable
@@ -407,26 +428,33 @@ private fun CurrentTrackCard(
             }
             if (t != null) {
                 Spacer(Modifier.height(4.dp))
-                Row {
-                    IconButton(onClick = {
-                        if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
-                        scope.launch { transport.vote(true).onFailure { onMessage("投票失败：${it.message}") } }
-                    }) {
-                        Icon(Icons.Rounded.ThumbUpAlt, contentDescription = "赞",
-                            tint = if (votedUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    IconButton(onClick = {
-                        if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
-                        scope.launch { transport.vote(false).onFailure { onMessage("投票失败：${it.message}") } }
-                    }) {
-                        Icon(Icons.Rounded.ThumbDownAlt, contentDescription = "踩",
-                            tint = if (votedDown) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    Spacer(Modifier.weight(1f))
-                    if (pb?.optBoolean("invalid") == true) {
-                        OutlinedButton(onClick = {
-                            scope.launch { transport.reportTrackError().onFailure { onMessage("${it.message}") } }
-                        }) { Text("标记无效并跳过") }
+                // 房主不参与投票（民主切歌只看群友），仅群友显示投票按钮
+                if (!transport.isControllerInRoom) {
+                    Row {
+                        IconButton(onClick = {
+                            if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
+                            scope.launch { transport.vote(true).onFailure { onMessage("投票失败：${it.message}") } }
+                        }) {
+                            Icon(Icons.Rounded.ThumbUpAlt, contentDescription = "赞",
+                                tint = if (votedUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        IconButton(onClick = {
+                            if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
+                            scope.launch { transport.vote(false).onFailure { onMessage("投票失败：${it.message}") } }
+                        }) {
+                            Icon(Icons.Rounded.ThumbDownAlt, contentDescription = "踩",
+                                tint = if (votedDown) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Text(
+                            when {
+                                votedUp -> " 已投赞"
+                                votedDown -> " 已投踩"
+                                else -> ""
+                            },
+                            modifier = Modifier.align(Alignment.CenterVertically),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
                 }
             }
@@ -435,36 +463,135 @@ private fun CurrentTrackCard(
 }
 
 @Composable
-private fun AddSongRow(transport: LitTogetherTransport, onMessage: (String) -> Unit) {
+private fun AddSongRow(
+    transport: LitTogetherTransport,
+    onMessage: (String) -> Unit,
+    search: com.wxjxpp.neiro.core.search.OnlineSearchRepository,
+    resolveUrl: suspend (com.wxjxpp.neiro.core.model.Song) -> String?,
+) {
     val scope = rememberCoroutineScope()
-    var urlText by remember { mutableStateOf("") }
+    var showSearch by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
+
     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        OutlinedTextField(
-            value = urlText, onValueChange = { urlText = it },
-            label = { Text("粘贴歌曲直链 URL（mp3/flac/m3u8…）") },
-            singleLine = true,
-            modifier = Modifier.weight(1f),
-        )
-        IconButton(
-            onClick = {
-                val u = urlText.trim()
-                if (!u.startsWith("http")) { onMessage("请粘贴 http(s) 开头的音频直链"); return@IconButton }
+        OutlinedButton(onClick = { showSearch = true }, modifier = Modifier.weight(1f)) {
+            Icon(Icons.Rounded.Search, contentDescription = null)
+            Spacer(Modifier.width(6.dp))
+            Text("搜索点歌（全员可用）")
+        }
+        if (adding) CircularProgressIndicator(Modifier.height(18.dp))
+    }
+
+    if (showSearch) {
+        SongPickDialog(
+            search = search,
+            onDismiss = { showSearch = false },
+            onPick = { song ->
+                showSearch = false
                 adding = true
                 scope.launch {
-                    val title = u.substringAfterLast('/').substringBefore('?').ifEmpty { u.take(24) }
-                    val r = transport.addSongByUrl(u, title)
+                    // 先用本机音源解析直链：成功则发 URL 曲目（全房间免脚本直接播）
+                    val url = runCatching { resolveUrl(song) }.getOrNull()
+                    val r = if (!url.isNullOrEmpty()) {
+                        transport.addSongByUrl(url, song.title, song.artistName, song.coverUri.orEmpty())
+                    } else {
+                        // 解析失败回退：平台曲目模式，听众用各自脚本取流
+                        transport.addSongFromPlatform(song)
+                    }
                     adding = false
-                    urlText = ""
-                    onMessage(r.fold({ "已加入列表（服务器已验证可用）" }, { "添加失败：${it.message}" }))
+                    onMessage(
+                        r.fold(
+                            { if (url.isNullOrEmpty()) "已加入列表（听众需自备音源）" else "已加入列表" },
+                            { "添加失败：${it.message}" },
+                        ),
+                    )
                 }
             },
-            enabled = !adding,
-        ) {
-            if (adding) CircularProgressIndicator(Modifier.height(18.dp))
-            else Icon(Icons.Rounded.AddLink, contentDescription = "添加歌曲")
-        }
+        )
     }
+}
+
+@Composable
+private fun SongPickDialog(
+    search: com.wxjxpp.neiro.core.search.OnlineSearchRepository,
+    onDismiss: () -> Unit,
+    onPick: (com.wxjxpp.neiro.core.model.Song) -> Unit,
+) {
+    var keyword by remember { mutableStateOf("") }
+    var results by remember { mutableStateOf<List<com.wxjxpp.neiro.core.model.Song>>(emptyList()) }
+    var searching by remember { mutableStateOf(false) }
+    var searched by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+        dismissButton = {},
+        title = { Text("搜索点歌") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = keyword,
+                    onValueChange = { keyword = it },
+                    label = { Text("歌名 / 歌手") },
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = {
+                            if (keyword.isBlank()) return@IconButton
+                            searching = true
+                            scope.launch {
+                                val r = search.search(keyword)
+                                results = r.songs
+                                searching = false
+                                searched = true
+                            }
+                        }) { Icon(Icons.Rounded.Search, contentDescription = "搜索") }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                Box(Modifier.height(360.dp)) {
+                    when {
+                        searching -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        results.isEmpty() && searched -> Text(
+                            "没搜到，换个关键词试试",
+                            modifier = Modifier.align(Alignment.Center),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> LazyColumn(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            items(results.size) { i ->
+                                val s = results[i]
+                                Row(
+                                    Modifier.fillMaxWidth()
+                                        .clickable { onPick(s) }
+                                        .padding(vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Column(Modifier.weight(1f)) {
+                                        Text(s.title, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+                                        Text(
+                                            s.artistName + " · " + s.albumTitle,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                            maxLines = 1,
+                                        )
+                                    }
+                                    IconButton(onClick = { onPick(s) }) {
+                                        Icon(Icons.Rounded.AddLink, contentDescription = "点这首")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        neutralButton = {
+            androidx.compose.material3.TextButton(onClick = onDismiss) { Text("关闭") }
+        },
+    )
 }
 
 @Composable

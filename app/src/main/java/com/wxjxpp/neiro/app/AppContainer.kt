@@ -354,7 +354,7 @@ private val registry = DefaultMusicSourceRegistry(
      *
      * 音质回退保留：同一首歌按设置方向逐级降/升音质重试，不会改变曲目本身。
      */
-    private suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.RemoteUrl {
+suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.RemoteUrl {
         val location = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Remote
             ?: return Media3PlayerController.RemoteUrl.Failure("这不是在线歌曲")
         if (activeOnlineSources.isEmpty()) {

@@ -728,6 +728,11 @@ private fun RouteContent(
                     transport = container.togetherTransport as LitTogetherTransport,
                     player = container.playerController,
                     onMessage = onToast,
+                    search = container.onlineSearch,
+                    resolveUrl = { song ->
+                        val r = container.resolveRemoteUrl(song)
+                        (r as? com.wxjxpp.neiro.core.player.Media3PlayerController.RemoteUrl.Success)?.url
+                    },
                     modifier = Modifier.fillMaxSize(),
                 )
 

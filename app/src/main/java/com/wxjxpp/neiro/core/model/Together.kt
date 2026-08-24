@@ -28,6 +28,8 @@ sealed interface TogetherEvent {
     data class QueueChanged(val songIds: List<String>) : TogetherEvent
     data class MemberChanged(val members: List<TogetherMember>) : TogetherEvent
     data class Chat(val fromId: String, val text: String, val atMs: Long) : TogetherEvent
+    /** 被房主移出房间。 */
+    data object Kicked : TogetherEvent
 }
 
 enum class TogetherConnectionState { Disconnected, Connecting, Connected, Reconnecting, Failed }
