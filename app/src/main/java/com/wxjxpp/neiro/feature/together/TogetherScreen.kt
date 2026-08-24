@@ -249,7 +249,7 @@ private fun RoomView(
                 Column(Modifier.padding(14.dp)) {
                     Text("当前曲目", style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val t = transport.currentTrackJson
+                    val t by transport.currentTrackJson.collectAsState()
                     Text(
                         t?.optString("title").takeIf { !it.isNullOrEmpty() } ?: "暂无",
                         style = MaterialTheme.typography.titleMedium,
