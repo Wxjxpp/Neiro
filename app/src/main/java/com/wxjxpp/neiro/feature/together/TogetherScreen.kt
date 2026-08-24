@@ -1,23 +1,37 @@
 package com.wxjxpp.neiro.feature.together
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.AddLink
+import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.PersonRemove
+import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Send
+import androidx.compose.material.icons.rounded.ThumbDownAlt
+import androidx.compose.material.icons.rounded.ThumbUpAlt
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -32,6 +46,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
@@ -47,12 +62,12 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 
 /**
- * 一起听页面。
+ * 一起听页面（v2 民主房间）。
  *
  * 未入房：填服务端地址 / 昵称 → 创建房间 或 加入房间（房间号+邀请密钥）。
- * 已入房：显示成员、当前曲目、连接状态；房主可直接控制，听众发请求。
+ * 已入房：邀请密钥卡片、投票进度条、加歌、队列、聊天弹幕、成员管理（房主可踢人）。
  * 同步逻辑：监听 [LitTogetherTransport.currentTrackJson]，与本地播放不一致时自动切歌；
- * 播放/暂停/进度按服务端权威快照校正（>800ms 才 seek）。
+ * 房主本机的播放由 AppContainer 桥接上报（SET_TRACK/PLAY/PAUSE），听众跟随服务端快照。
  */
 @Composable
 fun TogetherScreen(
@@ -61,17 +76,17 @@ fun TogetherScreen(
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
     val connection by transport.connectionState.collectAsState()
     val room by transport.room.collectAsState()
     val inRoom = room != null && connection != TogetherConnectionState.Disconnected
-
     if (inRoom) {
         RoomView(transport, player, onMessage, modifier)
     } else {
         LobbyView(transport, onMessage, modifier)
     }
 }
+
+// ================= 大厅 =================
 
 @Composable
 private fun LobbyView(
@@ -89,13 +104,17 @@ private fun LobbyView(
     var secret by remember { mutableStateOf("") }
 
     Column(
-        modifier = modifier.fillMaxSize().padding(horizontal = 20.dp),
+        modifier = modifier
+            .fillMaxSize()
+            .imePadding() // 键盘弹起时整体上移，昵称框不再被输入法遮挡
+            .verticalScroll(rememberScrollState())
+            .padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Spacer(Modifier.height(8.dp))
         Text("一起听", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(
-            "和好友实时同步听歌。需要自部署 Neiro-LIT 服务端（支持 Cloudflare / Vercel）。",
+            "和好友实时同步听歌。群友可以加歌（URL 直链）、投票切歌、发弹幕；房主拥有全部控制权。",
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -116,7 +135,7 @@ private fun LobbyView(
                 scope.launch {
                     val r = transport.createRoomAt(url, nick.trim())
                     busy = false
-                    onMessage(r.fold({ "房间已创建：$it（邀请密钥见下方）" }, { "创建失败：${it.message}" }))
+                    onMessage(r.fold({ "房间已创建：$it" }, { "创建失败：${it.message}" }))
                 }
             },
             enabled = !busy,
@@ -152,8 +171,11 @@ private fun LobbyView(
             enabled = !busy,
             modifier = Modifier.fillMaxWidth(),
         ) { Text("加入房间") }
+        Spacer(Modifier.height(24.dp))
     }
 }
+
+// ================= 房间内 =================
 
 @Composable
 private fun RoomView(
@@ -169,46 +191,59 @@ private fun RoomView(
     val clipboard = LocalClipboardManager.current
     val r = room ?: return
 
-    // ---- 播放同步核心 ----
+    // ---- 听众跟随服务端（房主由 AppContainer 桥上报，这里跳过防回环） ----
     LaunchedEffect(Unit) {
         transport.currentTrackJson.collect { track ->
+            if (transport.isControllerInRoom) return@collect
             val local = player.state.value.current
             if (track == null) {
-                player.pause()
+                // 待机态：房间没有曲目，不强制暂停本地播放之外的任何东西
                 return@collect
             }
-            val sourceId = track.optString("sourceId")
-            val songId = track.optString("songId")
-            val wantKey = "$sourceId:$songId"
-            val localKey = (local?.location as? MediaLocation.Remote)?.let { "${it.sourceId}:${it.songId}" }
-            if (localKey != wantKey) {
-                // 切歌：用 payload 还原完整在线歌曲交给播放引擎
-                val song = Song(
-                    id = "lit-$wantKey",
-                    title = track.optString("title"),
-                    artists = listOf(Artist(id = "lit-artist", name = track.optString("artist"))),
-                    album = track.optString("album").takeIf { it.isNotEmpty() }?.let {
-                        Album(id = "lit-album", title = it)
-                    },
-                    durationMs = track.optLong("durationMs"),
-                    coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
-                    location = MediaLocation.Remote(
-                        sourceId = sourceId,
-                        songId = songId,
-                        payload = track.optString("payload").takeIf { it.isNotEmpty() },
-                    ),
-                )
+            val key = track.optString("stableKey")
+            val localKey = when (val loc = local?.location) {
+                is MediaLocation.Remote -> "${loc.sourceId}:${loc.songId}"
+                is MediaLocation.Local ->
+                    if (loc.uri.startsWith("http")) "url:${LitTogetherTransport.urlHash(loc.uri)}" else null
+                else -> null
+            }
+            if (localKey != key) {
+                // 切歌：URL 直链直接播；平台曲目用 payload 还原完整歌曲交给播放引擎
+                val song = when (track.optString("sourceId")) {
+                    "url" -> Song(
+                        id = "lit-$key",
+                        title = track.optString("title"),
+                        artists = listOf(Artist(id = "lit-artist", name = track.optString("artist").ifEmpty { "房间点歌" })),
+                        durationMs = track.optLong("durationMs"),
+                        coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
+                        location = MediaLocation.Local(uri = track.optString("url"), filePath = null),
+                    )
+                    else -> Song(
+                        id = "lit-$key",
+                        title = track.optString("title"),
+                        artists = listOf(Artist(id = "lit-artist", name = track.optString("artist"))),
+                        album = track.optString("album").takeIf { it.isNotEmpty() }?.let {
+                            Album(id = "lit-album", title = it)
+                        },
+                        durationMs = track.optLong("durationMs"),
+                        coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
+                        location = MediaLocation.Remote(
+                            sourceId = track.optString("sourceId"),
+                            songId = track.optString("songId"),
+                            payload = track.optString("payload").takeIf { it.isNotEmpty() },
+                        ),
+                    )
+                }
                 player.setQueue(listOf(song), 0, autoPlay = true)
             }
             // 进度校正：偏差 >800ms 才 seek，避免与本地自然播放打架
-            val expected = transport.roomStateJson.value?.optLong("expectedPositionMs", -1L) ?: -1L
+            val expected = state?.optLong("expectedPositionMs", -1L) ?: -1L
             if (expected >= 0) {
                 val drift = kotlin.math.abs(player.state.value.positionMs - expected)
                 if (drift > LitTogetherTransport.DRIFT_TOLERANCE_MS) player.seekTo(expected)
             }
-            val shouldPlay = transport.roomStateJson.value
-                ?.optJSONObject("playback")?.optBoolean("playing", false) ?: false
-            if (shouldPlay != player.state.value.isPlaying) {
+            val shouldPlay = state?.optJSONObject("playback")?.optBoolean("playing", false) ?: false
+            if (shouldPlay != player.state.value.isPlaying && !player.state.value.isBuffering) {
                 if (shouldPlay) player.resume() else player.pause()
             }
         }
@@ -218,10 +253,11 @@ private fun RoomView(
         modifier = modifier.fillMaxSize().padding(horizontal = 20.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
+        // ---- 标题栏：状态 + 复制邀请 + 离开 ----
         item {
             Spacer(Modifier.height(8.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(Modifier.weight(1f)) {
                     Text(r.name, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
                     Text(
                         when (connection) {
@@ -244,30 +280,306 @@ private fun RoomView(
                 }) { Icon(Icons.Rounded.Logout, contentDescription = "离开房间") }
             }
         }
+
+        // ---- 邀请密钥卡片（修复：toast 说"见下方"但从不展示的问题）----
         item {
-            Card(modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp)) {
-                    Text("当前曲目", style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    val t by transport.currentTrackJson.collectAsState()
-                    Text(
-                        t?.optString("title").takeIf { !it.isNullOrEmpty() } ?: "暂无",
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(t?.optString("artist").orEmpty(),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+            val js = transport.lastJoinSecret
+            Card(Modifier.fillMaxWidth()) {
+                Row(
+                    Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("邀请密钥", style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            js.ifEmpty { "（你不是创建者，无密钥）" },
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                    if (js.isNotEmpty()) {
+                        IconButton(onClick = {
+                            clipboard.setText(AnnotatedString("${r.id}|$js"))
+                            onMessage("已复制「房间号|密钥」，发给朋友即可加入")
+                        }) { Icon(Icons.Rounded.ContentCopy, contentDescription = "复制") }
+                    }
                 }
             }
         }
-        item { Text("成员 (${r.members.size})", style = MaterialTheme.typography.titleSmall) }
-        items(r.members, key = { it.id }) { m ->
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(if (m.isHost) "👑 ${m.name}" else m.name, modifier = Modifier.weight(1f))
-                Text(if (m.isHost) "房主" else "听众",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+
+        // ---- 当前曲目 + 投票进度条 + 赞/踩 ----
+        item {
+            CurrentTrackCard(transport, player, onMessage)
+        }
+
+        // ---- 加歌 ----
+        item {
+            AddSongRow(transport, onMessage)
+        }
+
+        // ---- 队列 ----
+        val queue = state?.optJSONObject("playback")?.optJSONArray("queue")
+        if (queue != null && queue.length() > 0) {
+            item { Text("播放列表 (${queue.length()})", style = MaterialTheme.typography.titleSmall) }
+            items(queue.length()) { i ->
+                QueueItem(
+                    transport,
+                    queue.getJSONObject(i),
+                    isCurrent = i == (state?.optJSONObject("playback")?.optInt("currentIndex", -1) ?: -1),
+                    isHost = transport.isControllerInRoom,
+                    onMessage = onMessage,
+                )
             }
+        }
+
+        // ---- 聊天/弹幕 ----
+        item {
+            ChatSection(transport)
+        }
+
+        // ---- 成员（房主可踢人）----
+        item { Text("成员 (${r.members.size} · 在线 ${state?.optInt("onlineCount", r.members.size) ?: r.members.size})",
+            style = MaterialTheme.typography.titleSmall) }
+        items(r.members, key = { it.id }) { m ->
+            MemberRow(transport, m.id, m.name, m.isHost, onMessage)
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+@Composable
+private fun CurrentTrackCard(
+    transport: LitTogetherTransport,
+    player: PlayerController,
+    onMessage: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val state by transport.roomStateJson.collectAsState()
+    val t by transport.currentTrackJson.collectAsState()
+    val pb = state?.optJSONObject("playback")
+    val votes = state?.optJSONObject("voteSummary")
+    val online = state?.optInt("onlineCount", 1)?.coerceAtLeast(1) ?: 1
+    val up = votes?.optInt("up", 0) ?: 0
+    val down = votes?.optInt("down", 0) ?: 0
+    val threshold = votes?.optInt("threshold", 50) ?: 50
+    val downRatio = down.toFloat() / online
+    val myId = transport.selfMemberId
+    val votedUp = votes?.optJSONArray("upIds")?.let { a -> (0 until a.length()).any { a.optString(it) == myId } } == true
+    val votedDown = votes?.optJSONArray("downIds")?.let { a -> (0 until a.length()).any { a.optString(it) == myId } } == true
+
+    Card(Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(14.dp)) {
+            Text("当前曲目", style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Text(
+                t?.optString("title").takeIf { !it.isNullOrEmpty() } ?: "待机中 · 等待第一首歌",
+                style = MaterialTheme.typography.titleMedium,
+            )
+            Text(
+                buildString {
+                    append(t?.optString("artist").orEmpty().ifEmpty { "未知艺术家" })
+                    t?.optString("addedBy")?.takeIf { it.isNotEmpty() }?.let { append(" · 由 $it 点播") }
+                    if (t?.optBoolean("invalid", false) == true) append(" · ⚠ 无效源")
+                },
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            // 投票进度条：红色为踩票占比，达阈值即自动切歌
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Box(
+                    Modifier.weight(1f).height(6.dp).clip(RoundedCornerShape(3.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant),
+                ) {
+                    if (downRatio > 0f) {
+                        Box(
+                            Modifier.fillMaxWidth(downRatio.coerceIn(0f, 1f)).height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                                .background(MaterialTheme.colorScheme.error),
+                        )
+                    }
+                }
+                Text(
+                    "  $up 赞 · $down 踩 / ${online}人 · 达 ${threshold}% 自动切",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (t != null) {
+                Spacer(Modifier.height(4.dp))
+                Row {
+                    IconButton(onClick = {
+                        if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
+                        scope.launch { transport.vote(true).onFailure { onMessage("投票失败：${it.message}") } }
+                    }) {
+                        Icon(Icons.Rounded.ThumbUpAlt, contentDescription = "赞",
+                            tint = if (votedUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    IconButton(onClick = {
+                        if (votedUp || votedDown) { onMessage("每人每首歌限投一次"); return@IconButton }
+                        scope.launch { transport.vote(false).onFailure { onMessage("投票失败：${it.message}") } }
+                    }) {
+                        Icon(Icons.Rounded.ThumbDownAlt, contentDescription = "踩",
+                            tint = if (votedDown) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Spacer(Modifier.weight(1f))
+                    if (pb?.optBoolean("invalid") == true) {
+                        OutlinedButton(onClick = {
+                            scope.launch { transport.reportTrackError().onFailure { onMessage("${it.message}") } }
+                        }) { Text("标记无效并跳过") }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun AddSongRow(transport: LitTogetherTransport, onMessage: (String) -> Unit) {
+    val scope = rememberCoroutineScope()
+    var urlText by remember { mutableStateOf("") }
+    var adding by remember { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = urlText, onValueChange = { urlText = it },
+            label = { Text("粘贴歌曲直链 URL（mp3/flac/m3u8…）") },
+            singleLine = true,
+            modifier = Modifier.weight(1f),
+        )
+        IconButton(
+            onClick = {
+                val u = urlText.trim()
+                if (!u.startsWith("http")) { onMessage("请粘贴 http(s) 开头的音频直链"); return@IconButton }
+                adding = true
+                scope.launch {
+                    val title = u.substringAfterLast('/').substringBefore('?').ifEmpty { u.take(24) }
+                    val r = transport.addSongByUrl(u, title)
+                    adding = false
+                    urlText = ""
+                    onMessage(r.fold({ "已加入列表（服务器已验证可用）" }, { "添加失败：${it.message}" }))
+                }
+            },
+            enabled = !adding,
+        ) {
+            if (adding) CircularProgressIndicator(Modifier.height(18.dp))
+            else Icon(Icons.Rounded.AddLink, contentDescription = "添加歌曲")
+        }
+    }
+}
+
+@Composable
+private fun QueueItem(
+    transport: LitTogetherTransport,
+    t: JSONObject,
+    isCurrent: Boolean,
+    isHost: Boolean,
+    onMessage: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    Card(Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                Icons.Rounded.PlayArrow, contentDescription = null,
+                tint = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Column(Modifier.weight(1f).padding(start = 8.dp)) {
+                Text(
+                    (if (t.optBoolean("invalid", false)) "⚠ " else "") + t.optString("title"),
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                )
+                Text(
+                    listOf(
+                        t.optString("artist"),
+                        t.optString("addedBy")?.let { "$it 点播" },
+                    ).filter { it.isNotEmpty() }.joinToString(" · "),
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            if (isHost) {
+                IconButton(onClick = {
+                    scope.launch {
+                        transport.removeSong(t.optString("stableKey"))
+                            .onFailure { onMessage("移除失败：${it.message}") }
+                    }
+                }) { Icon(Icons.Rounded.Close, contentDescription = "移除") }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ChatSection(transport: LitTogetherTransport) {
+    val scope = rememberCoroutineScope()
+    val state by transport.roomStateJson.collectAsState()
+    var input by remember { mutableStateOf("") }
+    val chat = state?.optJSONArray("chat")
+    Column {
+        Text("弹幕", style = MaterialTheme.typography.titleSmall)
+        if (chat == null || chat.length() == 0) {
+            Text("还没有消息，说点什么吧", style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        chat?.let { arr ->
+            val from = maxOf(0, arr.length() - 20)
+            for (i in from until arr.length()) {
+                val c = arr.getJSONObject(i)
+                Text(
+                    "${c.optString("from")}：${c.optString("text")}",
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(vertical = 2.dp),
+                )
+            }
+        }
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            OutlinedTextField(
+                value = input, onValueChange = { input = it },
+                placeholder = { Text("发条弹幕…") },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            IconButton(onClick = {
+                val text = input.trim()
+                if (text.isEmpty()) return@IconButton
+                scope.launch {
+                    transport.chat(text).fold(
+                        onSuccess = { input = "" },
+                        onFailure = { },
+                    )
+                }
+            }) { Icon(Icons.Rounded.Send, contentDescription = "发送") }
+        }
+    }
+}
+
+@Composable
+private fun MemberRow(
+    transport: LitTogetherTransport,
+    memberId: String,
+    name: String,
+    isHost: Boolean,
+    onMessage: (String) -> Unit,
+) {
+    val scope = rememberCoroutineScope()
+    val self = transport.selfMemberId
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (isHost) "👑 $name" else if (memberId == self) "$name（我）" else name,
+            modifier = Modifier.weight(1f),
+        )
+        if (!isHost && memberId != self) {
+            IconButton(onClick = {
+                scope.launch {
+                    transport.kick(memberId).fold(
+                        onSuccess = { onMessage("已移除 $name") },
+                        onFailure = { onMessage("移除失败：${it.message}") },
+                    )
+                }
+            }) { Icon(Icons.Rounded.PersonRemove, contentDescription = "移出房间") }
         }
     }
 }

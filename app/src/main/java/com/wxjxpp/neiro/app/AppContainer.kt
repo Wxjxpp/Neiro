@@ -247,6 +247,60 @@ private val registry = DefaultMusicSourceRegistry(
         // 取流/播放错误改为顶部横幅（可关闭），不再用底部 Snackbar
         media3Controller.onPlaybackError = { message -> showError(message) }
 
+        // ---- 一起听桥接：会话恢复 + 房主播放上报 ----
+        runCatching { togetherTransport as com.wxjxpp.neiro.core.together.LitTogetherTransport }.getOrNull()?.let { lit ->
+            appScope.launch { runCatching { lit.restoreSession() } }
+            var lastErrorReportedKey = ""
+            appScope.launch {
+                media3Controller.state.collect { st ->
+                    if (!lit.isControllerInRoom) return@collect
+                    val song = st.current ?: return@collect
+                    // 组装服务端 track JSON；本地文件与 WebDAV 禁止入房
+                    val track = when (val loc = song.location) {
+                        is com.wxjxpp.neiro.core.model.MediaLocation.Remote -> org.json.JSONObject()
+                            .put("sourceId", loc.sourceId)
+                            .put("songId", loc.songId)
+                            .put("title", song.title)
+                            .put("artist", song.artistName)
+                            .put("album", song.albumTitle)
+                            .put("durationMs", song.durationMs)
+                            .put("cover", song.coverUri.orEmpty())
+                            .put("payload", loc.payload.orEmpty())
+                        is com.wxjxpp.neiro.core.model.MediaLocation.Local -> {
+                            if (!loc.uri.startsWith("http")) return@collect
+                            org.json.JSONObject()
+                                .put("sourceId", "url")
+                                .put("songId", com.wxjxpp.neiro.core.together.LitTogetherTransport.urlHash(loc.uri))
+                                .put("url", loc.uri)
+                                .put("title", song.title)
+                                .put("artist", song.artistName)
+                                .put("durationMs", song.durationMs)
+                                .put("cover", song.coverUri.orEmpty())
+                        }
+                        else -> return@collect
+                    }
+                    val key = "${track.optString("sourceId")}:${track.optString("songId")}"
+                    // URL 加载卡死兜底：缓冲超过 5s 或进度停滞且未在播 → 上报无效源自动切歌
+                    val stuck = st.isBuffering && st.positionMs <= 0L &&
+                        key == (lit.currentTrackJson.value?.optString("stableKey").orEmpty())
+                    if (stuck && key != lastErrorReportedKey) {
+                        lastErrorReportedKey = key
+                        runCatching { lit.reportTrackError() }
+                        return@collect
+                    }
+                    // 与服务器权威态对比，仅在真正不一致时上报（防止远端触发变更被回推形成回环）
+                    val pb = lit.roomStateJson.value?.optJSONObject("playback")
+                    val roomKey = pb?.optJSONObject("track")?.optString("stableKey").orEmpty()
+                    val roomPlaying = pb?.optBoolean("playing", false) ?: false
+                    if (roomKey != key) {
+                        runCatching { lit.publishCurrentTrack(track, st.positionMs, st.isPlaying) }
+                    } else if (roomPlaying != st.isPlaying) {
+                        runCatching { lit.publishPlayback(st.positionMs, st.isPlaying) }
+                    }
+                }
+            }
+        }
+
         // 脚本发起的 HTTP 请求交给宿主执行
         appScope.launch {
             userApiEngine.actions.collect { action -> onUserApiAction(action) }

@@ -66,6 +66,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val TogetherMemberId = stringPreferencesKey("together_member_id")
         val TogetherMemberSecret = stringPreferencesKey("together_member_secret")
         val TogetherToken = stringPreferencesKey("together_token")
+        val TogetherJoinSecret = stringPreferencesKey("together_join_secret")
         val RecentSongsJson = stringPreferencesKey("recent_songs_json")
         /** 本地收藏夹（歌曲快照 JSON 数组，在线/本地均可）。 */
         val FavoriteSongsJson = stringPreferencesKey("favorite_songs_json")
@@ -200,14 +201,19 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
             prefs[Keys.TogetherMemberId].orEmpty(),
             prefs[Keys.TogetherMemberSecret].orEmpty(),
             prefs[Keys.TogetherToken].orEmpty(),
+            prefs[Keys.TogetherJoinSecret].orEmpty(),
         )
     }
-    suspend fun setTogetherSession(roomId: String, memberId: String, memberSecret: String, token: String) {
+    suspend fun setTogetherSession(
+        roomId: String, memberId: String, memberSecret: String, token: String,
+        joinSecret: String = "",
+    ) {
         store.edit {
             it[Keys.TogetherRoomId] = roomId
             it[Keys.TogetherMemberId] = memberId
             it[Keys.TogetherMemberSecret] = memberSecret
             it[Keys.TogetherToken] = token
+            if (joinSecret.isNotEmpty()) it[Keys.TogetherJoinSecret] = joinSecret
         }
     }
     suspend fun clearTogetherSession() {
@@ -216,6 +222,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
             it.remove(Keys.TogetherMemberId)
             it.remove(Keys.TogetherMemberSecret)
             it.remove(Keys.TogetherToken)
+            it.remove(Keys.TogetherJoinSecret)
         }
     }
     suspend fun setNeteaseCookie(cookie: String) {
