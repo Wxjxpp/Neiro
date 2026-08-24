@@ -355,9 +355,8 @@ fun PlayerDetailScreen(
                         x = with(density) { (bigLeft + (smallLeftPx - bigLeft) * tMorph).toDp() },
                         y = with(density) { (bigTop + (smallTop - bigTop) * tMorph).toDp() },
                     )
-                    .graphicsLayer {
-                        shadowElevation = with(density) { 6.dp.toPx() * (1f - tMorph) }
-                    }
+                    // 注意：不加 shadowElevation——graphicsLayer 阴影是矩形轮廓，
+                    // 不跟随圆角，会在封面背后露出方形阴影边角
                     .pointerInput(Unit) {
                         detectVerticalDragGestures(
                             onDragEnd = onDragEnd,
@@ -385,8 +384,8 @@ fun PlayerDetailScreen(
                     ),
                 ),
         ) {
-            // 当前歌词横幅：播放页与歌词页都常显（横幅最高优先级）
-            if (!lyrics.isEmpty) {
+            // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）
+            if (!lyricsMode && !lyrics.isEmpty) {
                 CurrentLineBanner(
                     lyrics = lyrics,
                     positionMs = state.positionMs,
@@ -680,6 +679,9 @@ private fun CurrentLineBanner(
             horizontalAlignment = Alignment.CenterHorizontally,
             modifier = Modifier
                 .fillMaxWidth()
+                // Offscreen 必须在 drawWithContent 之前：先隔离出离屏缓冲，
+                // DstIn 渐变才只作用于横幅自身内容（否则会擦穿背景露出黑边）
+                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
                 .drawWithContent {
                     // 上/下边缘柔和淡出（DstIn：alpha=1 保留，alpha=0 擦除）
                     drawContent()
@@ -692,8 +694,7 @@ private fun CurrentLineBanner(
                         ),
                         blendMode = BlendMode.DstIn,
                     )
-                }
-                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen),
+                },
         ) {
             for (i in window) {
                 if (i < 0 || i >= lines.size) continue
