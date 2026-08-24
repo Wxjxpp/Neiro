@@ -97,6 +97,10 @@ fun SearchScreen(
         // 收起后作为顶部圆角搜索条。material3 1.5.0-alpha18 的 SearchBarDefaults.InputField
         // 已改为 TextFieldState 新签名，这里在 inputField 槽位用普通 TextField 保持字符串受控。
         var active by remember { mutableStateOf(false) }
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
         SearchBar(
             inputField = {
                 androidx.compose.material3.TextField(
@@ -146,6 +150,12 @@ fun SearchScreen(
                 modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceMd),
             )
         }
+        }
+        // 平台筛选区也铺满主题底色，避免左右露白
+        Surface(
+            color = MaterialTheme.colorScheme.surface,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
 
         // 聚合搜索时展示平台筛选器：FilterChip + FlowRow 自动换行
         if (query.isNotBlank() && onlinePlatforms.size > 1) {
@@ -164,8 +174,8 @@ fun SearchScreen(
                 }
             }
         }
-
-                when {
+        }
+        when {
             query.isBlank() -> {
                 if (noSourceAvailable) {
                     // 未导入音源：明确空态 + 引导（用户指定文案）

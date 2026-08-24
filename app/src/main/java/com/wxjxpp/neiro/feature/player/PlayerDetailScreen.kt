@@ -26,7 +26,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.FavoriteBorder
-import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PlayArrow
@@ -56,13 +55,19 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.draw.compositingStrategy
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import kotlin.math.abs
 import com.wxjxpp.neiro.core.model.Lyrics
 import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.PlaybackState
@@ -260,7 +265,22 @@ fun PlayerDetailScreen(
             }
             // 主区域：封面与歌词在同一连续进度上的变换
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth(),
+                modifier = Modifier.weight(1f).fillMaxWidth()
+                    // 整个主区域上滑展开歌词页 / 下滑收回播放页（拖拽 1:1 跟手）
+                    .pointerInput(Unit) {
+                        detectVerticalDragGestures(
+                            onDragEnd = onDragEnd,
+                            onDragCancel = onDragEnd,
+                        ) { change, dragAmount ->
+                            change.consume()
+                            if (dragAmount < -30f) {
+                                onExpandLyrics()
+                                onDrag(dragAmount)
+                            } else if (dragAmount > 30f) {
+                                onDrag(dragAmount)
+                            }
+                        }
+                    },
                 contentAlignment = Alignment.Center,
             ) {
                 if (!lyricsMode) {
@@ -271,32 +291,18 @@ fun PlayerDetailScreen(
                     val screenH = with(density) { configuration.screenHeightDp.dp.toPx() }
                     val coverTopOffset = with(density) { (screenH * 0.25f).toDp() } -
                         statusBarPadding.calculateTopPadding() - dimens.spaceSm
-                    Box(modifier = Modifier.fillMaxSize()) {
-                        SongCover(
-                            song = song,
-                            size = coverTarget,
-                            radius = dimens.detailCoverRadius,
-                            modifier = Modifier
-                                .align(Alignment.TopCenter)
-                                .offset(y = coverTopOffset.coerceAtLeast(0.dp))
-                                // 拖拽跟手：上滑进入歌词（连续），点击直接展开
-                                .pointerInput(Unit) {
-                                    detectVerticalDragGestures(
-                                        onDragEnd = onDragEnd,
-                                        onDragCancel = onDragEnd,
-                                    ) { change, dragAmount ->
-                                        change.consume()
-                                        if (dragAmount < 0f) {
-                                            onExpandLyrics()
-                                            onDrag(dragAmount)
-                                        }
-                                    }
-                                }
-                                .pointerInput(Unit) {
-                                    detectTapGestures(onTap = { onExpandLyrics() })
-                                },
-                        )
-                    }
+                    SongCover(
+                        song = song,
+                        size = coverTarget,
+                        radius = dimens.detailCoverRadius,
+                        modifier = Modifier
+                            .align(Alignment.TopCenter)
+                            .offset(y = coverTopOffset.coerceAtLeast(0.dp))
+                            // 点击进入歌词页（程序化动画：连续位移+缩小，无淡入淡出）
+                            .pointerInput(Unit) {
+                                detectTapGestures(onTap = { onExpandLyrics() })
+                            },
+                    )
                 } else {
                     Box(modifier = Modifier.fillMaxSize()) {
                         if (lyrics.isEmpty) {
@@ -518,7 +524,9 @@ fun PlayerDetailScreen(
                             )
                         }
                     }
-                    IconButton(onClick = onExpandLyrics) {
+                    IconButton(onClick = {
+                        if (lyricsMode) onCollapseToPlayer() else onExpandLyrics()
+                    }) {
                         Icon(
                             Icons.Rounded.Lyrics,
                             contentDescription = "显示歌词",
@@ -578,17 +586,7 @@ fun PlayerDetailScreen(
                     .padding(bottom = 120.dp),
             )
         }
-        // 返回按钮：悬浮左上角（安全区内，纯净模式隐藏）；歌词页返回到播放页
-        if (!pureMode) {
-            IconButton(
-                onClick = onCollapseToPlayer,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(start = 4.dp, top = statusBarPadding.calculateTopPadding() + 4.dp),
-            ) {
-                Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
-            }
-        }
+        // 返回按钮：已移除（返回手势/下滑即可收起）
     }
     if (showQueue && !pureMode) {
         QueueSheet(
@@ -674,7 +672,7 @@ private fun QualityPickerDialog(
     )
 }
 
-/** 封面模式下的当前歌词横幅：单行居中，点击进入完整歌词页。 */
+/** 封面模式下的当前歌词横幅：5 行窗口（前2 + 当前 + 后2）。 */
 @Composable
 private fun CurrentLineBanner(
     lyrics: Lyrics,
@@ -691,30 +689,61 @@ private fun CurrentLineBanner(
         if (lyrics.lines[i].startMs <= p) index = i else break
     }
     if (index < 0) return
-    val line = lyrics.lines[index]
+    val lines = lyrics.lines
+    // 5 行窗口：index-2 .. index+2，越界跳过
+    val window = (index - 2)..(index + 2)
     androidx.compose.material3.Surface(
         onClick = onClick,
         color = Color.Transparent,
-        modifier = modifier.padding(horizontal = 40.dp, vertical = 4.dp),
+        modifier = modifier.padding(horizontal = 24.dp, vertical = 4.dp),
     ) {
-        Column(horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(
-                text = line.text,
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                textAlign = TextAlign.Center,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            if (showTranslation && !line.translation.isNullOrBlank()) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .fillMaxWidth()
+                .drawWithContent {
+                    // 上/下边缘透明渐变：模拟模糊过渡的柔和边界
+                    drawContent()
+                    drawRect(
+                        brush = Brush.verticalGradient(
+                            0f to Color.Black.copy(alpha = 0.55f),
+                            0.28f to Color.Black.copy(alpha = 0f),
+                            0.72f to Color.Black.copy(alpha = 0f),
+                            1f to Color.Black.copy(alpha = 0.55f),
+                        ),
+                        blendMode = BlendMode.DstIn,
+                    )
+                }
+                .compositingStrategy(CompositingStrategy.Offscreen),
+        ) {
+            for (i in window) {
+                if (i < 0 || i >= lines.size) continue
+                val line = lines[i]
+                val isCurrent = i == index
                 Text(
-                    text = line.translation!!,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    text = line.text,
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontSize = MaterialTheme.typography.titleMedium.fontSize * if (isCurrent) 1.15f else 0.92f,
+                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                    ),
+                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier
+                        .padding(vertical = 1.dp)
+                        .alpha(if (isCurrent) 1f else 0.75f - (abs(i - index) - 1).coerceAtMost(2) * 0.15f),
                 )
+                if (isCurrent && showTranslation && !line.translation.isNullOrBlank()) {
+                    Text(
+                        text = line.translation!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = TextAlign.Center,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
             }
         }
     }

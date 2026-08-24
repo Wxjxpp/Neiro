@@ -1,6 +1,7 @@
 package com.wxjxpp.neiro.feature.diary
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -40,6 +41,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -316,7 +318,7 @@ private fun MonthCalendarView(
             }
         }
         Spacer(Modifier.height(6.dp))
-        // 直接按当前 offset 计算格子（不 remember 缓存 Calendar 实例，避免翻月读到旧对象）
+                // 直接按当前 offset 计算格子（不 remember 缓存 Calendar 实例，避免翻月读到旧对象）
         val cells = buildMonthCells(cal)
         cells.chunked(7).forEach { week ->
             Row(
@@ -326,6 +328,7 @@ private fun MonthCalendarView(
                 week.forEach { cell ->
                     Box(
                         contentAlignment = Alignment.Center,
+                        // weight(1f) 保证每列等宽等高，末行不再被拉伸成大格子
                         modifier = Modifier.weight(1f).aspectRatio(1f).padding(2.dp),
                     ) {
                         when (cell) {
@@ -333,25 +336,41 @@ private fun MonthCalendarView(
                             else -> {
                                 val data = dayMap[cell]
                                 val isToday = cell == todayStart()
-                                Surface(
-                                    color = heatmapColor(data?.level ?: 0),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = if (isToday) {
-                                        androidx.compose.foundation.BorderStroke(
-                                            2.dp,
-                                            MaterialTheme.colorScheme.primary,
-                                        )
-                                    } else null,
-                                    modifier = Modifier
-                                        .fillMaxSize()
-                                        .clickable { onDayClick(data) },
-                                ) {
-                                    Box(contentAlignment = Alignment.Center) {
-                                        Text(
-                                            text = dayNumber(cell),
-                                            style = MaterialTheme.typography.labelMedium,
-                                            fontWeight = if (isToday) FontWeight.Bold else null,
-                                        )
+                                val isFuture = cell > todayStart()
+                                if (!isFuture) {
+                                    Surface(
+                                        color = heatmapColor(data?.level ?: 0),
+                                        shape = RoundedCornerShape(8.dp),
+                                        border = if (isToday) {
+                                            androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary)
+                                        } else null,
+                                        modifier = Modifier.fillMaxSize().clickable { onDayClick(data) },
+                                    ) {
+                                        Box(contentAlignment = Alignment.Center) {
+                                            Text(
+                                                text = dayNumber(cell),
+                                                style = MaterialTheme.typography.labelMedium,
+                                                fontWeight = if (isToday) FontWeight.Bold else null,
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    // 未来日期：灰底 + 「这个月还没过呢」提示
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .fillMaxSize()
+                                            .clip(RoundedCornerShape(8.dp))
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
+                                    ) {
+                                        if (cell == monthFirstFutureDay(cells)) {
+                                            Text(
+                                                text = "这个月还没过呢",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                maxLines = 1,
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -493,12 +512,14 @@ internal fun buildMonthCells(monthCal: Calendar): List<Long?> {
     val maxDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
     for (d in 1..maxDay) {
         cal.set(Calendar.DAY_OF_MONTH, d)
-        if (cal.timeInMillis <= today) cells += cal.timeInMillis.cloneDay()
+        cells += cal.timeInMillis
     }
     return cells
 }
 
-private fun Long.cloneDay(): Long = this
+/** 未来日期区的第一天（用于放「这个月还没过呢」提示，只显示一次）。 */
+internal fun monthFirstFutureDay(cells: List<Long?>): Long? =
+    cells.filterNotNull().firstOrNull { it > todayStart() }
 
 /** 年视图周列：今年 1 月所在周的周一开始 → 今天所在周。 */
 internal fun buildYearWeeks(): List<List<Long>> {

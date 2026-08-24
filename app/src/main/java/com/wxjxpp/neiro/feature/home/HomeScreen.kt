@@ -154,13 +154,18 @@ fun HomeScreen(
                 }
             }
         }
-        // 悬浮操作组：回顶 + 定位当前播放（右侧，避开播放栏）
+        // 悬浮操作组：回顶 + 定位当前播放（右侧，抬高避开播放栏）
         val scope = rememberCoroutineScope()
         com.wxjxpp.neiro.ui.components.ScrollActions(
             listState = listState,
             modifier = Modifier
                 .align(Alignment.BottomEnd)
-                .padding(end = AppTheme.dimens.spaceLg, bottom = AppTheme.dimens.spaceLg),
+                .padding(
+                    end = AppTheme.dimens.spaceLg,
+                    // 抬高到播放栏上方，避免被遮挡
+                    bottom = AppTheme.dimens.playerBarHeight +
+                        AppTheme.dimens.floatingBarBottomMargin + AppTheme.dimens.spaceMd,
+                ),
             onLocate = {
                 val index = songs.indexOfFirst { it.id == currentPlayingId }
                 if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
@@ -350,7 +355,7 @@ private fun SongRow(
             Text(
                 text = "${song.artistName} · ${song.albumTitle}",
                 style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                color = if (isPlaying) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )

@@ -150,7 +150,7 @@ fun MusicPlayerApp(container: AppContainer) {
         container.messages.collect { message -> snackbarHostState.showSnackbar(message) }
     }
 
-    var route by rememberSaveable { mutableStateOf(Destination.Home.route) }
+    var route by rememberSaveable { mutableStateOf(Destination.Discover.route) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val dimens = AppTheme.dimens
 
@@ -280,7 +280,13 @@ fun MusicPlayerApp(container: AppContainer) {
                                 batchSongs = viewModel.selectedSongs()
                                 showBatchSheet = true
                             },
-                            contentPadding = PaddingValues(bottom = scaffoldPadding.calculateBottomPadding()),
+                            contentPadding = PaddingValues(
+                                // 预留播放栏高度：最后一项不再被浮动播放栏遮住。
+                                // 注意不要加 top——外层 Column 已做 statusBars padding，加了会双倍
+                                bottom = scaffoldPadding.calculateBottomPadding() +
+                                    AppTheme.dimens.playerBarHeight +
+                                    AppTheme.dimens.floatingBarBottomMargin + 12.dp,
+                            ),
                             modifier = Modifier.fillMaxSize(),
                         )
                         // 播放栏：floating=浮动样式；关闭开关后仍显示（底部贴合的紧凑条）
@@ -585,6 +591,7 @@ private fun RouteContent(
                     onOpenDetail = viewModel::loadDiscoverDetail,
                     onCloseDetail = viewModel::closeDiscoverDetail,
                     onPlayList = viewModel::playDiscoverList,
+                    onOpenSearch = { onNavigate(Destination.Search.route) },
                     favoriteIds = uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
                     downloadingIds = uiState.downloadingIds,
                     onDownloadSong = { song -> viewModel.downloadSongs(listOf(song)) },
@@ -616,7 +623,10 @@ private fun RouteContent(
 
                 Destination.Playlists.route -> PlaylistsScreen(
                     playlists = uiState.playlists,
-                    songsById = remember(uiState.songs) { uiState.songs.associateBy { it.id } },
+                    songsById = remember(uiState.songs, uiState.favoriteSongs, uiState.playlists) {
+                        // 歌单可能包含收藏/其他歌单中的在线歌曲：合并所有已知歌曲再建索引
+                        (uiState.songs + uiState.favoriteSongs).associateBy { it.id }
+                    },
                     onCreate = viewModel::createPlaylist,
                     onDelete = viewModel::deletePlaylist,
                     onRename = viewModel::renamePlaylist,

@@ -826,7 +826,12 @@ class AppViewModel(
     /** 批量：把若干歌曲加入已有歌单。 */
     fun addSongsToPlaylist(playlistId: String, songs: List<Song>) {
         if (songs.isEmpty()) return
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // 在线/收藏歌曲不在本地曲库表里：先落库（upsert 幂等），否则歌单详情查不到
+            val known = kotlinx.coroutines.flow.first(container.songRepository.observeSongs())
+                .mapTo(mutableSetOf()) { it.id }
+            val missing = songs.filter { it.id !in known }
+            if (missing.isNotEmpty()) container.songRepository.upsert(missing)
             container.playlistRepository.addSongs(playlistId, songs.map { it.id })
             notify("已加入歌单（${songs.size} 首）")
         }
@@ -834,7 +839,12 @@ class AppViewModel(
     /** 批量：新建歌单并加入歌曲。 */
     fun createPlaylistWithSongs(name: String, songs: List<Song>) {
         if (songs.isEmpty() || name.isBlank()) return
-        viewModelScope.launch {
+viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+            // 同 addSongsToPlaylist：在线歌曲先落库，避免歌单详情为空
+            val known = kotlinx.coroutines.flow.first(container.songRepository.observeSongs())
+                .mapTo(mutableSetOf()) { it.id }
+            val missing = songs.filter { it.id !in known }
+            if (missing.isNotEmpty()) container.songRepository.upsert(missing)
             container.playlistRepository.create(name.trim(), songs.map { it.id })
             notify("已创建「${name.trim()}」并加入 ${songs.size} 首")
         }

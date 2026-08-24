@@ -39,6 +39,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.discover.DiscoverRepository
@@ -71,6 +74,8 @@ fun DiscoverScreen(
     onOpenDetail: (String) -> Unit,
     onCloseDetail: () -> Unit,
     onPlayList: (List<Song>) -> Unit,
+    /** 打开搜索页（顶栏搜索入口）。 */
+    onOpenSearch: () -> Unit = {},
     favoriteIds: Set<String> = emptySet(),
     downloadingIds: Set<String> = emptySet(),
     onDownloadSong: ((Song) -> Unit)? = null,
@@ -100,6 +105,13 @@ fun DiscoverScreen(
                     )
                 }
             },
+            actions = {
+                if (!inDetail) {
+                    IconButton(onClick = onOpenSearch) {
+                        Icon(Icons.Rounded.Search, contentDescription = "搜索")
+                    }
+                }
+            },
         )
         when {
             inDetail -> DiscoverDetail(
@@ -125,11 +137,71 @@ fun DiscoverScreen(
                 isRefreshing = isRefreshing,
                 onRefresh = onRefresh,
                 modifier = Modifier.fillMaxSize(),
+                indicator = {
+                    // MD3 Expressive 波浪指示器：与歌曲页同款，避免混搭
+                    androidx.compose.material3.pulltorefresh.PullToRefreshDefaults.LoadingIndicator(
+                        state = androidx.compose.material3.pulltorefresh.rememberPullToRefreshState(),
+                        isRefreshing = isRefreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
+                },
             ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
+                // 时段问候语
+                item(key = "greeting") {
+                    Text(
+                        text = greetingText(),
+                        style = MaterialTheme.typography.titleLarge,
+                        modifier = Modifier.padding(horizontal = AppTheme.dimens.spaceLg, vertical = AppTheme.dimens.spaceSm),
+                    )
+                }
+                // 榜单快捷入口（横向胶囊）
+                if (toplists.isNotEmpty()) {
+                    item(key = "quick_toplists") {
+                        androidx.compose.foundation.lazy.LazyRow(
+                            contentPadding = PaddingValues(horizontal = AppTheme.dimens.spaceLg),
+                            horizontalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceXs),
+                        ) {
+                            androidx.compose.foundation.lazy.items(toplists) { ref ->
+                                Surface(
+                                    shape = RoundedCornerShape(20.dp),
+                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f),
+                                    modifier = Modifier.clickable { onOpenDetail(ref.id) },
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(
+                                            horizontal = AppTheme.dimens.spaceMd,
+                                            vertical = 8.dp,
+                                        ),
+                                    ) {
+                                        Icon(
+                                            Icons.Rounded.Explore,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(15.dp),
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                        Text(
+                                            text = ref.name,
+                                            style = MaterialTheme.typography.labelMedium,
+                                            modifier = Modifier.padding(start = 4.dp),
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+                // 当日最热：热歌榜第 1 名大图卡（文字在图上，底部渐变保证可读性）
+                val hotFirst = sections.firstOrNull { it.id == toplists.firstOrNull()?.id }?.songs?.firstOrNull()
+                if (hotFirst != null) {
+                    item(key = "daily_hot") {
+                        DailyHotCard(song = hotFirst, onClick = { onSongClick(hotFirst) })
+                    }
+                }
                 sections.forEach { section ->
                     item(key = "header_${section.id}") {
                         SectionHeader(
@@ -345,5 +417,86 @@ private fun SongCard(song: Song, onClick: () -> Unit) {
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,
         )
+    }
+}
+
+/** 按当前时段返回问候语。 */
+internal fun greetingText(): String {
+    val hour = java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY)
+    return when (hour) {
+        in 5..10 -> "早上好"
+        in 11..12 -> "中午好"
+        in 13..17 -> "下午好"
+        else -> "晚上好"
+    }
+}
+
+/**
+ * 当日最热大图卡：单张大图 + 文字直接写在图片上。
+ *
+ * 可读性保障：底部到顶部叠加黑色渐变（0.72 → 透明），文字永远压在渐变最深处，
+ * 与封面颜色无关都能看清。
+ */
+@Composable
+private fun DailyHotCard(song: Song, onClick: () -> Unit) {
+    val dimens = AppTheme.dimens
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm)
+            .height(190.dp)
+            .clip(RoundedCornerShape(18.dp))
+            .clickable(onClick = onClick),
+    ) {
+        SongCover(
+            song = song,
+            size = 999.dp,
+            radius = 0.dp,
+            modifier = Modifier.fillMaxSize(),
+        )
+        // 底部黑色渐变：保证任何封面色上文字都可读
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.05f),
+                        0.45f to Color.Black.copy(alpha = 0.25f),
+                        1f to Color.Black.copy(alpha = 0.78f),
+                    ),
+                ),
+        )
+        Column(
+            modifier = Modifier
+                .align(Alignment.BottomStart)
+                .padding(16.dp),
+        ) {
+            Surface(
+                color = MaterialTheme.colorScheme.primary.copy(alpha = 0.9f),
+                shape = RoundedCornerShape(6.dp),
+            ) {
+                Text(
+                    text = "今日最热",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                )
+            }
+            Text(
+                text = song.title,
+                style = MaterialTheme.typography.titleLarge,
+                color = Color.White,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.padding(top = 8.dp),
+            )
+            Text(
+                text = "${song.artistName} · ${song.albumTitle}",
+                style = MaterialTheme.typography.bodyMedium,
+                color = Color.White.copy(alpha = 0.85f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
     }
 }
