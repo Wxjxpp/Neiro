@@ -233,9 +233,10 @@ class LitTogetherTransport(
     ): Result<Unit> {
         if (token.isEmpty()) return Result.failure(IllegalStateException("不在房间中"))
         clientSequence++
-        // 全员开放事件（投票/聊天/加歌/无效源上报）直接发；
-        // 其余控制类事件由群友发时加 REQUEST_ 前缀，服务端按 allowMemberControl 门控。
-        val openEvents = setOf("VOTE", "CHAT", "ADD_SONG", "TRACK_ERROR")
+        // 全员开放事件（投票/聊天）直接发；其余控制类事件由群友发时
+        // 加 REQUEST_ 前缀，服务端映射后按各自门控处理（加歌=lockAddSongs，
+        // 播放控制=allowMemberControl，无效源上报=始终放行）。
+        val openEvents = setOf("VOTE", "CHAT")
         val evtType = if (!isController && type !in openEvents && !type.startsWith("REQUEST_")) {
             "REQUEST_$type"
         } else {
