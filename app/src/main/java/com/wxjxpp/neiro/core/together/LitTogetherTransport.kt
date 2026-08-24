@@ -318,7 +318,11 @@ class LitTogetherTransport(
         return null
     }
 
-    /** 与服务端 djb2 一致的 URL 哈希（去重键）见 [Companion.urlHash]。 */
+        /** 与服务端 djb2 一致的 URL 哈希（去重键）见 [Companion.urlHash]。 */
+
+    private fun parseError(body: String): Exception =
+        runCatching { Exception(JSONObject(body).optString("error")) }
+            .getOrDefault(Exception("HTTP 错误"))
 
     // ================= 轮询同步 =================
 

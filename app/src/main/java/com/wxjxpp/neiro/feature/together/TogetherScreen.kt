@@ -495,7 +495,7 @@ private fun QueueItem(
                     listOf(
                         t.optString("artist"),
                         t.optString("addedBy")?.let { "$it 点播" },
-                    ).filter { it.isNotEmpty() }.joinToString(" · "),
+                    ).filter { !it.isNullOrEmpty() }.joinToString(" · "),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
