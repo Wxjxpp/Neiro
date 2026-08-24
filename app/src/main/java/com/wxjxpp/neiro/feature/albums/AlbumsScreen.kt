@@ -133,6 +133,7 @@ fun AlbumsScreen(
                 },
             )
             AlbumDetailList(
+                album = opened!!,
                 songs = opened!!.songs,
                 extraSongs = extraSongs,
                 onSongClick = onSongClick,
@@ -177,6 +178,7 @@ fun AlbumsScreen(
 /** 专辑详情：头部信息（封面/歌手/总时长）+ 本专辑曲目（本地）+ 收藏/歌单中同专辑名的歌曲（去重），支持播放。 */
 @Composable
 private fun AlbumDetailList(
+    album: AlbumEntry,
     songs: List<Song>,
     extraSongs: List<Song>,
     onSongClick: (Song) -> Unit,
@@ -199,7 +201,7 @@ private fun AlbumDetailList(
         contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
     ) {
         item(key = "album_header") {
-            AlbumHeader(entry = opened!!, songCount = merged.size)
+            AlbumHeader(entry = album, songCount = merged.size)
         }
         lazyItems(merged, key = { it.id }) { song ->
             Row(

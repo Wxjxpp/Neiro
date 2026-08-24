@@ -21,22 +21,16 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        val session = PlaybackSessionHolder.getOrCreate(this)
-        // 确保通知渠道存在（Android 8+ 必需）
-        ensureChannel()
+        // 会话可能尚未创建（App 未播放过）：此时不强行建会话，
+        // onGetSession 返回 null 即可；App 开始播放后会话就位。
+        PlaybackSessionHolder.peek()?.let {
+            // 确保通知渠道存在（Android 8+ 必需）
+            ensureChannel()
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession? =
         PlaybackSessionHolder.peek()
-
-    /** 通知栏"关闭"按钮：停掉会话与服务。 */
-    private fun stopSelfAndRelease() {
-        PlaybackSessionHolder.peek()?.let { session ->
-            session.player.stop()
-            session.player.clearMediaItems()
-        }
-        stopSelf()
-    }
 
     private fun ensureChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {

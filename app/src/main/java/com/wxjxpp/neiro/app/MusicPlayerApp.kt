@@ -271,6 +271,7 @@ fun MusicPlayerApp(container: AppContainer) {
                             onScan = scanLibrary,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onNavigate = { target -> route = target },
+                            currentPlayingId = playback.current?.id,
                             onBatchOperate = { songs ->
                                 batchSongs = songs
                                 showBatchSheet = true
@@ -476,6 +477,8 @@ private fun RouteContent(
     onScan: () -> Unit,
     onOpenDrawer: () -> Unit,
     onNavigate: (String) -> Unit,
+    /** 当前播放歌曲 id（Home 高亮 + 定位）。 */
+    currentPlayingId: String? = null,
     onAddSelectedToPlaylist: () -> Unit,
     /** 搜索页等处的批量入口（打开批量弹层）。 */
     onBatchOperate: (List<com.wxjxpp.neiro.core.model.Song>) -> Unit = {},
@@ -507,7 +510,7 @@ private fun RouteContent(
                         songs = uiState.songs,
                         isRefreshing = uiState.isRefreshing,
                         selectedIds = uiState.selectedSongIds,
-                        currentPlayingId = playback.current?.id,
+                        currentPlayingId = currentPlayingId,
                         topBar = {
                             if (inSelectionModeCompat(uiState)) {
                                 SelectionTopBar(

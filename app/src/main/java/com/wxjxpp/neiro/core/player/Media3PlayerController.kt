@@ -74,10 +74,7 @@ class Media3PlayerController(
      */
     fun ensureMediaSession() {
         onPlayer { p ->
-            val session = PlaybackSessionHolder.getOrCreate(context)
-            if (session.player != p) {
-                PlaybackSessionHolder.attach(p)
-            }
+            PlaybackSessionHolder.getOrCreate(context, p)
         }
     }
 
