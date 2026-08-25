@@ -606,7 +606,7 @@ private fun RoomView(
                 items(n) { i ->
                     QueueItem(
                         transport,
-                        queueArr.getJSONObject(i),
+                        queueArr?.getJSONObject(i),
                         isCurrent = i == curIdx,
                         isHost = isHost,
                         onMessage = onMessage,
