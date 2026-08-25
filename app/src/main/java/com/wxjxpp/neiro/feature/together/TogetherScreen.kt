@@ -355,7 +355,7 @@ private fun RoomView(
 
     LaunchedEffect(Unit) {
         transport.roomStateJson.collect { stateJson ->
-            val pb = stateJson.optJSONObject("playback") ?: return@collect
+            val pb = stateJson?.optJSONObject("playback") ?: return@collect
             val track = pb.optJSONObject("track") ?: return@collect
             val queueArr = pb.optJSONArray("queue")
             val roomIdx = pb.optInt("currentIndex", -1)
