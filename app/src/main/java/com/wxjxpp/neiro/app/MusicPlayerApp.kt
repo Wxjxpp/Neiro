@@ -517,35 +517,9 @@ private fun RouteContent(
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
-        // 页面间切换：Material Motion「Transition Choreography」编排——
-    // Shared Axis Y 模式：页面按导航顺序产生方向性垂直位移 + 透明度渐变，
-    // 前进自下而上推入、后退反向滑出（空间连续性）；同级路由只做透明度切换。
-    // 曲线遵循 MD3E 动效物理：位移走弹簧（空间属性），透明度走 motionScheme effects 规格。
+    // 页面间切换：淡入淡出（Expressive motionScheme 由主题统一下发节奏）
     // SharedTransitionLayout 提供跨页面共享元素坐标系（专辑 Container Transform 等）
-    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    // Expressive 空间弹簧（MotionScheme 的 spatial 规格是 Float 签名，位移需 IntOffset，
-    // 故按 M3E 动效物理特征显式声明：无回弹、中低刚度=柔和到位）
-    val enterAxisSpring = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
-        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-        stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow,
-    )
-    val exitAxisSpring = androidx.compose.animation.core.spring<androidx.compose.ui.unit.IntOffset>(
-        dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-        stiffness = androidx.compose.animation.core.Spring.StiffnessMedium,
-    )
-    fun routeOrder(route: String): Int = when (route) {
-        Destination.Home.route -> 0
-        Destination.Discover.route -> 1
-        Destination.Search.route -> 2
-        Destination.Albums.route -> 2
-        Destination.Playlists.route -> 2
-        Destination.Library.route -> 2
-        Destination.Together.route -> 3
-        Destination.Diary.route -> 3
-        Destination.MusicSources.route -> 3
-        Destination.Settings.route -> 4
-        else -> 0
-    }
+    val rootMotionSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
     androidx.compose.animation.SharedTransitionLayout {
         androidx.compose.runtime.CompositionLocalProvider(
             com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope provides this,
@@ -553,20 +527,7 @@ private fun RouteContent(
         AnimatedContent(
             targetState = route,
             transitionSpec = {
-                if (initialState == targetState) {
-                    // 同一路由内容刷新：只做透明度，避免位移抖动
-                    fadeIn(effectsSpec) togetherWith fadeOut(effectsSpec)
-                } else {
-                    // Shared Axis Y：前进=新页自下而上推入；后退=旧页向下滑出让位
-                    val forward = routeOrder(initialState) < routeOrder(targetState)
-                    val enterY: (Int) -> Int = if (forward) { it -> it / 6 } else { it -> -it / 6 }
-                    val exitY: (Int) -> Int = if (forward) { it -> -it / 4 } else { it -> it / 4 }
-                    (
-                        slideInVertically(enterAxisSpring, enterY) + fadeIn(effectsSpec)
-                    ) togetherWith (
-                        slideOutVertically(exitAxisSpring, exitY) + fadeOut(effectsSpec)
-                    )
-                }
+                fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
             },
             label = "rootRoute",
             modifier = modifier,
