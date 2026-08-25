@@ -41,12 +41,12 @@ fun PillSelector(
             val shape: Shape = when {
                 options.size == 1 -> RoundedCornerShape(50)
                 index == 0 -> RoundedCornerShape(
-                    topStart = 50, bottomStart = 50, topEnd = 0, bottomEnd = 0,
+                    topStart = 50.dp, bottomStart = 50.dp, topEnd = 0.dp, bottomEnd = 0.dp,
                 )
                 index == options.lastIndex -> RoundedCornerShape(
-                    topStart = 0, bottomStart = 0, topEnd = 50, bottomEnd = 50,
+                    topStart = 0.dp, bottomStart = 0.dp, topEnd = 50.dp, bottomEnd = 50.dp,
                 )
-                else -> RoundedCornerShape(0)
+                else -> RoundedCornerShape(0.dp)
             }
             Surface(
                 shape = shape,

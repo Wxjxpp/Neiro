@@ -103,28 +103,32 @@ private fun BannerCard(
     onClose: () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
-    val (container, content, icon, border) = when (banner.type) {
+    val container: androidx.compose.ui.graphics.Color
+    val content: androidx.compose.ui.graphics.Color
+    val border: androidx.compose.ui.graphics.Color
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+    when (banner.type) {
         // 成功绿：主色低透明度铺底（暗色模式自适应）
-        "success" -> kotlin.collections.listOf(
-            cs.primary.copy(alpha = 0.16f),
-            cs.primary,
-            Icons.Rounded.CheckCircle,
-            cs.primary.copy(alpha = 0.34f),
-        )
+        "success" -> {
+            container = cs.primary.copy(alpha = 0.16f)
+            content = cs.primary
+            border = cs.primary.copy(alpha = 0.34f)
+            icon = Icons.Rounded.CheckCircle
+        }
         // 失败红
-        "error" -> kotlin.collections.listOf(
-            cs.errorContainer,
-            cs.onErrorContainer,
-            Icons.Rounded.WarningAmber,
-            cs.error.copy(alpha = 0.42f),
-        )
+        "error" -> {
+            container = cs.errorContainer
+            content = cs.onErrorContainer
+            border = cs.error.copy(alpha = 0.42f)
+            icon = Icons.Rounded.WarningAmber
+        }
         // 中性信息
-        else -> kotlin.collections.listOf(
-            cs.surfaceVariant.copy(alpha = 0.92f),
-            cs.onSurfaceVariant,
-            Icons.Rounded.Info,
-            cs.outlineVariant,
-        )
+        else -> {
+            container = cs.surfaceVariant.copy(alpha = 0.92f)
+            content = cs.onSurfaceVariant
+            border = cs.outlineVariant
+            icon = Icons.Rounded.Info
+        }
     }
     Surface(
         color = container,
