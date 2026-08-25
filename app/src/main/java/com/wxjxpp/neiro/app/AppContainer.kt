@@ -326,7 +326,7 @@ private val registry = DefaultMusicSourceRegistry(
         // 启动时恢复上次启用的音源脚本；引擎状态变化时同步外置源集合
         appScope.launch {
             appSettings.observeActiveUserApiId().collect { id ->
-                if (id != null && id != activatingId && userApiEngine.status !is UserApiStatus.Ready) {
+                if (id != null && id != activatingId && userApiEngine.status.value !is UserApiStatus.Ready) {
                     activateUserApi(id)
                 }
                 if (id == null) refreshOnlineSources(enabled = false)
@@ -374,6 +374,13 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
         if (activeOnlineSources.isEmpty()) {
             return Media3PlayerController.RemoteUrl.Failure("没有可用的外置音源（请先在「自定义音源」启用脚本）")
         }
+        // 脚本引擎可能仍在初始化（冷启动自动恢复 / 刚点启用）：等就绪再取流，
+        // 避免请求打进未完成 init 的脚本（表现为档位失败但脚本日志无任何后端尝试）
+        if (userApiEngine.status.value is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing) {
+            kotlinx.coroutines.withTimeoutOrNull(20_000L) {
+                userApiEngine.status.first { it !is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing }
+            }
+        }
         val baseQuality = appSettings.currentQuality()
         val fallbackDir = appSettings.observeQualityFallbackDirection().first()
 
@@ -396,11 +403,25 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
                     failures += "[$quality] 音源脚本不支持${source.displayName}，请检查「自定义音源」"
                     continue
                 }
-                when (val r = source.resolvePlayUrlDetailed(song, quality)) {
+                when (val first = source.resolvePlayUrlDetailed(song, quality)) {
                     is OnlineMusicSource.PlayUrlResult.Success ->
-                        return Media3PlayerController.RemoteUrl.Success(r.url)
-                    is OnlineMusicSource.PlayUrlResult.Failure ->
-                        failures += "[$quality] ${r.reason.take(80)}"
+                        return Media3PlayerController.RemoteUrl.Success(first.url)
+                    is OnlineMusicSource.PlayUrlResult.Failure -> {
+                        // 聚合脚本偶发返回无明细的裸 failed（请求到达时后端列表还没装配完）：
+                        // 稍候重试一次；带明细的真实失败不重试（避免双倍等待）
+                        val final = if (first.reason.trim().equals("failed", ignoreCase = true)) {
+                            kotlinx.coroutines.delay(1_500)
+                            source.resolvePlayUrlDetailed(song, quality)
+                        } else {
+                            first
+                        }
+                        when (final) {
+                            is OnlineMusicSource.PlayUrlResult.Success ->
+                                return Media3PlayerController.RemoteUrl.Success(final.url)
+                            is OnlineMusicSource.PlayUrlResult.Failure ->
+                                failures += "[$quality] ${(final.reason.ifBlank { first.reason }).take(80)}"
+                        }
+                    }
                 }
             }
         }
@@ -419,9 +440,23 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
  *  那不代表「握手失败」。引擎 Ready + 能力表非空即代表脚本链路健康。 */
     override suspend fun testUserApiHandshake(api: com.wxjxpp.neiro.core.userapi.UserApiInfo): String {
         val started = System.currentTimeMillis()
-        // 引擎当前状态：Ready 且 info.id 匹配 → 脚本已完整执行 init 并上报能力表
-        val status = userApiEngine.status
-        val ready = status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Ready && status.info.id == api.id
+        // 注意：status 是 StateFlow，必须取 .value 才是状态本体；
+        // 直接对 StateFlow 做 is 判断恒为 false（上一版恒报「未启用」的根源）
+        var status = userApiEngine.status.value
+        // 引擎正在初始化（或刚点启用还没进入 Initializing）时等待收敛，最多 15s
+        fun stillPending(): Boolean =
+            status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing ||
+                (status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Idle && activatingId != null)
+        if (stillPending()) {
+            val deadline = System.currentTimeMillis() + 15_000L
+            while (System.currentTimeMillis() < deadline) {
+                kotlinx.coroutines.delay(200)
+                status = userApiEngine.status.value
+                if (!stillPending()) break
+            }
+        }
+        val st = status
+        val ready = st is com.wxjxpp.neiro.core.userapi.UserApiStatus.Ready && st.info.id == api.id
         val elapsed = System.currentTimeMillis() - started
         return when {
             ready -> {
@@ -435,11 +470,19 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
                     append("（${elapsed}ms）")
                 }
             }
-            status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Failed && status.id == api.id ->
-                "握手失败 · ${api.name} · ${status.message.take(120)}"
-            status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing ->
+            st is com.wxjxpp.neiro.core.userapi.UserApiStatus.Failed && st.id == api.id ->
+                "握手失败 · ${api.name} · ${st.message.take(120)}"
+            st is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing ->
                 "握手失败 · ${api.name} · 脚本仍在初始化，请稍后再试"
-            else -> "握手失败 · ${api.name} · 脚本未启用或引擎未加载（请先点 ▶ 启用）"
+            else -> {
+                val activeName = (userApiEngine.status.value as? com.wxjxpp.neiro.core.userapi.UserApiStatus.Ready)
+                    ?.info?.name
+                if (activeName != null && activeName != api.name) {
+                    "握手失败 · ${api.name} · 当前启用的是「$activeName」，请先切换到该音源再测试"
+                } else {
+                    "握手失败 · ${api.name} · 脚本未启用或引擎未加载（请先点 ▶ 启用）"
+                }
+            }
         }
     }
 
