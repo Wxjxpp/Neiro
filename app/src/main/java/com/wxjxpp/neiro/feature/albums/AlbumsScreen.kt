@@ -132,13 +132,14 @@ fun AlbumsScreen(
 ) {
     var opened by remember { mutableStateOf<AlbumEntry?>(null) }
     BackHandler(enabled = opened != null) { opened = null }
-    // Container Transform：网格 → 详情，专辑封面作为共享元素飞入详情头部
+    // Container Transform：网格 → 详情，专辑封面作为共享元素飞入详情头部。
+    // 曲线用 MD3E motionScheme 的空间规格（expressive 弹簧），符合 Transition Choreography
+    val morphSpec = MaterialTheme.motionScheme.defaultSpatialSpec<Float>()
     AnimatedContent(
         targetState = opened,
         label = "albumContainer",
         transitionSpec = {
-            fadeIn(androidx.compose.animation.core.tween(260)) togetherWith
-                fadeOut(androidx.compose.animation.core.tween(200))
+            fadeIn(morphSpec) togetherWith fadeOut(morphSpec)
         },
         modifier = modifier,
     ) { current ->

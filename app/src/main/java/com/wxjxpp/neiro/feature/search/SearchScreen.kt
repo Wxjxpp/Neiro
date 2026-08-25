@@ -5,6 +5,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
@@ -21,6 +23,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.WifiOff
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -81,6 +84,11 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
+    // 网络状态：进入页面/搜索时探测一次，用于空结果归因（离线时明确提示，不误导为"没有这首歌"）
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val isOffline = remember(query) {
+        !com.wxjxpp.neiro.core.net.NetworkMonitor.isOnline(context)
+    }
     // 在线/本地 Tab 状态：默认智能落位——在线结果为空且本地有命中（典型如断网）
     // 时直接落在「本地」，不再卡在空白在线页；新搜索或在线结果到达后自动回「在线」。
     var showLocalTab by remember(query, onlineResults) {
@@ -201,10 +209,12 @@ fun SearchScreen(
                 }
             }
             allLocalEmpty -> {
-                // 空结果归因：区分「没有音源」「网络不通」「平台失败」「真无此歌」
+                // 空结果归因：区分「没有音源」「没联网」「平台失败」「真无此歌」
                 when {
                     onlinePlatforms.size <= 1 ->
                         HintText("没有可用音源：请先在「音源」页导入并启用音源脚本")
+                    isOffline ->
+                        HintText("当前无网络连接，在线搜索不可用。\n本地结果见下方；恢复网络后可重新搜索在线曲库")
                     onlineFailed.size >= onlinePlatforms.size - 1 && onlineFailed.isNotEmpty() ->
                         HintText("在线搜索失败：${onlineFailed.joinToString("、")}。\n请检查网络连接后重试")
                     onlineResults.isEmpty() && localResults.isEmpty() ->
@@ -216,6 +226,30 @@ fun SearchScreen(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
+                // 离线提示条：断网时明确告知在线搜索不可用（有本地结果自动落本地Tab的场景）
+                if (isOffline && query.isNotBlank()) {
+                    item(key = "offline_banner") {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = dimens.spaceLg, vertical = 6.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.WifiOff,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp),
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text(
+                                "无网络连接，仅显示本地结果",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.error,
+                            )
+                        }
+                    }
+                }
                 // 聚合模式下同时展示在线 + 本地，带切换开关
                 if (currentOnlinePlatform == OnlineSearchRepository.ALL) {
                     item {
