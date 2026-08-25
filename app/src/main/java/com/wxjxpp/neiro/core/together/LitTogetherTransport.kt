@@ -145,11 +145,12 @@ class LitTogetherTransport(
         }
     }
 
-    /** 创建房间（成为房主）。成功返回房间号。 */
-    suspend fun createRoomAt(baseUrl: String, nick: String): Result<String> {
+    /** 创建房间（成为房主）。roomName 为可选显示名。成功返回房间号。 */
+    suspend fun createRoomAt(baseUrl: String, nick: String, roomName: String = ""): Result<String> {
         serverUrl = baseUrl.trim().trimEnd('/')
         nickname = nick
         val body = JSONObject().put("nickname", nick)
+        if (roomName.isNotEmpty()) body.put("roomName", roomName)
         val resp = runCatching { http.postJson("$serverUrl/api/rooms", body.toString()) }
             .getOrElse { return Result.failure(it) }
         if (!resp.isSuccessful) return Result.failure(parseError(resp.body))
@@ -420,11 +421,16 @@ class LitTogetherTransport(
         }
         val members = membersJson.keys().asSequence().map { id ->
             val m = membersJson.getJSONObject(id)
-            TogetherMember(id = id, name = m.optString("nickname"), isHost = id == controllerId)
+            TogetherMember(
+                id = id,
+                name = m.optString("nickname"),
+                isHost = id == controllerId,
+                online = m.optBoolean("online", true),
+            )
         }.toList()
         room.value = TogetherRoom(
             id = state.optString("roomId"),
-            name = "房间 ${state.optString("roomId")}",
+            name = state.optString("roomName").ifEmpty { "房间 ${state.optString("roomId")}" },
             members = members,
             hostId = controllerId,
         )

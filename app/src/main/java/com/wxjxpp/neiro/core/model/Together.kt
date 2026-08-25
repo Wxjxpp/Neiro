@@ -11,6 +11,8 @@ data class TogetherMember(
     val id: String,
     val name: String,
     val isHost: Boolean = false,
+    /** 是否在线（服务端按心跳窗口判定）。 */
+    val online: Boolean = true,
 )
 
 data class TogetherRoom(
