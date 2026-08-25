@@ -482,10 +482,11 @@ fun SettingsScreen(
             SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
             SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
             SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
-            }
-        }
-    }
-}
+            } // Card 入口组
+        } // 根列表 Column
+    } // else：根列表分支
+} // AnimatedContent 内容
+} // SettingsScreen
 
 /** 二级子页：带返回键的简单容器。 */
 @Composable
