@@ -47,7 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.search.OnlineSearchRepository
-import com.wxjxpp.neiro.ui.components.PillSelector
+import com.wxjxpp.neiro.ui.components.ConnectedChoiceGroup
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
@@ -55,7 +55,7 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
  * 搜索页。
  *
  * - 搜索栏：Material3 [SearchBar]（带水平安全区，不再顶到屏幕边缘）
- * - 平台筛选：连通胶囊选择组（PillSelector）
+ * - 平台筛选：官方连通按钮组（M3E connected button group）
  * - 在线搜索中展示 MD3E LoadingIndicator；空结果按原因归因提示
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class,
@@ -171,9 +171,9 @@ fun SearchScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
 
-        // 聚合搜索时展示平台筛选器：连通胶囊选择组
+        // 聚合搜索时展示平台筛选器：官方连通按钮组（M3E connected button group）
         if (query.isNotBlank() && onlinePlatforms.size > 1) {
-            PillSelector(
+            ConnectedChoiceGroup(
                 options = onlinePlatforms.map { it.displayName },
                 selectedIndex = onlinePlatforms.indexOfFirst { it.id == currentOnlinePlatform }
                     .coerceAtLeast(0),
@@ -258,10 +258,10 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 在线/本地切换：连通胶囊选择组（与平台筛选条同款）
+                            // 在线/本地切换：官方连通按钮组（与平台筛选条同款）
                             val labels = listOf("在线", "本地")
                             var tabActive by remember(query, onlineResults) { mutableStateOf(if (showLocalTab) 1 else 0) }
-                            PillSelector(
+                            ConnectedChoiceGroup(
                                 options = labels,
                                 selectedIndex = tabActive,
                                 onSelect = { i ->

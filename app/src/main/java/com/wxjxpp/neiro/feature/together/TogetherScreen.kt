@@ -73,7 +73,7 @@ import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.TogetherConnectionState
 import com.wxjxpp.neiro.core.player.PlayerController
 import com.wxjxpp.neiro.core.together.LitTogetherTransport
-import com.wxjxpp.neiro.ui.components.PillSelector
+import com.wxjxpp.neiro.ui.components.ConnectedChoiceGroup
 import com.wxjxpp.neiro.ui.components.SongCover
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -738,12 +738,12 @@ private fun RoomView(
                 )
             }
         }
-        // 平台标签分类条：连通胶囊选择组（与全局聚合搜索一致），横向滚动防溢出
+        // 平台标签分类条：官方连通按钮组（与全局聚合搜索一致），横向滚动防溢出
         item {
             Row(
                 modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
             ) {
-                PillSelector(
+                ConnectedChoiceGroup(
                     options = search.platforms.map { it.displayName },
                     selectedIndex = search.platforms.indexOfFirst { it.id == platformId }.coerceAtLeast(0),
                     onSelect = { index ->

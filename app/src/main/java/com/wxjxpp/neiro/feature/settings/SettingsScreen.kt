@@ -30,9 +30,15 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -47,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.data.QualityFallbackDirection
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.ShuffleMode
+import com.wxjxpp.neiro.ui.components.ConnectedChoiceGroup
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /** 设置页：无顶部大标题，只列可修改项。 */
@@ -110,22 +117,48 @@ fun SettingsScreen(
     var subsection by remember { mutableStateOf<String?>(null) }
     // 子页返回手势：先回设置根页，再走外壳的页面级返回
     androidx.activity.compose.BackHandler(enabled = subsection != null) { subsection = null }
-    if (subsection != null) {
-        SettingsSubsection(
-            title = when (subsection) {
-                "lyrics" -> "歌词"
-                "playback" -> "播放"
-                "source" -> "音源"
-                "appearance" -> "外观"
-                "download" -> "下载"
-                "lab" -> "实验室"
-                else -> ""
-            },
-            onBack = { subsection = null },
-            contentPadding = contentPadding,
-            modifier = modifier,
-        ) {
-            when (subsection) {
+    // 二级导航转场：Material Motion「Transition Choreography」Shared Axis Y——
+    // 进入子页=前进（新内容自下而上推入），返回=后退（旧内容向下滑出），
+    // 位移走弹簧、透明度走 effects 规格，与全局路由编排同一套动效语言
+    val enterAxisSpring = spring<IntOffset>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMediumLow,
+    )
+    val exitAxisSpring = spring<IntOffset>(
+        dampingRatio = Spring.DampingRatioNoBouncy,
+        stiffness = Spring.StiffnessMedium,
+    )
+    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    AnimatedContent(
+        targetState = subsection,
+        transitionSpec = {
+            val forward = initialState == null
+            val enterY: (Int) -> Int = if (forward) { it -> it / 6 } else { it -> -it / 6 }
+            val exitY: (Int) -> Int = if (forward) { it -> -it / 4 } else { it -> it / 4 }
+            (
+                slideInVertically(enterAxisSpring, enterY) + fadeIn(effectsSpec)
+            ) togetherWith (
+                slideOutVertically(exitAxisSpring, exitY) + fadeOut(effectsSpec)
+            )
+        },
+        label = "settingsSubsection",
+        modifier = modifier,
+    ) { currentSubsection ->
+        if (currentSubsection != null) {
+            SettingsSubsection(
+                title = when (currentSubsection) {
+                    "lyrics" -> "歌词"
+                    "playback" -> "播放"
+                    "source" -> "音源"
+                    "appearance" -> "外观"
+                    "download" -> "下载"
+                    "lab" -> "实验室"
+                    else -> ""
+                },
+                onBack = { subsection = null },
+                contentPadding = contentPadding,
+            ) {
+                when (currentSubsection) {
                 "lyrics" -> {
                     SwitchRow(
                         title = "显示翻译",
@@ -151,16 +184,13 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(top = AppTheme.dimens.spaceMd, bottom = AppTheme.dimens.spaceXs),
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf("start" to "左", "center" to "中", "end" to "右").forEachIndexed { index, (value, label) ->
-                            SegmentedButton(
-                                selected = lyricsAlign == value,
-                                onClick = { onLyricsAlignChange(value) },
-                                shape = SegmentedButtonDefaults.itemShape(index, 3),
-                                label = { Text(label) },
-                            )
-                        }
-                    }
+                    val alignOptions = remember { listOf("start" to "左", "center" to "中", "end" to "右") }
+                    ConnectedChoiceGroup(
+                        options = alignOptions.map { it.second },
+                        selectedIndex = alignOptions.indexOfFirst { it.first == lyricsAlign }.coerceAtLeast(0),
+                        onSelect = { index -> onLyricsAlignChange(alignOptions[index].first) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     var fontValue by remember(lyricsFontScale) { mutableStateOf(lyricsFontScale) }
                     Text(
@@ -194,16 +224,12 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceSm),
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        ShuffleMode.entries.forEachIndexed { index, mode ->
-                            SegmentedButton(
-                                selected = shuffleMode == mode,
-                                onClick = { onShuffleModeChange(mode) },
-                                shape = SegmentedButtonDefaults.itemShape(index, ShuffleMode.entries.size),
-                                label = { Text(if (mode == ShuffleMode.Pseudo) "伪随机" else "真随机") },
-                            )
-                        }
-                    }
+                    ConnectedChoiceGroup(
+                        options = ShuffleMode.entries.map { if (it == ShuffleMode.Pseudo) "伪随机" else "真随机" },
+                        selectedIndex = ShuffleMode.entries.indexOf(shuffleMode).coerceAtLeast(0),
+                        onSelect = { index -> onShuffleModeChange(ShuffleMode.entries[index]) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     SwitchRow(
                         title = "拔出耳机自动暂停",
@@ -244,20 +270,13 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        listOf(
-                            "default" to "默认",
-                            "serif" to "衬线",
-                            "mono" to "等宽",
-                        ).forEachIndexed { index, (id, label) ->
-                            SegmentedButton(
-                                selected = appFontFamily == id,
-                                onClick = { onAppFontFamilyChange(id) },
-                                shape = SegmentedButtonDefaults.itemShape(index, 3),
-                                label = { Text(label) },
-                            )
-                        }
-                    }
+                    val fontOptions = remember { listOf("default" to "默认", "serif" to "衬线", "mono" to "等宽") }
+                    ConnectedChoiceGroup(
+                        options = fontOptions.map { it.second },
+                        selectedIndex = fontOptions.indexOfFirst { it.first == appFontFamily }.coerceAtLeast(0),
+                        onSelect = { index -> onAppFontFamilyChange(fontOptions[index].first) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     var fontScaleValue by remember(appFontScale) { mutableStateOf(appFontScale) }
                     Text(
                         text = "字号大小：%.0f%%".format(fontScaleValue * 100),
@@ -353,16 +372,12 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
-                        Quality.entries.forEachIndexed { index, q ->
-                            SegmentedButton(
-                                selected = preferredQuality == q,
-                                onClick = { onPreferredQualityChange(q) },
-                                shape = SegmentedButtonDefaults.itemShape(index, Quality.entries.size),
-                                label = { Text(qualityLabel(q)) },
-                            )
-                        }
-                    }
+                    ConnectedChoiceGroup(
+                        options = Quality.entries.map { qualityLabel(it) },
+                        selectedIndex = Quality.entries.indexOf(preferredQuality).coerceAtLeast(0),
+                        onSelect = { index -> onPreferredQualityChange(Quality.entries[index]) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text(
                         text = "取流失败时按下面的方向逐级调整音质重试；只使用歌曲自身平台的音源，不会跨平台自动换源。",
                         style = MaterialTheme.typography.bodySmall,
@@ -375,19 +390,18 @@ fun SettingsScreen(
                         style = MaterialTheme.typography.titleSmall,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
                     )
-                    SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
+                    val fallbackOptions = remember {
                         listOf(
                             QualityFallbackDirection.LOWER to "优先降低",
                             QualityFallbackDirection.HIGHER to "优先升高",
-                        ).forEachIndexed { index, (direction, label) ->
-                            SegmentedButton(
-                                selected = qualityFallbackDirection == direction,
-                                onClick = { onQualityFallbackDirectionChange(direction) },
-                                shape = SegmentedButtonDefaults.itemShape(index, 2),
-                                label = { Text(label) },
-                            )
-                        }
+                        )
                     }
+                    ConnectedChoiceGroup(
+                        options = fallbackOptions.map { it.second },
+                        selectedIndex = fallbackOptions.indexOfFirst { it.first == qualityFallbackDirection }.coerceAtLeast(0),
+                        onSelect = { index -> onQualityFallbackDirectionChange(fallbackOptions[index].first) },
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     Text(
                         text = if (qualityFallbackDirection == QualityFallbackDirection.LOWER) {
                             "降低：Lossless → High → Standard → Low，流量友好"
@@ -436,18 +450,18 @@ fun SettingsScreen(
                         checked = labTurboSpeed,
                         onCheckedChange = onLabTurboSpeedChange,
                     )
+                    }
                 }
             }
-        }
-        return
-    }
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .verticalScroll(rememberScrollState())
-            .padding(contentPadding)
-            .padding(horizontal = dimens.spaceLg),
-    ) {
+        } else {
+            // 根列表：同样置于编排容器内，与子页构成 Shared Axis Y 的转场两端
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .padding(contentPadding)
+                    .padding(horizontal = dimens.spaceLg),
+            ) {
         // 导航入口：打开侧边栏（每个页面必须有导航方式）
         Row(verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onOpenDrawer) {
@@ -468,6 +482,7 @@ fun SettingsScreen(
             SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
             SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
             SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
+            }
         }
     }
 }

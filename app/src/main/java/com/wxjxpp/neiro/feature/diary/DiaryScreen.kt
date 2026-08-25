@@ -27,9 +27,7 @@ import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import com.wxjxpp.neiro.ui.components.ConnectedChoiceGroup
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -91,16 +89,14 @@ fun DiaryScreen(
                     style = MaterialTheme.typography.titleLarge,
                     modifier = Modifier.weight(1f),
                 )
-                SingleChoiceSegmentedButtonRow {
-                    listOf(1 to "一个月", 12 to "一年").forEachIndexed { index, (months, label) ->
-                        SegmentedButton(
-                            selected = rangeMonths == months,
-                            onClick = { rangeMonths = months; selectedDay = null },
-                            shape = SegmentedButtonDefaults.itemShape(index, 2),
-                            label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                        )
-                    }
-                }
+                ConnectedChoiceGroup(
+                    options = listOf("一个月", "一年"),
+                    selectedIndex = if (rangeMonths == 1) 0 else 1,
+                    onSelect = { index ->
+                        rangeMonths = if (index == 0) 1 else 12
+                        selectedDay = null
+                    },
+                )
             }
         }
         item {
