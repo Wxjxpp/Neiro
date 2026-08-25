@@ -444,7 +444,9 @@ private fun ErrorBanner(
                     }
                 },
         ) {
-            androidx.compose.animation.AnimatedContent(
+        // 点击切换展开：完整显示多音质档位的失败明细（默认 4 行截断）
+        var expanded by remember(message) { mutableStateOf(false) }
+        androidx.compose.animation.AnimatedContent(
                 targetState = message.orEmpty(),
                 transitionSpec = { fadeIn(tween(200)) togetherWith fadeOut(tween(120)) },
                 label = "errorMessage",
@@ -457,9 +459,12 @@ private fun ErrorBanner(
                         text = text,
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onErrorContainer,
-                        maxLines = 4,
+                        maxLines = if (expanded) Int.MAX_VALUE else 4,
                         overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                        modifier = Modifier.weight(1f).padding(vertical = AppTheme.dimens.spaceSm),
+                        modifier = Modifier
+                            .weight(1f)
+                            .padding(vertical = AppTheme.dimens.spaceSm)
+                            .clickable { expanded = !expanded },
                     )
                     IconButton(onClick = onDismiss) {
                         Icon(

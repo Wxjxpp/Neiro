@@ -414,27 +414,32 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
         )
     }
 
-    /** 测试音源握手：向脚本引擎发一次真实请求，验证脚本可执行、网络可达。耗时附在结果尾部。 */
+    /** 测试音源握手：校验脚本引擎已成功加载该音源并完成能力上报（QuickJS 执行通过）。
+ *  注意：不发真实业务请求——聚合源对探测性假数据（songId=0）必然返回业务失败，
+ *  那不代表「握手失败」。引擎 Ready + 能力表非空即代表脚本链路健康。 */
     override suspend fun testUserApiHandshake(api: com.wxjxpp.neiro.core.userapi.UserApiInfo): String {
-        val platforms = api.platforms
-        if (platforms.isEmpty()) return "握手失败：脚本未上报支持的平台"
-        val platform = platforms.first()
         val started = System.currentTimeMillis()
-        // 用 pic 动作做探测：请求最轻（只取封面 URL），能完整走一遍「引擎→脚本→网络」链路
-        val result = userApiClient.pic(
-            source = platform,
-            musicInfo = org.json.JSONObject()
-                .put("songId", "0")
-                .put("title", "handshake-probe")
-                .put("artist", "")
-                .put("album", ""),
-        )
+        // 引擎当前状态：Ready 且 info.id 匹配 → 脚本已完整执行 init 并上报能力表
+        val status = userApiEngine.status
+        val ready = status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Ready && status.info.id == api.id
         val elapsed = System.currentTimeMillis() - started
-        return when (result) {
-            is com.wxjxpp.neiro.core.userapi.UserApiClient.Result.Success ->
-                "握手成功 · ${api.name} · 平台 $platform · 耗时 ${elapsed}ms"
-            is com.wxjxpp.neiro.core.userapi.UserApiClient.Result.Failure ->
-                "握手失败 · ${api.name} · ${result.reason.take(120)}"
+        return when {
+            ready -> {
+                val platforms = api.platforms
+                val actions = activeCapabilities.entries.take(3)
+                    .joinToString { (k, v) -> "$k:${v.joinToString("/")}" }
+                buildString {
+                    append("握手成功 · ${api.name} · 引擎已加载并完成能力上报")
+                    if (platforms.isNotEmpty()) append(" · 平台 ${platforms.joinToString("、")}")
+                    if (actions.isNotEmpty()) append(" · 能力 {$actions}")
+                    append("（${elapsed}ms）")
+                }
+            }
+            status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Failed && status.id == api.id ->
+                "握手失败 · ${api.name} · ${status.message.take(120)}"
+            status is com.wxjxpp.neiro.core.userapi.UserApiStatus.Initializing ->
+                "握手失败 · ${api.name} · 脚本仍在初始化，请稍后再试"
+            else -> "握手失败 · ${api.name} · 脚本未启用或引擎未加载（请先点 ▶ 启用）"
         }
     }
 
