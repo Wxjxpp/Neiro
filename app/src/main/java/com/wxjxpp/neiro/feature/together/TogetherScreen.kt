@@ -604,9 +604,10 @@ private fun RoomView(
             LazyColumn(Modifier.padding(horizontal = 20.dp)) {
                 val n = queueArr?.length() ?: 0
                 items(n) { i ->
+                    val trackItem = queueArr?.optJSONObject(i) ?: return@items
                     QueueItem(
                         transport,
-                        queueArr?.getJSONObject(i),
+                        trackItem,
                         isCurrent = i == curIdx,
                         isHost = isHost,
                         onMessage = onMessage,
