@@ -1,3 +1,7 @@
 <resources>
-    <style name="Theme.App" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- windowBackground：Android 12 以下显示启动图；12+ 由系统 SplashScreen 接管（values-v31）。
+         Compose 根布局 fillMaxSize+background 会盖住它，不会透出到运行期界面。 -->
+    <style name="Theme.App" parent="android:Theme.Material.Light.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
 </resources>
