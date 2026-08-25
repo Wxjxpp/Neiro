@@ -23,6 +23,12 @@ import org.json.JSONObject
  */
 class DiscoverRepository(
     private val http: HttpClient,
+    /**
+     * 动态决定榜单歌曲挂载到哪个音源 ID。
+     * 用户启用了 LX 音源后返回如 "wy-lx"，播放时即可在注册表命中该音源；
+     * 未启用时返回 null，保持平台原生 id（此时播放会提示需要音源，属预期）。
+     */
+    private val sourceIdProvider: () -> String? = { null },
 ) {
 
     data class Section(
@@ -89,8 +95,11 @@ class DiscoverRepository(
         val songId = info.optLong("id").takeIf { it > 0 }?.toString() ?: return null
         val title = info.optString("name").ifBlank { return null }
         val album = info.optJSONObject("al")
+        // 动态挂载：用户已启用对应 LX 音源时，榜单歌曲直接挂到该音源（可播）；
+        // 否则保持原生 "wy"（播放时会提示需要音源）
+        val mountedSourceId = sourceIdProvider() ?: "wy"
         return Song(
-            id = "wy:$songId",
+            id = "$mountedSourceId:$songId",
             title = title,
             artists = info.optJSONArray("ar")?.let { arr ->
                     (0 until arr.length()).mapNotNull { i ->
@@ -110,7 +119,7 @@ class DiscoverRepository(
             durationMs = info.optLong("dt"),
             coverUri = album?.optString("picUrl")?.takeIf { it.isNotBlank() },
             location = MediaLocation.Remote(
-                sourceId = "wy",
+                sourceId = mountedSourceId,
                 songId = songId,
                 payload = info.toString(),
             ),

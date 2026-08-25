@@ -91,6 +91,21 @@ class LitTogetherTransport(
 
     /** 本机在房内的成员 ID（踢人按钮排除自己用）。 */
     val selfMemberId: String get() = memberId
+    /** 是否仍在房间会话中（有 token 即视为在房）。 */
+    fun isInRoom(): Boolean = token.isNotEmpty()
+
+    /**
+     * 最近一次「服务端侧」曲目切换的时间戳。
+     * 房主端在收到远端切歌后的短窗口内暂停本机上报，防止上报桥与跟随逻辑互相打架。
+     */
+    @Volatile
+    var lastRemoteSwitchAt: Long = 0L
+        private set
+
+    /** 记录一次服务端侧切换（供房主上报桥静默窗口判定）。 */
+    fun markRemoteSwitch() {
+        lastRemoteSwitchAt = System.currentTimeMillis()
+    }
 
     // ================= TogetherTransport 接口实现 =================
 
@@ -135,6 +150,9 @@ class LitTogetherTransport(
         memberSecret = session.getOrNull(2).orEmpty()
         token = session.getOrNull(3).orEmpty()
         lastJoinSecret = session.getOrNull(4).orEmpty()
+        // 房主标记：joinSecret 只由创建者持有，恢复会话时据此还原身份
+        // （首个快照到达后仍会以服务端 controllerId 为准二次校正）
+        isController = lastJoinSecret.isNotEmpty()
         serverUrl = settings.observeTogetherServerUrl().firstOrNull().orEmpty()
         nickname = settings.observeTogetherNickname().firstOrNull().orEmpty()
         serverUrlFlow.value = serverUrl
@@ -309,6 +327,13 @@ class LitTogetherTransport(
     /** 弹幕/聊天（全员可用，服务端限频 1.5s）。 */
     suspend fun chat(text: String): Result<Unit> =
         sendControl("CHAT") { put("text", text.take(200)) }
+
+    /** 本机播完当前曲目的上报（全员可用；服务端按时间轴闸门判定后推进）。 */
+    suspend fun reportTrackEnd(): Result<Unit> = sendControl("TRACK_END")
+
+    /** 房主点歌单任意曲目开播（index 为服务端队列下标）。 */
+    suspend fun playIndex(index: Int): Result<Unit> =
+        sendControl("PLAY_INDEX") { put("index", index) }
 
     /** 踢人（仅房主）。 */
     suspend fun kick(targetMemberId: String): Result<Unit> {

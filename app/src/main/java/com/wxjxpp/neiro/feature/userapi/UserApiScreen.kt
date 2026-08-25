@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -21,10 +22,12 @@ import androidx.compose.material.icons.rounded.Extension
 import androidx.compose.material.icons.rounded.FileOpen
 import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Menu
+import androidx.compose.material.icons.rounded.NetworkCheck
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -38,9 +41,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.launch
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.foundation.text.KeyboardOptions
@@ -66,6 +72,8 @@ fun UserApiScreen(
     onDeactivate: () -> Unit,
     onUpdate: (String) -> Unit,
     onRemove: (String) -> Unit,
+    /** 测试握手：对指定音源发一次真实脚本请求，验证脚本引擎与网络通路。 */
+    onTestHandshake: suspend (UserApiInfo) -> String,
     onOpenDrawer: () -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
@@ -75,6 +83,11 @@ fun UserApiScreen(
     var showUrlDialog by remember { mutableStateOf(false) }
     var showImportSheet by remember { mutableStateOf(false) }
     var removeTarget by remember { mutableStateOf<UserApiInfo?>(null) }
+    // 握手测试状态：apiId → 结果文本（进行中显示"…"）
+    var testingId by remember { mutableStateOf<String?>(null) }
+    var testResultId by remember { mutableStateOf<String?>(null) }
+    var testResult by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
 
     val picker = rememberLauncherForActivityResult(
         ActivityResultContracts.OpenDocument(),
@@ -153,7 +166,7 @@ fun UserApiScreen(
                                     api.description.takeIf { it.isNotBlank() },
                                     api.platforms.takeIf { it.isNotEmpty() }
                                         ?.let { "支持：${it.joinToString("、")}" },
-                                ).joinToString(" · ").ifBlank { api.id }
+                                .joinToString(" · ").ifBlank { api.id }
                             )
                         },
                         trailingContent = {
@@ -167,6 +180,32 @@ fun UserApiScreen(
                                         Icon(Icons.Rounded.PlayArrow, contentDescription = "启用")
                                     }
                                 }
+                                // 测试握手：发一次真实脚本请求验证可用性
+                                IconButton(
+                                    onClick = {
+                                        if (testingId != null) return@IconButton
+                                        testingId = api.id
+                                        testResult = null
+                                        scope.launch {
+                                            val started = System.currentTimeMillis()
+                                            val msg = runCatching { onTestHandshake(api) }
+                                                .getOrElse { "测试异常：${it.message}" }
+                                            val elapsed = System.currentTimeMillis() - started
+                                            testResult = "$msg（${elapsed}ms）"
+                                            testResultId = api.id
+                                            testingId = null
+                                        }
+                                    },
+                                    enabled = testingId == null,
+                                ) {
+                                    if (testingId == api.id) {
+                                        CircularProgressIndicator(
+                                            Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp,
+                                        )
+                                    } else {
+                                        Icon(Icons.Rounded.NetworkCheck, contentDescription = "测试握手")
+                                    }
+                                }
                                 if (api.sourceUrl != null) {
                                     IconButton(onClick = { onUpdate(api.id) }) {
                                         Icon(Icons.Rounded.Refresh, contentDescription = "更新")
@@ -178,6 +217,19 @@ fun UserApiScreen(
                             }
                         },
                     )
+                    // 握手测试结果（显示在对应条目正下方）
+                    if (testResultId == api.id && testResult != null) {
+                        Text(
+                            testResult.orEmpty(),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (testResult.orEmpty().startsWith("握手成功")) {
+                                androidx.compose.ui.graphics.Color(0xFF2E7D32)
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            },
+                            modifier = Modifier.padding(start = 16.dp, bottom = 8.dp),
+                        )
+                    }
                 }
             }
         }

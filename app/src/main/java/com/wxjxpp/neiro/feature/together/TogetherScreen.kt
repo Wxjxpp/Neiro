@@ -298,61 +298,102 @@ private fun RoomView(
     val curIdx = pb?.optInt("currentIndex", -1) ?: -1
     val nextTrack = queueArr?.optJSONObject(curIdx + 1)
 
-    // ---- 听众跟随服务端（房主由 AppContainer 桥上报，这里跳过防回环） ----
+// ---- 房间跟随：全员监听服务端曲目变化并切歌（房主也切，保持全房同曲）----
     LaunchedEffect(Unit) {
         transport.currentTrackJson.collect { track ->
-            if (transport.isControllerInRoom) return@collect
             val local = player.state.value.current
             if (track == null) {
                 // 待机态：房间没有曲目，不强制暂停本地播放之外的任何东西
                 return@collect
             }
             val key = track.optString("stableKey")
-            val localKey = when (val loc = local?.location) {
-                is MediaLocation.Remote -> "${loc.sourceId}:${loc.songId}"
-                is MediaLocation.Local ->
-                    if (loc.uri.startsWith("http")) "url:${LitTogetherTransport.urlHash(loc.uri)}" else null
-                else -> null
+                        // 本地已在播同一首（房主上报后回推 / 群友已切好）则跳过
+            if (localKeyOf(local) == key) {
+                if (!transport.isControllerInRoom) syncProgressAndPlayState(track)
+                return@collect
             }
-            if (localKey != key) {
-                // 切歌：URL 直链直接播；平台曲目用 payload 还原完整歌曲交给播放引擎
-                val song = when (track.optString("sourceId")) {
-                    "url" -> Song(
-                        id = "lit-$key",
-                        title = track.optString("title"),
-                        artists = listOf(Artist(id = "lit-artist", name = track.optString("artist").ifEmpty { "房间点歌" })),
-                        durationMs = track.optLong("durationMs"),
-                        coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
-                        location = MediaLocation.Local(uri = track.optString("url"), filePath = null),
-                    )
-                    else -> Song(
-                        id = "lit-$key",
-                        title = track.optString("title"),
-                        artists = listOf(Artist(id = "lit-artist", name = track.optString("artist"))),
-                        album = track.optString("album").takeIf { it.isNotEmpty() }?.let {
-                            Album(id = "lit-album", title = it)
-                        },
-                        durationMs = track.optLong("durationMs"),
-                        coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
-                        location = MediaLocation.Remote(
-                            sourceId = track.optString("sourceId"),
-                            songId = track.optString("songId"),
-                            payload = track.optString("payload").takeIf { it.isNotEmpty() },
-                        ),
-                    )
-                }
-                player.setQueue(listOf(song), 0, autoPlay = true)
+            // 记录远端切换时间：房主上报桥在窗口内静默，防回环
+            transport.markRemoteSwitch()
+            // 切歌：URL 直链直接播；平台曲目用 payload 还原完整歌曲交给播放引擎
+            val song = when (track.optString("sourceId")) {
+                "url" -> Song(
+                    id = "lit-$key",
+                    title = track.optString("title"),
+                    artists = listOf(Artist(id = "lit-artist", name = track.optString("artist").ifEmpty { "房间点歌" })),
+                    durationMs = track.optLong("durationMs"),
+                    coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
+                    location = MediaLocation.Local(uri = track.optString("url"), filePath = null),
+                )
+                else -> Song(
+                    id = "lit-$key",
+                    title = track.optString("title"),
+                    artists = listOf(Artist(id = "lit-artist", name = track.optString("artist"))),
+                    album = track.optString("album").takeIf { it.isNotEmpty() }?.let {
+                        Album(id = "lit-album", title = it)
+                    },
+                    durationMs = track.optLong("durationMs"),
+                    coverUri = track.optString("cover").takeIf { it.isNotEmpty() },
+                    location = MediaLocation.Remote(
+                        sourceId = track.optString("sourceId"),
+                        songId = track.optString("songId"),
+                        payload = track.optString("payload").takeIf { it.isNotEmpty() },
+                    ),
+                )
             }
-            // 进度校正：偏差 >800ms 才 seek，避免与本地自然播放打架
-            val expected = state?.optLong("expectedPositionMs", -1L) ?: -1L
-            if (expected >= 0) {
-                val drift = kotlin.math.abs(player.state.value.positionMs - expected)
-                if (drift > LitTogetherTransport.DRIFT_TOLERANCE_MS) player.seekTo(expected)
+            player.setQueue(listOf(song), 0, autoPlay = true)
+        }
+    }
+
+    /** 本地当前曲目的 stableKey（与房间 key 对齐）。 */
+    fun localKeyOf(song: com.wxjxpp.neiro.core.model.Song?): String? = when (val loc = song?.location) {
+        is MediaLocation.Remote -> "${loc.sourceId}:${loc.songId}"
+        is MediaLocation.Local ->
+            if (loc.uri.startsWith("http")) "url:${LitTogetherTransport.urlHash(loc.uri)}" else null
+        else -> null
+    }
+
+    /** 听众的进度/播放状态校正。 */
+    fun syncProgressAndPlayState(track: org.json.JSONObject) {
+        val stateJson = transport.roomStateJson.value ?: return
+        val expected = stateJson.optLong("expectedPositionMs", -1L)
+        if (expected >= 0) {
+            val drift = kotlin.math.abs(player.state.value.positionMs - expected)
+            // 放宽到 2.5s 且不回拉超过 30s 的进度，避免把自然播完的尾部硬拽回去造成循环感
+            if (drift > LitTogetherTransport.DRIFT_TOLERANCE_MS && drift < 30_000L) {
+                player.seekTo(expected)
             }
-            val shouldPlay = state?.optJSONObject("playback")?.optBoolean("playing", false) ?: false
-            if (shouldPlay != player.state.value.isPlaying && !player.state.value.isBuffering) {
-                if (shouldPlay) player.resume() else player.pause()
+        }
+        val shouldPlay = stateJson.optJSONObject("playback")?.optBoolean("playing", false) ?: false
+        val st = player.state.value
+        // 曲目已播完但房间还标记在播：不要强行 resume（等 TRACK_END 推进），否则就是原地循环
+        val endedLocally = st.durationMs > 0 && st.positionMs >= st.durationMs - 300
+        if (shouldPlay != st.isPlaying && !st.isBuffering && !endedLocally) {
+            if (shouldPlay) player.resume() else player.pause()
+        }
+    }
+
+    // ---- 播完检测：任一成员本机播完即上报，服务端闸门判定后推进下一首 ----
+    LaunchedEffect(Unit) {
+        var lastEndedKey = ""
+        while (true) {
+            kotlinx.coroutines.delay(1000)
+            if (!transport.isInRoom()) continue
+            val room = transport.roomStateJson.value ?: continue
+            val pb = room.optJSONObject("playback") ?: continue
+            if (!pb.optBoolean("playing", false)) continue
+            val track = transport.currentTrackJson.value ?: continue
+            val dur = track.optLong("durationMs", 0L)
+            if (dur <= 0) continue
+            val st = player.state.value
+            val localDur = if (st.durationMs > 0) st.durationMs else dur
+            val key = track.optString("stableKey")
+            val nearEnd = st.positionMs >= localDur - 400 ||
+                (room.optLong("expectedPositionMs", 0L) + 400 >= dur)
+            if (nearEnd && lastEndedKey != key) {
+                lastEndedKey = key
+                transport.reportTrackEnd()
             }
+            if (key != lastEndedKey) lastEndedKey = ""
         }
     }
 
@@ -684,13 +725,28 @@ private fun RoomView(
 @Composable
 private fun QueueItem(
     transport: LitTogetherTransport,
-    t: JSONObject,
+    t: JSONObject?,
     isCurrent: Boolean,
     isHost: Boolean,
     onMessage: (String) -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    Card(Modifier.fillMaxWidth()) {
+    if (t == null) return
+    Card(Modifier.fillMaxWidth().clickable {
+        if (isHost) {
+            // 房主：点歌单任意曲目 → 服务端 PLAY_INDEX 开播，全房跟随
+            scope.launch {
+                transport.playIndex(transport.roomStateJson.value
+                    ?.optJSONObject("playback")?.optJSONArray("queue")
+                    ?.let { q -> (0 until q.length()).firstOrNull { q.optJSONObject(it)?.optString("stableKey") == t.optString("stableKey") } }
+                    ?: -1,
+                ).fold(
+                    onSuccess = { },
+                    onFailure = { onMessage("播放失败：${it.message}") },
+                )
+            }
+        }
+    }) {
         Row(
             Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
@@ -744,8 +800,8 @@ private fun ChatSection(transport: LitTogetherTransport) {
                 val c = arr.getJSONObject(i)
                 Text(
                     "${c.optString("from")}：${c.optString("text")}",
-                    style = MaterialTheme.typography.bodySmall,
-                    modifier = Modifier.padding(vertical = 2.dp),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.padding(vertical = 3.dp),
                 )
             }
         }

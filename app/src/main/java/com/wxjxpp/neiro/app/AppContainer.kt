@@ -80,6 +80,8 @@ interface AppContainer {
     val sourceRegistry: MusicSourceRegistry
     val lyricsParsers: LyricsParserRegistry
     val togetherTransport: TogetherTransport
+    /** 测试音源握手（音源页「测试握手」按钮）：返回结果描述。 */
+    suspend fun testUserApiHandshake(api: com.wxjxpp.neiro.core.userapi.UserApiInfo): String
     val mediaScanner: MediaScanner
     val metadataReader: MetadataReader
 
@@ -238,7 +240,16 @@ private val registry = DefaultMusicSourceRegistry(
     override val togetherTransport: TogetherTransport = LitTogetherTransport(appSettings, httpClient, appScope)
     /** 发现页：榜单直连网易云公开接口；猜你喜欢复用聚合搜索。 */
     override val discoverRepository: com.wxjxpp.neiro.core.discover.DiscoverRepository by lazy {
-        com.wxjxpp.neiro.core.discover.DiscoverRepository(http = httpClient)
+        com.wxjxpp.neiro.core.discover.DiscoverRepository(
+            http = httpClient,
+            // 用户启用了 LX 音源后，发现页榜单歌曲动态挂到对应音源（如 "wy-lx"），可直接播放
+            sourceIdProvider = {
+                activeOnlineSources.firstOrNull()?.id
+                    ?.takeIf { id -> activeOnlineSources.any { it.id == id } }
+                    ?: registry.sources.filterIsInstance<com.wxjxpp.neiro.core.source.online.LxSourcePlatform>()
+                        .firstOrNull()?.id
+            },
+        )
     }
     init {
         // 记录一次应用启动（听歌热力图的"启动次数"维度）
@@ -281,6 +292,8 @@ private val registry = DefaultMusicSourceRegistry(
                         else -> return@collect
                     }
                     val key = "${track.optString("sourceId")}:${track.optString("songId")}"
+                    // 远端切歌后的静默窗口：跟随逻辑正在切本机播放器，此时不上报防回环
+                    if (System.currentTimeMillis() - lit.lastRemoteSwitchAt < 5000) return@collect
                     // URL 加载卡死兜底：缓冲超过 5s 或进度停滞且未在播 → 上报无效源自动切歌
                     val stuck = st.isBuffering && st.positionMs <= 0L &&
                         key == (lit.currentTrackJson.value?.optString("stableKey").orEmpty())
@@ -399,6 +412,30 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
         return Media3PlayerController.RemoteUrl.Failure(
             "「${song.title}」各音质档位均取流失败：\n" + failures.takeLast(4).joinToString("\n")
         )
+    }
+
+    /** 测试音源握手：向脚本引擎发一次真实请求，验证脚本可执行、网络可达。耗时附在结果尾部。 */
+    override suspend fun testUserApiHandshake(api: com.wxjxpp.neiro.core.userapi.UserApiInfo): String {
+        val platforms = api.platforms
+        if (platforms.isEmpty()) return "握手失败：脚本未上报支持的平台"
+        val platform = platforms.first()
+        val started = System.currentTimeMillis()
+        // 用 pic 动作做探测：请求最轻（只取封面 URL），能完整走一遍「引擎→脚本→网络」链路
+        val result = userApiClient.pic(
+            source = platform,
+            musicInfo = org.json.JSONObject()
+                .put("songId", "0")
+                .put("title", "handshake-probe")
+                .put("artist", "")
+                .put("album", ""),
+        )
+        val elapsed = System.currentTimeMillis() - started
+        return when (result) {
+            is com.wxjxpp.neiro.core.userapi.UserApiClient.Result.Success ->
+                "握手成功 · ${api.name} · 平台 $platform · 耗时 ${elapsed}ms"
+            is com.wxjxpp.neiro.core.userapi.UserApiClient.Result.Failure ->
+                "握手失败 · ${api.name} · ${result.reason.take(120)}"
+        }
     }
 
     private fun onUserApiAction(action: UserApiAction) {

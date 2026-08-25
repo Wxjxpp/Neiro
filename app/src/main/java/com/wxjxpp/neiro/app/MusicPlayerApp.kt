@@ -652,6 +652,7 @@ private fun RouteContent(
                     onDeactivate = viewModel::deactivateUserApi,
                     onUpdate = viewModel::updateUserApi,
                     onRemove = viewModel::removeUserApi,
+                    onTestHandshake = { api -> container.testUserApiHandshake(api) },
                     onOpenDrawer = onOpenDrawer,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
