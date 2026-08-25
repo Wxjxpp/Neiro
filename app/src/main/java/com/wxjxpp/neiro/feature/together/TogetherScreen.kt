@@ -143,7 +143,10 @@ internal fun parseInviteMessage(text: String): Pair<String, String>? {
 internal fun formatRoomId(id: String): String =
     if (id.length == 6) "${id.slice(0..2)}-${id.slice(3..5)}" else id
 
-@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+)
 @Composable
 private fun LobbyView(
     transport: LitTogetherTransport,

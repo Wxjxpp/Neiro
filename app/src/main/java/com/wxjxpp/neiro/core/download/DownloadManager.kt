@@ -83,8 +83,8 @@ class DownloadManager(
         // 2) 元数据嵌入（失败不阻断下载，只跳过增强项）
         var embedNote = ""
         runCatching {
-            val embedCover = first(settings.downloadEmbedCover)
-            val embedLyrics = first(settings.downloadEmbedLyrics)
+            val embedCover = settings.downloadEmbedCover.first()
+            val embedLyrics = settings.downloadEmbedLyrics.first()
             val cover = if (embedCover) fetchCoverBytes(song) else null
             val lyric = if (embedLyrics) fetchLyricsLrc(song) else null
             AudioTagWriter.embed(tmp, song, cover, null, lyric)
@@ -94,7 +94,7 @@ class DownloadManager(
             ).joinToString("、").let { if (it.isEmpty()) "" else "（已嵌入$it）" }
         }
         // 3) 落位：自定义 SAF 目录优先，否则公共 Music/Neiro
-        val dirUri = first(settings.observeDownloadDirUri())
+        val dirUri = settings.observeDownloadDirUri().first()
         val result = runCatching {
             if (dirUri.isNotBlank()) {
                 val name = safeFileName(song.title, song.artistName, ext)
