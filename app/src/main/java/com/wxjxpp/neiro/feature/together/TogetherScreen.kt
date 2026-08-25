@@ -157,7 +157,10 @@ private fun LobbyView(
     var busy by remember { mutableStateOf(false) }
     val savedUrl by transport.serverUrlFlow.collectAsState()
     val savedNick by transport.nicknameFlow.collectAsState()
-    var url by remember(savedUrl) { mutableStateOf(savedUrl.ifEmpty { "https://wxjxpp.de5.net" }) }
+    // 服务端地址不再预置官方实例（CF 免费额度有限），由用户自部署或向房主索取
+    var url by remember(savedUrl) { mutableStateOf(savedUrl) }
+    var showHelpDialog by remember { mutableStateOf(false) }
+    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     var nick by remember(savedNick) { mutableStateOf(savedNick) }
     // 底部 Sheet 开关：创建房间（填房间名）/ 加入房间（粘贴邀请消息）/ 汉堡菜单
     var showCreateSheet by remember { mutableStateOf(false) }
@@ -195,7 +198,8 @@ private fun LobbyView(
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
                 value = url, onValueChange = { url = it },
-                label = { Text("一起听服务器") }, singleLine = true,
+                label = { Text("一起听服务器（必填）") }, singleLine = true,
+                placeholder = { Text("https://你的Worker地址.workers.dev") },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
@@ -223,6 +227,10 @@ private fun LobbyView(
                 style = MaterialTheme.typography.labelSmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
+            // 部署引导：CF 免费额度有限，不提供公共实例
+            androidx.compose.material3.TextButton(onClick = { showHelpDialog = true }) {
+                Text("如何获取客户端地址？")
+            }
             Spacer(Modifier.height(24.dp))
         }
         // 创建/加入是网络操作且 CF 冷启动可能较慢：全屏加载层（MD3E LoadingIndicator）
@@ -242,6 +250,46 @@ private fun LobbyView(
         }
     }
 
+        // ---- 部署引导弹窗 ----
+    if (showHelpDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showHelpDialog = false },
+            confirmButton = {},
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showHelpDialog = false }) {
+                    Text("我知道了")
+                }
+            },
+            title = { Text("如何获取一起听服务器地址？") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text(
+                        "服务器地址需要自己部署，或者向房主索要。",
+                        style = MaterialTheme.typography.bodyMedium,
+                    )
+                    Text(
+                        "部署请看：",
+                        style = MaterialTheme.typography.bodyMedium,
+                        modifier = Modifier.clickable {
+                            uriHandler.openUri("https://github.com/Wxjxpp/wxjxpp-neiro-lit")
+                            showHelpDialog = false
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Text(
+                        "github.com/Wxjxpp/wxjxpp-neiro-lit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.clickable {
+                            uriHandler.openUri("https://github.com/Wxjxpp/wxjxpp-neiro-lit")
+                            showHelpDialog = false
+                        },
+                    )
+                }
+            },
+        )
+    }
+
     // ---- 创建房间 Sheet：仅需输入房间名称 ----
     if (showCreateSheet) {
         androidx.compose.material3.ModalBottomSheet(onDismissRequest = { if (!busy) showCreateSheet = false }) {
@@ -257,6 +305,9 @@ private fun LobbyView(
                 )
                 Button(
                     onClick = {
+                        if (url.isBlank() || !url.startsWith("http")) {
+                            onMessage("请先填写一起听服务器地址"); return@Button
+                        }
                         if (nick.isBlank()) { onMessage("请先填写显示昵称"); return@Button }
                         busy = true
                         scope.launch {
@@ -300,6 +351,9 @@ private fun LobbyView(
                 )
                 Button(
                     onClick = {
+                        if (url.isBlank() || !url.startsWith("http")) {
+                            onMessage("请先填写一起听服务器地址"); return@Button
+                        }
                         if (nick.isBlank()) { onMessage("请先填写显示昵称"); return@Button }
                         val parsed = parseInviteMessage(inviteInput)
                         if (parsed == null) {

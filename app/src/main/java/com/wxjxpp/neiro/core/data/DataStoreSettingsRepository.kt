@@ -187,7 +187,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.NeteaseCookie].orEmpty() }
 
     // ---- 一起听 ----
-    /** 一起听服务端地址（如 https://wxjxpp.de5.net）。 */
+    /** 一起听服务端地址（用户自部署的 Worker 地址）。 */
     fun observeTogetherServerUrl(): Flow<String> =
         store.data.map { it[Keys.TogetherServerUrl].orEmpty() }
     suspend fun setTogetherServerUrl(url: String) {
