@@ -1,6 +1,15 @@
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.animation.ExperimentalSharedTransitionApi::class,
+)
+
 package com.wxjxpp.neiro.feature.albums
 
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -48,6 +57,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.ui.components.LocalNavAnimatedVisibilityScope
+import com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /** 专辑聚合视图。 */
@@ -121,56 +132,72 @@ fun AlbumsScreen(
 ) {
     var opened by remember { mutableStateOf<AlbumEntry?>(null) }
     BackHandler(enabled = opened != null) { opened = null }
-    if (opened != null) {
-        Column(modifier = modifier.fillMaxSize()) {
-            TopAppBar(
-                title = {
-                    Text(opened!!.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                },
-                navigationIcon = {
-                    IconButton(onClick = { opened = null }) {
-                        Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
-                    }
-                },
+    // Container Transform：网格 → 详情，专辑封面作为共享元素飞入详情头部
+    AnimatedContent(
+        targetState = opened,
+        label = "albumContainer",
+        transitionSpec = {
+            fadeIn(androidx.compose.animation.core.tween(260)) togetherWith
+                fadeOut(androidx.compose.animation.core.tween(200))
+        },
+        modifier = modifier,
+    ) { current ->
+        if (current != null) {
+            Column(modifier = Modifier.fillMaxSize()) {
+                TopAppBar(
+                    title = {
+                        Text(current.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    },
+                    navigationIcon = {
+                        IconButton(onClick = { opened = null }) {
+                            Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
+                        }
+                    },
+                )
+                AlbumDetailList(
+                    album = current,
+                    songs = current.songs,
+                    extraSongs = extraSongs,
+                    onSongClick = onSongClick,
+                    favoriteIds = favoriteIds,
+                    downloadingIds = downloadingIds,
+                    onDownloadSong = onDownloadSong,
+                    contentPadding = contentPadding,
+                    sharedKey = "album_cover_${current.title}|${current.artistName}",
+                )
+            }
+        } else {
+            val albums = remember(songs, sortField, sortDescending) {
+                groupAlbums(songs, sortField, sortDescending)
+            }
+            Column(modifier = Modifier.fillMaxSize()) {
+            AlbumsTopBar(
+                onOpenDrawer = onOpenDrawer,
+                sortField = sortField,
+                sortDescending = sortDescending,
+                onSortFieldChange = onSortFieldChange,
+                onSortDirectionToggle = onSortDirectionToggle,
             )
-            AlbumDetailList(
-                album = opened!!,
-                songs = opened!!.songs,
-                extraSongs = extraSongs,
-                onSongClick = onSongClick,
-                favoriteIds = favoriteIds,
-                downloadingIds = downloadingIds,
-                onDownloadSong = onDownloadSong,
-                contentPadding = contentPadding,
-            )
-        }
-        return
-    }
-    val albums = remember(songs, sortField, sortDescending) {
-        groupAlbums(songs, sortField, sortDescending)
-    }
-    Column(modifier = modifier.fillMaxSize()) {
-        AlbumsTopBar(
-            onOpenDrawer = onOpenDrawer,
-            sortField = sortField,
-            sortDescending = sortDescending,
-            onSortFieldChange = onSortFieldChange,
-            onSortDirectionToggle = onSortDirectionToggle,
-        )
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
-            contentPadding = PaddingValues(
-                start = AppTheme.dimens.spaceMd,
-                end = AppTheme.dimens.spaceMd,
-                top = AppTheme.dimens.spaceSm,
-                bottom = contentPadding.calculateBottomPadding(),
-            ),
-            horizontalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceMd),
-            verticalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceLg),
-            modifier = Modifier.fillMaxSize(),
-        ) {
-            items(albums, key = { "${it.title}|${it.artistName}" }) { album ->
-                AlbumCard(album = album, onClick = { opened = album })
+            LazyVerticalGrid(
+                columns = GridCells.Fixed(2),
+                contentPadding = PaddingValues(
+                    start = AppTheme.dimens.spaceMd,
+                    end = AppTheme.dimens.spaceMd,
+                    top = AppTheme.dimens.spaceSm,
+                    bottom = contentPadding.calculateBottomPadding(),
+                ),
+                horizontalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceMd),
+                verticalArrangement = Arrangement.spacedBy(AppTheme.dimens.spaceLg),
+                modifier = Modifier.fillMaxSize(),
+            ) {
+                items(albums, key = { "${it.title}|${it.artistName}" }) { album ->
+                    AlbumCard(
+                        album = album,
+                        onClick = { opened = album },
+                        sharedKey = "album_cover_${album.title}|${album.artistName}",
+                    )
+                }
+            }
             }
         }
     }
@@ -187,6 +214,7 @@ private fun AlbumDetailList(
     downloadingIds: Set<String>,
     onDownloadSong: ((Song) -> Unit)?,
     contentPadding: PaddingValues,
+    sharedKey: String? = null,
 ) {
     val merged = remember(songs, extraSongs) {
         buildList {
@@ -202,7 +230,7 @@ private fun AlbumDetailList(
         contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
     ) {
         item(key = "album_header") {
-            AlbumHeader(entry = album, songCount = merged.size)
+            AlbumHeader(entry = album, songCount = merged.size, sharedKey = sharedKey)
         }
         lazyItems(merged, key = { it.id }) { song ->
             Row(
@@ -242,9 +270,9 @@ private fun AlbumDetailList(
     }
 }
 
-/** 专辑详情头部：小封面 + 歌手 + 总时长 + 曲目数。 */
+/** 专辑详情头部：小封面 + 歌手 + 总时长 + 曲目数。封面为 Container Transform 共享元素。 */
 @Composable
-private fun AlbumHeader(entry: AlbumEntry, songCount: Int) {
+private fun AlbumHeader(entry: AlbumEntry, songCount: Int, sharedKey: String? = null) {
     val dimens = AppTheme.dimens
     // 总时长：所有曲目 durationMs 求和（在线歌曲元数据缺失时按 0 计）
     val totalMs = entry.songs.sumOf { it.durationMs }
@@ -254,14 +282,33 @@ private fun AlbumHeader(entry: AlbumEntry, songCount: Int) {
             .fillMaxWidth()
             .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
     ) {
-        AsyncImage(
-            model = entry.coverUri,
-            contentDescription = entry.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .size(72.dp)
-                .clip(RoundedCornerShape(10.dp)),
-        )
+        val baseModifier = Modifier
+            .size(72.dp)
+            .clip(RoundedCornerShape(10.dp))
+        val sts = LocalSharedTransitionScope.current
+        val animScope = LocalNavAnimatedVisibilityScope.current
+        if (sts != null && animScope != null && sharedKey != null) {
+            with(sts) {
+                AsyncImage(
+                    model = entry.coverUri,
+                    contentDescription = entry.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .sharedElement(
+                            rememberSharedContentState(key = sharedKey),
+                            animatedVisibilityScope = animScope,
+                        )
+                        .then(baseModifier),
+                )
+            }
+        } else {
+            AsyncImage(
+                model = entry.coverUri,
+                contentDescription = entry.title,
+                contentScale = ContentScale.Crop,
+                modifier = baseModifier,
+            )
+        }
         Column(modifier = Modifier.weight(1f).padding(start = dimens.spaceMd)) {
             Text(
                 text = entry.artistName.ifBlank { "未知歌手" },
@@ -355,7 +402,11 @@ private fun AlbumsTopBar(
 }
 
 @Composable
-private fun AlbumCard(album: AlbumEntry, onClick: () -> Unit) {
+private fun AlbumCard(
+    album: AlbumEntry,
+    onClick: () -> Unit,
+    sharedKey: String? = null,
+) {
     val dimens = AppTheme.dimens
     Column(
         modifier = Modifier
@@ -363,15 +414,34 @@ private fun AlbumCard(album: AlbumEntry, onClick: () -> Unit) {
             .clickable(onClick = onClick)
             .padding(dimens.spaceXs),
     ) {
-        AsyncImage(
-            model = album.coverUri,
-            contentDescription = album.title,
-            contentScale = ContentScale.Crop,
-            modifier = Modifier
-                .fillMaxWidth()
-                .aspectRatio(1f)
-                .clip(RoundedCornerShape(14.dp)),
-        )
+        val sts = LocalSharedTransitionScope.current
+        val animScope = LocalNavAnimatedVisibilityScope.current
+        val imageModifier = Modifier
+            .fillMaxWidth()
+            .aspectRatio(1f)
+            .clip(RoundedCornerShape(14.dp))
+        if (sts != null && animScope != null && sharedKey != null) {
+            with(sts) {
+                AsyncImage(
+                    model = album.coverUri,
+                    contentDescription = album.title,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier
+                        .sharedElement(
+                            rememberSharedContentState(key = sharedKey),
+                            animatedVisibilityScope = animScope,
+                        )
+                        .then(imageModifier),
+                )
+            }
+        } else {
+            AsyncImage(
+                model = album.coverUri,
+                contentDescription = album.title,
+                contentScale = ContentScale.Crop,
+                modifier = imageModifier,
+            )
+        }
         Text(
             text = album.title,
             style = MaterialTheme.typography.titleSmall,

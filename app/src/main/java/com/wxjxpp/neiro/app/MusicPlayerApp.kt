@@ -1,3 +1,8 @@
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.animation.ExperimentalSharedTransitionApi::class,
+)
+
 package com.wxjxpp.neiro.app
 
 import androidx.activity.compose.BackHandler
@@ -147,10 +152,9 @@ fun MusicPlayerApp(container: AppContainer) {
 
     val hasSong = playback.current != null
 
-    // 全局一次性提示（音源导入失败等轻提示保留 Snackbar）
-    val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
+    // 全局一次性提示（音源导入失败等）：统一路由到顶部横幅（中性样式）
     LaunchedEffect(Unit) {
-        container.messages.collect { message -> snackbarHostState.showSnackbar(message) }
+        container.messages.collect { message -> container.notifyInfo(message) }
     }
 
     var route by rememberSaveable { mutableStateOf(Destination.Discover.route) }
@@ -262,7 +266,13 @@ fun MusicPlayerApp(container: AppContainer) {
                     },
             ) {
                 androidx.compose.material3.Scaffold(
-                    snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
+                    // 顶部横幅栈：成功绿 / 信息中性 / 错误红，堆叠展示
+                    topBar = {
+                        com.wxjxpp.neiro.ui.components.BannerStack(
+                            banners = uiState.banners,
+                            onDismiss = viewModel::dismissBanner,
+                        )
+                    },
                 ) { scaffoldPadding ->
                     Box(
                         modifier = Modifier
@@ -279,7 +289,7 @@ fun MusicPlayerApp(container: AppContainer) {
                             onScan = scanLibrary,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
                             onNavigate = { target -> route = target },
-                            onToast = { message -> scope.launch { snackbarHostState.showSnackbar(message) } },
+                            onToast = { message -> container.notifyInfo(message) },
                             currentPlayingId = playback.current?.id,
                             onBatchOperate = { songs ->
                                 batchSongs = songs
@@ -508,16 +518,24 @@ private fun RouteContent(
     modifier: Modifier = Modifier,
 ) {
     // 页面间切换：淡入淡出（Expressive motionScheme 由主题统一下发节奏）
+    // SharedTransitionLayout 提供跨页面共享元素坐标系（专辑 Container Transform 等）
     val rootMotionSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
-    AnimatedContent(
-        targetState = route,
-        transitionSpec = {
-            fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
-        },
-        label = "rootRoute",
-        modifier = modifier,
-    ) { currentRoute ->
-        Box(modifier = Modifier.fillMaxSize()) {
+    androidx.compose.animation.SharedTransitionLayout {
+        androidx.compose.runtime.CompositionLocalProvider(
+            com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope provides this,
+        ) {
+        AnimatedContent(
+            targetState = route,
+            transitionSpec = {
+                fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
+            },
+            label = "rootRoute",
+            modifier = modifier,
+        ) { currentRoute ->
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.wxjxpp.neiro.ui.components.LocalNavAnimatedVisibilityScope provides this@AnimatedContent,
+            ) {
+            Box(modifier = Modifier.fillMaxSize()) {
             when (currentRoute) {
                 Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) {
                     EmptySongsScreen(
@@ -768,6 +786,9 @@ private fun RouteContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
+            }
+            }
+        }
         }
     }
 }

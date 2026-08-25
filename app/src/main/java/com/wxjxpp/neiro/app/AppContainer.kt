@@ -107,6 +107,14 @@ interface AppContainer {
 
     /** 发一条提示。 */
     fun notify(message: String)
+    /** 成功提示（绿色横幅）。 */
+    fun notifySuccess(message: String)
+    /** 中性信息提示（横幅，无着色强调）。 */
+    fun notifyInfo(message: String)
+    /** 成功/信息横幅队列（顶部堆叠展示）。 */
+    val banners: kotlinx.coroutines.flow.StateFlow<List<Banner>>
+    /** UI 关闭横幅后从队列移除。 */
+    fun dismissBanner(id: Long)
     /** 顶部错误横幅（可关闭，替代 Snackbar 展示取流失败等错误）。 */
     val errorBanner: kotlinx.coroutines.flow.MutableStateFlow<String?>
     fun showError(message: String) {
@@ -118,6 +126,13 @@ interface AppContainer {
         }
     }
 }
+
+/** 应用内横幅：id 用于堆叠去重/出队，type 决定配色。 */
+data class Banner(
+    val id: Long,
+    val type: String,
+    val message: String,
+)
 
 class DefaultAppContainer(
     private val application: Application,
@@ -133,6 +148,27 @@ class DefaultAppContainer(
     override val errorBanner = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
     override fun notify(message: String) {
         _messages.tryEmit(message)
+    }
+    /** 横幅队列：成功/信息类提示堆叠展示，最新在前，最多保留 4 条。 */
+    private val _banners = kotlinx.coroutines.flow.MutableStateFlow<List<Banner>>(emptyList())
+    override val banners: kotlinx.coroutines.flow.StateFlow<List<Banner>> = _banners
+    private var bannerSeq = 0L
+
+    private fun pushBanner(type: String, message: String) {
+        val entry = Banner(id = ++bannerSeq, type = type, message = message)
+        _banners.value = (listOf(entry) + _banners.value).take(4)
+        // 超过 5 条兜底清理（正常由 UI 关闭回调移除）
+        appScope.launch {
+            kotlinx.coroutines.delay(30_000L)
+            _banners.value = _banners.value.filter { it.id != entry.id }
+        }
+    }
+
+    override fun notifySuccess(message: String) = pushBanner("success", message)
+    override fun notifyInfo(message: String) = pushBanner("info", message)
+    /** UI 关闭横幅后从队列移除。 */
+    override fun dismissBanner(id: Long) {
+        _banners.value = _banners.value.filter { it.id != id }
     }
 
     // === 网络 ===

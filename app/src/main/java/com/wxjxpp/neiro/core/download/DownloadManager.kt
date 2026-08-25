@@ -80,18 +80,31 @@ class DownloadManager(
             onEvent?.invoke(song.title, true, msg)
             return@withContext msg
         }
-        // 2) 元数据嵌入（失败不阻断下载，只跳过增强项）
+        // 2) 元数据嵌入（失败不阻断下载，只跳过增强项；失败原因附到结果消息便于排查）
         var embedNote = ""
+        var embedIssue = ""
         runCatching {
             val embedCover = settings.downloadEmbedCover.first()
             val embedLyrics = settings.downloadEmbedLyrics.first()
+            if (!embedCover && !embedLyrics) return@runCatching
             val cover = if (embedCover) fetchCoverBytes(song) else null
+            if (embedCover && cover == null) embedIssue += "封面未获取到 "
             val lyric = if (embedLyrics) fetchLyricsLrc(song) else null
+            if (embedLyrics && lyric == null) embedIssue += "歌词未获取到 "
             AudioTagWriter.embed(tmp, song, cover, null, lyric)
             embedNote = listOfNotNull(
                 if (cover != null) "封面" else null,
                 if (lyric != null) "歌词" else null,
-            ).joinToString("、").let { if (it.isEmpty()) "" else "（已嵌入$it）" }
+            ).joinToString("、").let {
+                when {
+                    it.isNotEmpty() -> "（已嵌入$it）"
+                    embedIssue.isNotBlank() -> "（${embedIssue.trim()}）"
+                    else -> ""
+                }
+            }
+        }.onFailure { e ->
+            android.util.Log.w("DownloadManager", "元数据嵌入失败: ${song.title}", e)
+            embedNote = "（标签嵌入失败：${e.message?.take(40)}）"
         }
         // 3) 落位：自定义 SAF 目录优先，否则公共 Music/Neiro
         val dirUri = settings.observeDownloadDirUri().first()
@@ -131,9 +144,9 @@ class DownloadManager(
         )
     }
 
-    /** 抓取专辑图字节：http(s) 直取；content:// 走 ContentResolver。 */
+    /** 抓取专辑图字节：http(s) 直取；content:// 走 ContentResolver；song 无封面时回退专辑封面。 */
     private suspend fun fetchCoverBytes(song: Song): ByteArray? {
-        val uri = song.coverUri.orEmpty()
+        val uri = song.coverUri.orEmpty().ifEmpty { song.album?.coverUri.orEmpty() }
         if (uri.isEmpty()) return null
         return runCatching {
             when {

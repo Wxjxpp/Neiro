@@ -1,7 +1,10 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+
 package com.wxjxpp.neiro.feature.together
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -39,9 +42,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
@@ -72,6 +73,7 @@ import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.TogetherConnectionState
 import com.wxjxpp.neiro.core.player.PlayerController
 import com.wxjxpp.neiro.core.together.LitTogetherTransport
+import com.wxjxpp.neiro.ui.components.PillSelector
 import com.wxjxpp.neiro.ui.components.SongCover
 import kotlinx.coroutines.launch
 import org.json.JSONObject
@@ -197,13 +199,21 @@ private fun LobbyView(
             )
             Spacer(Modifier.height(8.dp))
             OutlinedTextField(
-                value = url, onValueChange = { url = it },
+                value = url,
+                onValueChange = {
+                    url = it
+                    transport.saveServerUrl(it) // 输入即持久化，重启不丢
+                },
                 label = { Text("一起听服务器（必填）") }, singleLine = true,
                 placeholder = { Text("https://你的Worker地址.workers.dev") },
                 modifier = Modifier.fillMaxWidth(),
             )
             OutlinedTextField(
-                value = nick, onValueChange = { nick = it },
+                value = nick,
+                onValueChange = {
+                    nick = it.take(24)
+                    transport.saveNickname(nick) // 输入即持久化，重启不丢
+                },
                 label = { Text("显示昵称（1-24 位中文/字母/数字）") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
             )
@@ -707,7 +717,9 @@ private fun RoomView(
                     leadingIcon = { Icon(Icons.Rounded.Search, contentDescription = null) },
                     trailingIcon = {
                         when {
-                            searching -> CircularProgressIndicator(Modifier.height(18.dp))
+                            searching -> androidx.compose.material3.LoadingIndicator(
+                                modifier = Modifier.height(18.dp).width(18.dp),
+                            )
                             keyword.isNotEmpty() -> IconButton(onClick = {
                                 keyword = ""; results = emptyList(); searched = false
                             }) { Icon(Icons.Rounded.Close, contentDescription = "清空") }
@@ -726,16 +738,19 @@ private fun RoomView(
                 )
             }
         }
-        // 平台标签分类条（与全局聚合搜索的平台一致）
+        // 平台标签分类条：连通胶囊选择组（与全局聚合搜索一致），横向滚动防溢出
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                search.platforms.forEach { p ->
-                    FilterChip(
-                        selected = platformId == p.id,
-                        onClick = { platformId = p.id; runSearch() },
-                        label = { Text(p.displayName) },
-                    )
-                }
+            Row(
+                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+            ) {
+                PillSelector(
+                    options = search.platforms.map { it.displayName },
+                    selectedIndex = search.platforms.indexOfFirst { it.id == platformId }.coerceAtLeast(0),
+                    onSelect = { index ->
+                        platformId = search.platforms[index].id
+                        runSearch()
+                    },
+                )
             }
         }
         // 搜索结果：必须含专辑图；点添加不关闭结果（无效源可多试几个）
@@ -743,7 +758,7 @@ private fun RoomView(
             item {
                 Box(Modifier.height(240.dp)) {
                     when {
-                        searching -> CircularProgressIndicator(Modifier.align(Alignment.Center))
+                        searching -> androidx.compose.material3.LoadingIndicator(Modifier.align(Alignment.Center))
                         results.isEmpty() -> Text(
                             "没搜到，换个关键词或标签试试",
                             modifier = Modifier.align(Alignment.Center),
@@ -790,7 +805,9 @@ private fun RoomView(
                                         )
                                     }
                                     if (addingKey == s.id) {
-                                        CircularProgressIndicator(Modifier.height(20.dp))
+                                        androidx.compose.material3.LoadingIndicator(
+                                            modifier = Modifier.height(20.dp).width(20.dp),
+                                        )
                                     } else {
                                         Icon(
                                             Icons.Rounded.AddLink, contentDescription = "点这首",
@@ -938,7 +955,7 @@ private fun RoomView(
             contentAlignment = Alignment.Center,
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
+                androidx.compose.material3.LoadingIndicator()
                 Spacer(Modifier.height(12.dp))
                 Text(if (closing) "正在关闭房间…" else "正在处理…")
             }
@@ -1124,14 +1141,14 @@ private fun CurrentTrackCard(
                     Icon(Icons.Rounded.ThumbUpAlt, contentDescription = "赞",
                         tint = if (votedUp) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (votingUp) CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
+                if (votingUp) androidx.compose.material3.LoadingIndicator(Modifier.height(18.dp).width(18.dp))
                 Spacer(Modifier.width(8.dp))
                 IconButton(onClick = { castVote(false) }, enabled = !votingUp && !votingDown)
 {
                     Icon(Icons.Rounded.ThumbDownAlt, contentDescription = "踩",
                         tint = if (votedDown) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
                 }
-                if (votingDown) CircularProgressIndicator(Modifier.height(18.dp).width(18.dp), strokeWidth = 2.dp)
+                if (votingDown) androidx.compose.material3.LoadingIndicator(Modifier.height(18.dp).width(18.dp))
                 Text(
                     when {
                         votedUp -> " 已投赞"

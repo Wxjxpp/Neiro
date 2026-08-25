@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -49,6 +50,24 @@ class LitTogetherTransport(
     /** 当前设备唯一身份（32 位 hex），创建/加入时刷新；UI 组装邀请消息用。 */
     var currentUid: String = ""
         private set
+
+    init {
+        // 启动即从 DataStore 恢复服务器地址与昵称：大厅输入一次，重启后仍在
+        scope.launch {
+            serverUrlFlow.value = settings.observeTogetherServerUrl().first()
+            nicknameFlow.value = settings.observeTogetherNickname().first()
+        }
+    }
+
+    /** 保存昵称到 DataStore（大厅输入变化时调用）。 */
+    fun saveNickname(nickname: String) {
+        scope.launch { settings.setTogetherNickname(nickname) }
+    }
+
+    /** 保存服务器地址到 DataStore（大厅输入变化时调用）。 */
+    fun saveServerUrl(url: String) {
+        scope.launch { settings.setTogetherServerUrl(url) }
+    }
     /** 创建房间时服务端下发的邀请密钥（持久化，杀进程不丢）。 */
     var lastJoinSecret: String = ""
         private set

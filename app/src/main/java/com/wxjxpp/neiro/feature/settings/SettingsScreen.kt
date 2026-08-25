@@ -455,32 +455,20 @@ fun SettingsScreen(
             }
             Text("设置", style = MaterialTheme.typography.titleLarge)
         }
-        SubsectionEntry(title = "歌词", icon = Icons.Rounded.Lyrics) { subsection = "lyrics" }
-        SubsectionEntry(title = "播放", icon = Icons.Rounded.PlayCircle) { subsection = "playback" }
-        SubsectionEntry(title = "音源", icon = Icons.Rounded.GraphicEq) { subsection = "source" }
-        SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
-        SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
-        SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
-        HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
-        SectionTitle("在线播放")
-        Text(
-            text = "网易云 Cookie（可选）。填入网页版登录后的 MUSIC_U 值可解锁 VIP / 无版权歌曲，" +
-                "格式：MUSIC_U=xxxxxxxx。免费歌曲无需 Cookie。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(bottom = dimens.spaceSm),
-        )
-        var cookieText by remember(neteaseCookie) { mutableStateOf(neteaseCookie) }
-        OutlinedTextField(
-            value = cookieText,
-            onValueChange = {
-                cookieText = it
-                onNeteaseCookieChange(it)
-            },
+        // 二级菜单入口组：每项用 ListItem（Item）包裹，整组卡片收拢
+        androidx.compose.material3.Card(
+            colors = androidx.compose.material3.CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+            ),
             modifier = Modifier.fillMaxWidth(),
-            singleLine = true,
-            placeholder = { Text("MUSIC_U=...") },
-        )
+        ) {
+            SubsectionEntry(title = "歌词", icon = Icons.Rounded.Lyrics) { subsection = "lyrics" }
+            SubsectionEntry(title = "播放", icon = Icons.Rounded.PlayCircle) { subsection = "playback" }
+            SubsectionEntry(title = "音源", icon = Icons.Rounded.GraphicEq) { subsection = "source" }
+            SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
+            SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
+            SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
+        }
     }
 }
 
@@ -523,34 +511,34 @@ internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.HiRes -> "Hi"
 }
 
-/** 根列表里的一行菜单入口：只写名称 + 前置图标（不写解释，紧凑）。 */
+/** 根列表里的一行菜单入口：ListItem（Item）样式，图标 + 名称 + 右箭头。 */
 @Composable
 private fun SubsectionEntry(
     title: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     onClick: () -> Unit,
 ) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onClick)
-            .padding(vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Icon(
-            icon,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(end = AppTheme.dimens.spaceLg),
-        )
-        Text(title, style = MaterialTheme.typography.titleMedium)
-        Spacer(Modifier.weight(1f))
-        Icon(
-            Icons.AutoMirrored.Rounded.KeyboardArrowRight,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-    }
+    androidx.compose.material3.ListItem(
+        headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
+        leadingContent = {
+            Icon(
+                icon,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+        },
+        trailingContent = {
+            Icon(
+                Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        },
+        colors = androidx.compose.material3.ListItemDefaults.colors(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+        ),
+        modifier = Modifier.clickable(onClick = onClick),
+    )
 }
 
 @Composable

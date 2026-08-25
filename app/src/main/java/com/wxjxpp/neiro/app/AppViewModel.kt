@@ -134,6 +134,8 @@ data class ShellUiState(
     val recentSongs: List<Song> = emptyList(),
     /** 全局错误提示：顶部横幅展示，可关闭 / 上滑关闭。 */
     val errorMessage: String? = null,
+    /** 成功/信息类横幅队列（顶部堆叠展示）。 */
+    val banners: List<com.wxjxpp.neiro.app.Banner> = emptyList(),
 )
 
 class AppViewModel(
@@ -300,10 +302,21 @@ class AppViewModel(
         container.appSettings.observeAppFontFamily()
             .onEach { family -> _uiState.update { it.copy(appFontFamily = family) } }
             .launchIn(viewModelScope)
-        // 顶部错误横幅（取流失败等）
+        // 顶部错误横幅（取流失败等）+ 成功/信息横幅队列
         container.errorBanner
             .onEach { message -> _uiState.update { it.copy(errorMessage = message) } }
             .launchIn(viewModelScope)
+        container.banners
+            .onEach { list -> _uiState.update { it.copy(banners = list) } }
+            .launchIn(viewModelScope)
+        // 下载事件 → 横幅（进行中=信息，完成=绿色，失败=红色）
+        container.downloadManager.onEvent = { _, done, msg ->
+            when {
+                !done -> container.notifyInfo(msg)
+                msg.contains("失败") -> container.showError(msg)
+                else -> container.notifySuccess(msg)
+            }
+        }
         // 播放进度记忆：每 5 秒采样落盘一次 + 切歌立即记录（含歌曲快照，跨会话可恢复）
         container.playerController.state
             .sample(5_000L)
@@ -429,12 +442,23 @@ class AppViewModel(
 
     /** 下载在线歌曲文件到公共音乐目录。开始/结束都走顶部横幅，进度可见。 */
     fun downloadSong(song: Song) {
-        container.showError("开始下载「${song.title}」，请在通知栏查看进度")
-        viewModelScope.launch { container.showError(container.downloadManager.downloadSong(song)) }
+        container.notifyInfo("开始下载「${song.title}」，请在通知栏查看进度")
+        viewModelScope.launch {
+            val result = container.downloadManager.downloadSong(song)
+            // downloadSong 内部已通过 onEvent 发送完成/失败横幅，这里不再重复
+            if (result.startsWith("下载失败")) container.showError(result)
+        }
     }
     /** 下载在线歌词到公共文档目录。 */
     fun downloadLyrics(song: Song) {
-        viewModelScope.launch { container.showError(container.downloadManager.downloadLyrics(song)) }
+        viewModelScope.launch {
+            val result = container.downloadManager.downloadLyrics(song)
+            if (result.contains("失败") || result == "下载失败：这不是在线歌曲") {
+                container.showError(result)
+            } else {
+                container.notifySuccess(result)
+            }
+        }
     }
     fun togglePlay() = container.playerController.togglePlay()
     fun next() = container.playerController.next()
@@ -624,6 +648,8 @@ class AppViewModel(
     }
     /** 轻提示转发到容器（Snackbar 展示）。 */
     private fun notify(message: String) = container.notify(message)
+    /** UI 关闭横幅回调（成功/信息类）。 */
+    fun dismissBanner(id: Long) = container.dismissBanner(id)
     fun loadFavorites() {
         viewModelScope.launch {
             val songs = parseSnapshotArray(container.appSettings.observeFavoriteSongsJson().first())
@@ -662,7 +688,7 @@ class AppViewModel(
     /** 连续下载多首（逐首排队，失败不中断；完成一首移除一个进行中标记）。 */
     fun downloadSongs(songsToDownload: List<Song>) {
         if (songsToDownload.isEmpty()) return
-        container.showError(
+        container.notifyInfo(
             "开始下载 ${songsToDownload.size} 首，请在通知栏查看进度",
         )
         viewModelScope.launch {
@@ -680,7 +706,7 @@ class AppViewModel(
                 _uiState.update { it.copy(downloadingIds = it.downloadingIds - s.id) }
             }
             if (songsToDownload.size > 1) {
-                container.showError("批量下载完成 $ok/${songsToDownload.size}，请到 Music/Neiro 查看")
+                container.notifySuccess("批量下载完成 $ok/${songsToDownload.size}，请到 Music/Neiro 查看")
             }
         }
     }

@@ -23,7 +23,6 @@ import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -42,8 +41,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.search.OnlineSearchRepository
+import com.wxjxpp.neiro.ui.components.PillSelector
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
@@ -51,10 +52,11 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
  * 搜索页。
  *
  * - 搜索栏：Material3 [SearchBar]（带水平安全区，不再顶到屏幕边缘）
- * - 平台筛选：FilterChip + FlowRow
- * - 在线结果每行带下载按钮；未导入音源时给出明确空态引导
+ * - 平台筛选：连通胶囊选择组（PillSelector）
+ * - 在线搜索中展示 MD3E LoadingIndicator；空结果按原因归因提示
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun SearchScreen(
     query: String,
@@ -161,22 +163,16 @@ fun SearchScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
 
-        // 聚合搜索时展示平台筛选器：FilterChip + FlowRow 自动换行
+        // 聚合搜索时展示平台筛选器：连通胶囊选择组
         if (query.isNotBlank() && onlinePlatforms.size > 1) {
-            FlowRow(
+            PillSelector(
+                options = onlinePlatforms.map { it.displayName },
+                selectedIndex = onlinePlatforms.indexOfFirst { it.id == currentOnlinePlatform }
+                    .coerceAtLeast(0),
+                onSelect = { index -> onOnlinePlatformChange(onlinePlatforms[index].id) },
                 modifier = Modifier
-                    .fillMaxWidth()
                     .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs),
-                horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
-            ) {
-                onlinePlatforms.forEach { platform ->
-                    FilterChip(
-                        selected = currentOnlinePlatform == platform.id,
-                        onClick = { onOnlinePlatformChange(platform.id) },
-                        label = { Text(platform.displayName, style = MaterialTheme.typography.labelMedium) },
-                    )
-                }
-            }
+            )
         }
         }
         when {
@@ -189,11 +185,31 @@ fun SearchScreen(
                 }
             }
             noSourceAvailable && onlineResults.isEmpty() && localResults.isEmpty() -> NoSourceHint()
+            isLoadingOnline && onlineResults.isEmpty() -> {
+                // 搜索中：MD3E 加载动画（与全局动效统一）
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(top = 48.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    androidx.compose.material3.LoadingIndicator(modifier = Modifier.height(44.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text(
+                        "正在搜索…",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
             allLocalEmpty -> {
-                if (onlineFailed.isEmpty()) {
-                    HintText("没有匹配的歌曲")
-                } else {
-                    HintText("在线搜索失败：${onlineFailed.joinToString("、")}")
+                // 空结果归因：区分「没有音源」「网络不通」「平台失败」「真无此歌」
+                when {
+                    onlinePlatforms.size <= 1 ->
+                        HintText("没有可用音源：请先在「音源」页导入并启用音源脚本")
+                    onlineFailed.size >= onlinePlatforms.size - 1 && onlineFailed.isNotEmpty() ->
+                        HintText("在线搜索失败：${onlineFailed.joinToString("、")}。\n请检查网络连接后重试")
+                    onlineResults.isEmpty() && localResults.isEmpty() ->
+                        HintText("在线和本地都没有找到「$query」，换个关键词试试")
+                    else -> HintText("没有匹配的歌曲")
                 }
             }
             else -> LazyColumn(
@@ -208,21 +224,18 @@ fun SearchScreen(
                             horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
                             verticalAlignment = Alignment.CenterVertically,
                         ) {
-                            // 在线/本地切换：i=0 在线，i=1 本地
+                            // 在线/本地切换：连通胶囊选择组（与平台筛选条同款）
                             val labels = listOf("在线", "本地")
                             var tabActive by remember(query, onlineResults) { mutableStateOf(if (showLocalTab) 1 else 0) }
-                            FlowRow(
-                                modifier = Modifier.weight(1f),
-                                horizontalArrangement = Arrangement.spacedBy(dimens.spaceXs),
-                            ) {
-                                labels.forEachIndexed { i, label ->
-                                    FilterChip(
-                                        selected = tabActive == i,
-                                        onClick = { tabActive = i; showLocalTab = (i == 1) },
-                                        label = { Text(label, style = MaterialTheme.typography.labelMedium) },
-                                    )
-                                }
-                            }
+                            PillSelector(
+                                options = labels,
+                                selectedIndex = tabActive,
+                                onSelect = { i ->
+                                    tabActive = i
+                                    showLocalTab = (i == 1)
+                                },
+                                modifier = Modifier.weight(1f, fill = false),
+                            )
                             if (onlineFailed.isNotEmpty()) {
                                 Text(
                                     "(${onlineFailed.size} 失败)",
