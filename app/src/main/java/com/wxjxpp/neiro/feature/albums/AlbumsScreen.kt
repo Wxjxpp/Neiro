@@ -7,6 +7,7 @@ package com.wxjxpp.neiro.feature.albums
 
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
@@ -57,7 +58,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.wxjxpp.neiro.core.model.Song
-import com.wxjxpp.neiro.ui.components.LocalNavAnimatedVisibilityScope
 import com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
@@ -143,8 +143,24 @@ fun AlbumsScreen(
         },
         modifier = modifier,
     ) { current ->
+        // Container Transform 的动画作用域必须是本 AnimatedContent（而非外层路由），
+        // 否则共享元素匹配不到活动转场，退化为普通淡入淡出
+        val animScope = this
+        val sts = LocalSharedTransitionScope.current
         if (current != null) {
-            Column(modifier = Modifier.fillMaxSize()) {
+            val albumKey = "${current.title}|${current.artistName}"
+            // 详情整页作为"容器"端：与被点击卡片同 key，sharedBounds 驱动容器变形
+            val containerModifier = if (sts != null) {
+                with(sts) {
+                    Modifier.sharedBounds(
+                        rememberSharedContentState(key = "album_container_$albumKey"),
+                        animatedVisibilityScope = animScope,
+                    )
+                }
+            } else {
+                Modifier
+            }
+            Column(modifier = containerModifier.fillMaxSize()) {
                 TopAppBar(
                     title = {
                         Text(current.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
@@ -164,7 +180,8 @@ fun AlbumsScreen(
                     downloadingIds = downloadingIds,
                     onDownloadSong = onDownloadSong,
                     contentPadding = contentPadding,
-                    sharedKey = "album_cover_${current.title}|${current.artistName}",
+                    sharedKey = "album_cover_$albumKey",
+                    animScope = animScope,
                 )
             }
         } else {
@@ -196,6 +213,7 @@ fun AlbumsScreen(
                         album = album,
                         onClick = { opened = album },
                         sharedKey = "album_cover_${album.title}|${album.artistName}",
+                        animScope = animScope,
                     )
                 }
             }
@@ -216,6 +234,7 @@ private fun AlbumDetailList(
     onDownloadSong: ((Song) -> Unit)?,
     contentPadding: PaddingValues,
     sharedKey: String? = null,
+    animScope: AnimatedVisibilityScope? = null,
 ) {
     val merged = remember(songs, extraSongs) {
         buildList {
@@ -231,7 +250,7 @@ private fun AlbumDetailList(
         contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
     ) {
         item(key = "album_header") {
-            AlbumHeader(entry = album, songCount = merged.size, sharedKey = sharedKey)
+            AlbumHeader(entry = album, songCount = merged.size, sharedKey = sharedKey, animScope = animScope)
         }
         lazyItems(merged, key = { it.id }) { song ->
             Row(
@@ -273,7 +292,7 @@ private fun AlbumDetailList(
 
 /** 专辑详情头部：小封面 + 歌手 + 总时长 + 曲目数。封面为 Container Transform 共享元素。 */
 @Composable
-private fun AlbumHeader(entry: AlbumEntry, songCount: Int, sharedKey: String? = null) {
+private fun AlbumHeader(entry: AlbumEntry, songCount: Int, sharedKey: String? = null, animScope: AnimatedVisibilityScope? = null) {
     val dimens = AppTheme.dimens
     // 总时长：所有曲目 durationMs 求和（在线歌曲元数据缺失时按 0 计）
     val totalMs = entry.songs.sumOf { it.durationMs }
@@ -287,7 +306,6 @@ private fun AlbumHeader(entry: AlbumEntry, songCount: Int, sharedKey: String? = 
             .size(72.dp)
             .clip(RoundedCornerShape(10.dp))
         val sts = LocalSharedTransitionScope.current
-        val animScope = LocalNavAnimatedVisibilityScope.current
         if (sts != null && animScope != null && sharedKey != null) {
             with(sts) {
                 AsyncImage(
@@ -407,16 +425,27 @@ private fun AlbumCard(
     album: AlbumEntry,
     onClick: () -> Unit,
     sharedKey: String? = null,
+    animScope: AnimatedVisibilityScope? = null,
 ) {
     val dimens = AppTheme.dimens
+    val sts = LocalSharedTransitionScope.current
+    // 卡片整体作为"容器"起点：与详情整页同 key，sharedBounds 驱动容器变形
+    val containerModifier = if (sts != null && animScope != null) {
+        with(sts) {
+            Modifier.sharedBounds(
+                rememberSharedContentState(key = "album_container_${album.title}|${album.artistName}"),
+                animatedVisibilityScope = animScope,
+            )
+        }
+    } else {
+        Modifier
+    }
     Column(
-        modifier = Modifier
+        modifier = containerModifier
             .clip(RoundedCornerShape(16.dp))
             .clickable(onClick = onClick)
             .padding(dimens.spaceXs),
     ) {
-        val sts = LocalSharedTransitionScope.current
-        val animScope = LocalNavAnimatedVisibilityScope.current
         val imageModifier = Modifier
             .fillMaxWidth()
             .aspectRatio(1f)

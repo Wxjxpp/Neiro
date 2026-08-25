@@ -31,14 +31,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.ui.unit.IntOffset
+import androidx.compose.animation.AnimatedVisibilityScope
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -54,6 +47,7 @@ import com.wxjxpp.neiro.core.data.QualityFallbackDirection
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.ShuffleMode
 import com.wxjxpp.neiro.ui.components.ConnectedChoiceGroup
+import com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
 /** 设置页：无顶部大标题，只列可修改项。 */
@@ -117,34 +111,29 @@ fun SettingsScreen(
     var subsection by remember { mutableStateOf<String?>(null) }
     // 子页返回手势：先回设置根页，再走外壳的页面级返回
     androidx.activity.compose.BackHandler(enabled = subsection != null) { subsection = null }
-    // 二级导航转场：Material Motion「Transition Choreography」Shared Axis Y——
-    // 进入子页=前进（新内容自下而上推入），返回=后退（旧内容向下滑出），
-    // 位移走弹簧、透明度走 effects 规格，与全局路由编排同一套动效语言
-    val enterAxisSpring = spring<IntOffset>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = Spring.StiffnessMediumLow,
-    )
-    val exitAxisSpring = spring<IntOffset>(
-        dampingRatio = Spring.DampingRatioNoBouncy,
-        stiffness = Spring.StiffnessMedium,
-    )
-    val effectsSpec = MaterialTheme.motionScheme.defaultEffectsSpec<Float>()
+    // 二级导航转场：Material Motion「Container Transform」——
+    // 被点击的入口行作为容器起点，变形展开为子页整页（官方 demo 同款）；
+    // 容器变形由 sharedBounds 驱动，非共享内容走默认淡入淡出
     AnimatedContent(
         targetState = subsection,
-        transitionSpec = {
-            val forward = initialState == null
-            val enterY: (Int) -> Int = if (forward) { it -> it / 6 } else { it -> -it / 6 }
-            val exitY: (Int) -> Int = if (forward) { it -> -it / 4 } else { it -> it / 4 }
-            (
-                slideInVertically(enterAxisSpring, enterY) + fadeIn(effectsSpec)
-            ) togetherWith (
-                slideOutVertically(exitAxisSpring, exitY) + fadeOut(effectsSpec)
-            )
-        },
         label = "settingsSubsection",
         modifier = modifier,
     ) { currentSubsection ->
+        // Container Transform 的动画作用域必须是本 AnimatedContent
+        val animScope = this
+        val sts = LocalSharedTransitionScope.current
         if (currentSubsection != null) {
+            // 子页整页作为"容器"终点：与被点击入口行同 key，sharedBounds 驱动容器变形
+            val containerModifier = if (sts != null) {
+                with(sts) {
+                    Modifier.sharedBounds(
+                        rememberSharedContentState(key = "settings_container_$currentSubsection"),
+                        animatedVisibilityScope = animScope,
+                    )
+                }
+            } else {
+                Modifier
+            }
             SettingsSubsection(
                 title = when (currentSubsection) {
                     "lyrics" -> "歌词"
@@ -157,6 +146,7 @@ fun SettingsScreen(
                 },
                 onBack = { subsection = null },
                 contentPadding = contentPadding,
+                modifier = containerModifier,
             ) {
                 when (currentSubsection) {
                 "lyrics" -> {
@@ -476,12 +466,12 @@ fun SettingsScreen(
             ),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            SubsectionEntry(title = "歌词", icon = Icons.Rounded.Lyrics) { subsection = "lyrics" }
-            SubsectionEntry(title = "播放", icon = Icons.Rounded.PlayCircle) { subsection = "playback" }
-            SubsectionEntry(title = "音源", icon = Icons.Rounded.GraphicEq) { subsection = "source" }
-            SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
-            SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
-            SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
+            SubsectionEntry(title = "歌词", key = "lyrics", icon = Icons.Rounded.Lyrics, animScope = animScope) { subsection = "lyrics" }
+            SubsectionEntry(title = "播放", key = "playback", icon = Icons.Rounded.PlayCircle, animScope = animScope) { subsection = "playback" }
+            SubsectionEntry(title = "音源", key = "source", icon = Icons.Rounded.GraphicEq, animScope = animScope) { subsection = "source" }
+            SubsectionEntry(title = "外观", key = "appearance", icon = Icons.Rounded.Palette, animScope = animScope) { subsection = "appearance" }
+            SubsectionEntry(title = "下载", key = "download", icon = Icons.Rounded.Download, animScope = animScope) { subsection = "download" }
+            SubsectionEntry(title = "实验室", key = "lab", icon = Icons.Rounded.Science, animScope = animScope) { subsection = "lab" }
             } // Card 入口组
         } // 根列表 Column
     } // else：根列表分支
@@ -527,13 +517,26 @@ internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.HiRes -> "Hi"
 }
 
-/** 根列表里的一行菜单入口：ListItem（Item）样式，图标 + 名称 + 右箭头。 */
+/** 根列表里的一行菜单入口：ListItem（Item）样式，图标 + 名称 + 右箭头。容器变形起点。 */
 @Composable
 private fun SubsectionEntry(
     title: String,
+    key: String,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
+    animScope: AnimatedVisibilityScope?,
     onClick: () -> Unit,
 ) {
+    val sts = LocalSharedTransitionScope.current
+    val entryModifier = if (sts != null && animScope != null) {
+        with(sts) {
+            Modifier.sharedBounds(
+                rememberSharedContentState(key = "settings_container_$key"),
+                animatedVisibilityScope = animScope,
+            )
+        }
+    } else {
+        Modifier
+    }
     androidx.compose.material3.ListItem(
         headlineContent = { Text(title, style = MaterialTheme.typography.titleMedium) },
         leadingContent = {
@@ -553,7 +556,7 @@ private fun SubsectionEntry(
         colors = androidx.compose.material3.ListItemDefaults.colors(
             containerColor = androidx.compose.ui.graphics.Color.Transparent,
         ),
-        modifier = Modifier.clickable(onClick = onClick),
+        modifier = entryModifier.clickable(onClick = onClick),
     )
 }
 
