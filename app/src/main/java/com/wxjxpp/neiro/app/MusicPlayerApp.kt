@@ -532,9 +532,6 @@ private fun RouteContent(
             label = "rootRoute",
             modifier = modifier,
         ) { currentRoute ->
-            androidx.compose.runtime.CompositionLocalProvider(
-                com.wxjxpp.neiro.ui.components.LocalNavAnimatedVisibilityScope provides this@AnimatedContent,
-            ) {
             Box(modifier = Modifier.fillMaxSize()) {
             when (currentRoute) {
                 Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) {
@@ -785,7 +782,6 @@ private fun RouteContent(
                     onOpenDrawer = onOpenDrawer,
                     modifier = Modifier.fillMaxSize(),
                 )
-            }
             }
             }
         }
