@@ -166,7 +166,7 @@ fun UserApiScreen(
                                     api.description.takeIf { it.isNotBlank() },
                                     api.platforms.takeIf { it.isNotEmpty() }
                                         ?.let { "支持：${it.joinToString("、")}" },
-                                .joinToString(" · ").ifBlank { api.id }
+                                ).joinToString(" · ").ifBlank { api.id }
                             )
                         },
                         trailingContent = {

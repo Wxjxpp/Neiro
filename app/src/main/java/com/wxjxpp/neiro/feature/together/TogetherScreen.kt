@@ -299,6 +299,34 @@ private fun RoomView(
     val nextTrack = queueArr?.optJSONObject(curIdx + 1)
 
 // ---- 房间跟随：全员监听服务端曲目变化并切歌（房主也切，保持全房同曲）----
+    /** 本地当前曲目的 stableKey（与房间 key 对齐）。 */
+    fun localKeyOf(song: com.wxjxpp.neiro.core.model.Song?): String? = when (val loc = song?.location) {
+        is MediaLocation.Remote -> "${loc.sourceId}:${loc.songId}"
+        is MediaLocation.Local ->
+            if (loc.uri.startsWith("http")) "url:${LitTogetherTransport.urlHash(loc.uri)}" else null
+        else -> null
+    }
+
+    /** 听众的进度/播放状态校正。 */
+    fun syncProgressAndPlayState(track: org.json.JSONObject) {
+        val stateJson = transport.roomStateJson.value ?: return
+        val expected = stateJson.optLong("expectedPositionMs", -1L)
+        if (expected >= 0) {
+            val drift = kotlin.math.abs(player.state.value.positionMs - expected)
+            // 放宽到 2.5s 且不回拉超过 30s 的进度，避免把自然播完的尾部硬拽回去造成循环感
+            if (drift > LitTogetherTransport.DRIFT_TOLERANCE_MS && drift < 30_000L) {
+                player.seekTo(expected)
+            }
+        }
+        val shouldPlay = stateJson.optJSONObject("playback")?.optBoolean("playing", false) ?: false
+        val st = player.state.value
+        // 曲目已播完但房间还标记在播：不要强行 resume（等 TRACK_END 推进），否则就是原地循环
+        val endedLocally = st.durationMs > 0 && st.positionMs >= st.durationMs - 300
+        if (shouldPlay != st.isPlaying && !st.isBuffering && !endedLocally) {
+            if (shouldPlay) player.resume() else player.pause()
+        }
+    }
+
     LaunchedEffect(Unit) {
         transport.currentTrackJson.collect { track ->
             val local = player.state.value.current
@@ -341,34 +369,6 @@ private fun RoomView(
                 )
             }
             player.setQueue(listOf(song), 0, autoPlay = true)
-        }
-    }
-
-    /** 本地当前曲目的 stableKey（与房间 key 对齐）。 */
-    fun localKeyOf(song: com.wxjxpp.neiro.core.model.Song?): String? = when (val loc = song?.location) {
-        is MediaLocation.Remote -> "${loc.sourceId}:${loc.songId}"
-        is MediaLocation.Local ->
-            if (loc.uri.startsWith("http")) "url:${LitTogetherTransport.urlHash(loc.uri)}" else null
-        else -> null
-    }
-
-    /** 听众的进度/播放状态校正。 */
-    fun syncProgressAndPlayState(track: org.json.JSONObject) {
-        val stateJson = transport.roomStateJson.value ?: return
-        val expected = stateJson.optLong("expectedPositionMs", -1L)
-        if (expected >= 0) {
-            val drift = kotlin.math.abs(player.state.value.positionMs - expected)
-            // 放宽到 2.5s 且不回拉超过 30s 的进度，避免把自然播完的尾部硬拽回去造成循环感
-            if (drift > LitTogetherTransport.DRIFT_TOLERANCE_MS && drift < 30_000L) {
-                player.seekTo(expected)
-            }
-        }
-        val shouldPlay = stateJson.optJSONObject("playback")?.optBoolean("playing", false) ?: false
-        val st = player.state.value
-        // 曲目已播完但房间还标记在播：不要强行 resume（等 TRACK_END 推进），否则就是原地循环
-        val endedLocally = st.durationMs > 0 && st.positionMs >= st.durationMs - 300
-        if (shouldPlay != st.isPlaying && !st.isBuffering && !endedLocally) {
-            if (shouldPlay) player.resume() else player.pause()
         }
     }
 
