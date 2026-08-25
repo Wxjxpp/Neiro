@@ -46,6 +46,9 @@ class LitTogetherTransport(
     val serverUrlFlow = MutableStateFlow("")
     val nicknameFlow = MutableStateFlow("")
 
+    /** 当前设备唯一身份（32 位 hex），创建/加入时刷新；UI 组装邀请消息用。 */
+    var currentUid: String = ""
+        private set
     /** 创建房间时服务端下发的邀请密钥（持久化，杀进程不丢）。 */
     var lastJoinSecret: String = ""
         private set
@@ -167,7 +170,8 @@ class LitTogetherTransport(
     suspend fun createRoomAt(baseUrl: String, nick: String, roomName: String = ""): Result<String> {
         serverUrl = baseUrl.trim().trimEnd('/')
         nickname = nick
-        val body = JSONObject().put("nickname", nick)
+        currentUid = settings.getOrCreateTogetherUid()
+        val body = JSONObject().put("nickname", nick).put("uid", currentUid)
         if (roomName.isNotEmpty()) body.put("roomName", roomName)
         val resp = runCatching { http.postJson("$serverUrl/api/rooms", body.toString()) }
             .getOrElse { return Result.failure(it) }
@@ -198,7 +202,6 @@ class LitTogetherTransport(
         startPolling()
         return Result.success(roomId)
     }
-
     private fun applyIdentity(json: JSONObject, controllerDefault: Boolean) {
         roomId = json.optString("roomId", roomId)
         memberId = json.getString("memberId")
@@ -226,6 +229,22 @@ class LitTogetherTransport(
         resetLocal()
     }
 
+    /** 重置唯一身份标识（32位）：旧 uid 关联的成员密钥/会话一并作废，需重新加入房间。 */
+    suspend fun resetIdentity(): String {
+        stopPolling()
+        runCatching {
+            if (token.isNotEmpty() && roomId.isNotEmpty()) {
+                http.postJson(
+                    "$serverUrl/api/rooms/$roomId/leave",
+                    "{}",
+                    mapOf("Authorization" to "Bearer $token"),
+                )
+            }
+        }
+        settings.clearTogetherSession()
+        resetLocal()
+        return settings.resetTogetherUid()
+    }
     private fun persistSession() {
         scope.launch {
             settings.setTogetherServerUrl(serverUrl)

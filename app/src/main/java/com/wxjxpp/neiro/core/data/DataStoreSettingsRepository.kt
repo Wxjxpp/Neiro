@@ -62,6 +62,7 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         // ---- 一起听 ----
         val TogetherServerUrl = stringPreferencesKey("together_server_url")
         val TogetherNickname = stringPreferencesKey("together_nickname")
+        val TogetherUid = stringPreferencesKey("together_uid")
         val TogetherRoomId = stringPreferencesKey("together_room_id")
         val TogetherMemberId = stringPreferencesKey("together_member_id")
         val TogetherMemberSecret = stringPreferencesKey("together_member_secret")
@@ -193,6 +194,25 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.TogetherNickname].orEmpty() }
     suspend fun setTogetherNickname(nickname: String) {
         store.edit { it[Keys.TogetherNickname] = nickname }
+    }
+    /** 一起听唯一身份标识（32 位 hex，设备维度，默认不可见；菜单里可重置） */
+    fun observeTogetherUid(): Flow<String> =
+        store.data.map { it[Keys.TogetherUid].orEmpty() }
+    suspend fun getOrCreateTogetherUid(): String {
+        val existing = store.data.first()[Keys.TogetherUid].orEmpty()
+        if (existing.length == 32) return existing
+        // 8-4-4-4-12 共 32 hex；SecureRandom 防可预测
+        val chars = "0123456789abcdef"
+        val rnd = java.security.SecureRandom()
+        val sb = StringBuilder(32)
+        repeat(32) { sb.append(chars[rnd.nextInt(chars.length)]) }
+        val uid = sb.toString()
+        store.edit { it[Keys.TogetherUid] = uid }
+        return uid
+    }
+    suspend fun resetTogetherUid(): String {
+        store.edit { it.remove(Keys.TogetherUid) }
+        return getOrCreateTogetherUid()
     }
     /** 会话凭据：用于断线重连（memberSecret）与恢复房间。 */
     fun observeTogetherSession(): Flow<List<String>> = store.data.map { prefs ->

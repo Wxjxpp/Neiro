@@ -22,10 +22,14 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.AddLink
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.ContentCopy
+import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Logout
+import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.MoreVert
+import androidx.compose.material.icons.rounded.Person
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.PlayArrow
+import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Send
 import androidx.compose.material.icons.rounded.ThumbDownAlt
@@ -111,6 +115,35 @@ fun TogetherScreen(
 
 // ================= 大厅 =================
 
+// ================= 大厅 =================
+/** 解析邀请分享文本："XXX-XXX|密钥"；兼容旧版「房间ID：X 密钥：Y」。返回 (roomId, secret) 或 null。 */
+internal fun parseInviteMessage(text: String): Pair<String, String>? {
+    val t = text.trim()
+    if (t.isEmpty()) return null
+    if (t.contains("|")) {
+        val head = t.substringBefore("|").trim()
+        val secret = t.substringAfter("|", "").trim()
+        val digits = head.filter(Char::isDigit)
+        if (digits.length in 4..12 && secret.isNotEmpty()) return digits to secret
+        return null
+    }
+    val idM = Regex("(?:房间ID|房间号)[:：]\\s*([A-Za-z0-9\\-]+)").find(t)
+    val secM = Regex("密钥[:：]\\s*([A-Za-z0-9]+)").find(t)
+    if (idM != null && secM != null) {
+        return idM.groupValues[1].replace("-", "") to secM.groupValues[1]
+    }
+    // 兜底：整段就是「房号 密钥」两段式
+    val parts = t.split(Regex("\\s+"))
+    if (parts.size == 2 && parts[0].all(Char::isDigit) && parts[0].length in 4..12) {
+        return parts[0] to parts[1]
+    }
+    return null
+}
+/** 房间号展示格式：123456 → 123-456 */
+internal fun formatRoomId(id: String): String =
+    if (id.length == 6) "${id.slice(0..2)}-${id.slice(3..5)}" else id
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 private fun LobbyView(
     transport: LitTogetherTransport,
@@ -123,103 +156,206 @@ private fun LobbyView(
     val savedNick by transport.nicknameFlow.collectAsState()
     var url by remember(savedUrl) { mutableStateOf(savedUrl.ifEmpty { "https://wxjxpp.de5.net" }) }
     var nick by remember(savedNick) { mutableStateOf(savedNick) }
-    var roomId by remember { mutableStateOf("") }
-    var secret by remember { mutableStateOf("") }
-    var roomName by remember { mutableStateOf("") }
+    // 底部 Sheet 开关：创建房间（填房间名）/ 加入房间（粘贴邀请消息）/ 汉堡菜单
+    var showCreateSheet by remember { mutableStateOf(false) }
+    var showJoinSheet by remember { mutableStateOf(false) }
+    var showMenuSheet by remember { mutableStateOf(false) }
+    var roomNameInput by remember { mutableStateOf("") }
+    var inviteInput by remember { mutableStateOf("") }
 
-    Column(
-        modifier = modifier
-            .fillMaxSize()
-            .imePadding() // 键盘弹起时整体上移，昵称框不再被输入法遮挡
-            .verticalScroll(rememberScrollState())
-            .padding(horizontal = 20.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        Spacer(Modifier.height(8.dp))
-        Text("一起听", style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-        Text(
-            "和好友实时同步听歌。群友可以搜索点歌、投票切歌、发弹幕；房主拥有全部控制权。",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = url, onValueChange = { url = it },
-            label = { Text("服务端地址") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = nick, onValueChange = { nick = it },
-            label = { Text("昵称（1-24 位中文/字母/数字）") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        // 创建房间时可自定义房间显示名；房间号由服务端生成纯数字 ID
-        OutlinedTextField(
-            value = roomName, onValueChange = { roomName = it.take(30) },
-            label = { Text("房间名称（可选，创建时生效）") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Text(
-            "加入房间需要向房主要邀请码（房间ID下方小字或复制按钮）",
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        OutlinedTextField(
-            value = roomId, onValueChange = { roomId = it.filter(Char::isDigit).take(6) },
-            label = { Text("房间号（6 位数字）") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedTextField(
-            value = secret, onValueChange = { secret = it },
-            label = { Text("邀请密钥（首次加入必填）") }, singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        // 并排操作：加入=MD3 主色实心按钮，创建=浅色 Tonal
-        Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            Button(
-                onClick = {
-                    if (nick.isBlank() || roomId.isBlank() || secret.isBlank()) {
-                        onMessage("昵称、房间号、邀请密钥都要填"); return@Button
-                    }
-                    busy = true
-                    scope.launch {
-                        val r = transport.joinRoomAt(url, roomId.trim(), nick.trim(), secret.trim())
-                        busy = false
-                        onMessage(r.fold({ "已加入房间 $it" }, { it.message ?: "加入失败" }))
-                    }
-                },
-                enabled = !busy,
-                modifier = Modifier.weight(1f),
-            ) {
-                if (busy) CircularProgressIndicator(modifier = Modifier.height(18.dp)) else Text("加入房间")
-            }
-            OutlinedButton(
-                onClick = {
-                    if (nick.isBlank()) { onMessage("请先填写昵称"); return@OutlinedButton }
-                    busy = true
-                    scope.launch {
-                        val r = transport.createRoomAt(url, nick.trim(), roomName.trim())
-                        busy = false
-                        onMessage(r.fold({ "房间已创建：$it" }, { it.message ?: "创建失败" }))
-                    }
-                },
-                enabled = !busy,
-                colors = ButtonDefaults.outlinedButtonColors(),
-                modifier = Modifier.weight(1f),
-            ) { Text("创建房间") }
-        }
-        Spacer(Modifier.height(24.dp))
-    }
-    // 创建/加入是网络操作且 CF 冷启动可能较慢：全屏半透明加载层
-    if (busy) {
-        Box(
-            Modifier.fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
-            contentAlignment = Alignment.Center,
+    Box(modifier.fillMaxSize().imePadding()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                CircularProgressIndicator()
-                Spacer(Modifier.height(12.dp))
-                Text("正在连接服务器…", style = MaterialTheme.typography.bodyMedium)
+            Spacer(Modifier.height(8.dp))
+            // 标题行 + 右上角汉堡菜单
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "一起听",
+                    style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.weight(1f),
+                )
+                IconButton(onClick = { showMenuSheet = true }) {
+                    Icon(Icons.Rounded.Menu, contentDescription = "更多选项")
+                }
+            }
+            Text(
+                "和好友实时同步听歌。群友可以搜索点歌、投票切歌、发弹幕；房主拥有全部控制权。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = url, onValueChange = { url = it },
+                label = { Text("一起听服务器") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
+                value = nick, onValueChange = { nick = it },
+                label = { Text("显示昵称（1-24 位中文/字母/数字）") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Spacer(Modifier.height(16.dp))
+            // 并排操作：加入=MD3E 主色实心蓝，创建=浅色描边
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Button(
+                    onClick = { showJoinSheet = true },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                ) { Text("加入房间", style = MaterialTheme.typography.labelLarge) }
+                OutlinedButton(
+                    onClick = { showCreateSheet = true },
+                    enabled = !busy,
+                    modifier = Modifier.weight(1f).height(52.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(),
+                ) { Text("创建房间", style = MaterialTheme.typography.labelLarge) }
+            }
+            Text(
+                "加入房间：把房主分享的邀请消息整段粘贴即可",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(24.dp))
+        }
+        // 创建/加入是网络操作且 CF 冷启动可能较慢：全屏加载层（MD3E LoadingIndicator）
+        if (busy) {
+            Box(
+                Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    androidx.compose.material3.LoadingIndicator()
+                    Spacer(Modifier.height(16.dp))
+                    Text("正在连接服务器…", style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+
+    // ---- 创建房间 Sheet：仅需输入房间名称 ----
+    if (showCreateSheet) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { if (!busy) showCreateSheet = false }) {
+            Column(
+                Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("创建房间", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = roomNameInput, onValueChange = { roomNameInput = it.take(30) },
+                    label = { Text("房间名称") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Button(
+                    onClick = {
+                        if (nick.isBlank()) { onMessage("请先填写显示昵称"); return@Button }
+                        busy = true
+                        scope.launch {
+                            val r = transport.createRoomAt(url, nick.trim(), roomNameInput.trim())
+                            busy = false
+                            r.fold({
+                                showCreateSheet = false
+                                roomNameInput = ""
+                                onMessage("房间已创建：$it")
+                            }, { onMessage(it.message ?: "创建失败") })
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    if (busy) androidx.compose.material3.LoadingIndicator(modifier = Modifier.height(24.dp))
+                    else Text("创建并进入", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+
+    // ---- 加入房间 Sheet：整段粘贴邀请消息即可 ----
+    if (showJoinSheet) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { if (!busy) showJoinSheet = false }) {
+            Column(
+                Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+            ) {
+                Text("加入房间", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                OutlinedTextField(
+                    value = inviteInput, onValueChange = { inviteInput = it },
+                    label = { Text("粘贴邀请消息") },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 2,
+                )
+                Text(
+                    "示例：我在Neiro听歌，复制消息和我一起听\n123-456|密钥",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Button(
+                    onClick = {
+                        if (nick.isBlank()) { onMessage("请先填写显示昵称"); return@Button }
+                        val parsed = parseInviteMessage(inviteInput)
+                        if (parsed == null) {
+                            onMessage("邀请消息格式不对，请完整复制房主分享的内容"); return@Button
+                        }
+                        val (rid, sec) = parsed
+                        if (sec.isEmpty()) { onMessage("邀请消息里缺少密钥，请让房主重新复制"); return@Button }
+                        busy = true
+                        scope.launch {
+                            val r = transport.joinRoomAt(url, rid, nick.trim(), sec)
+                            busy = false
+                            r.fold({
+                                showJoinSheet = false
+                                inviteInput = ""
+                                onMessage("已加入房间 $it")
+                            }, { onMessage(it.message ?: "加入失败") })
+                        }
+                    },
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth().height(52.dp),
+                ) {
+                    if (busy) androidx.compose.material3.LoadingIndicator(modifier = Modifier.height(24.dp))
+                    else Text("加入", style = MaterialTheme.typography.labelLarge)
+                }
+            }
+        }
+    }
+
+    // ---- 汉堡菜单 Sheet：服务器/昵称概览 + 重置唯一身份 ----
+    if (showMenuSheet) {
+        androidx.compose.material3.ModalBottomSheet(onDismissRequest = { showMenuSheet = false }) {
+            Column(
+                Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text("更多选项", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("一起听服务器") },
+                    supportingContent = { Text(url.ifEmpty { "未设置" }) },
+                    leadingContent = { Icon(Icons.Rounded.Dns, contentDescription = null) },
+                )
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("显示昵称") },
+                    supportingContent = { Text(nick.ifEmpty { "未设置" }) },
+                    leadingContent = { Icon(Icons.Rounded.Person, contentDescription = null) },
+                )
+                androidx.compose.material3.HorizontalDivider()
+                androidx.compose.material3.ListItem(
+                    headlineContent = { Text("重置唯一身份标识") },
+                    supportingContent = { Text("生成新的 32 位设备身份；旧身份关联的房间会话将作废") },
+                    leadingContent = { Icon(Icons.Rounded.Refresh, contentDescription = null) },
+                    modifier = Modifier.clickable {
+                        scope.launch {
+                            val newUid = transport.resetIdentity()
+                            showMenuSheet = false
+                            onMessage("唯一身份已重置：${newUid.take(8)}…")
+                        }
+                    },
+                )
             }
         }
     }
@@ -442,7 +578,7 @@ private fun RoomView(
                         )
                     }
                     Text(
-                        "房间ID ${r.id}" +
+                        "房间ID ${formatRoomId(r.id)}" +
                             when (connection) {
                                 TogetherConnectionState.Connected -> ""
                                 TogetherConnectionState.Reconnecting -> " · 重连中…"
@@ -454,9 +590,13 @@ private fun RoomView(
                     )
                 }
                 IconButton(onClick = {
-                    clipboard.setText(AnnotatedString("房间ID：${r.id}\n密钥：${transport.lastJoinSecret}"))
-                    onMessage("已复制房间信息，发给朋友即可加入")
-                }) { Icon(Icons.Rounded.ContentCopy, contentDescription = "复制房间信息") }
+                    clipboard.setText(
+                        AnnotatedString(
+                            "我在Neiro听歌，复制消息和我一起听\n${formatRoomId(r.id)}|${transport.lastJoinSecret}"
+                        )
+                    )
+                    onMessage("已复制邀请消息，发给朋友粘贴即可加入")
+                }) { Icon(Icons.Rounded.ContentCopy, contentDescription = "复制邀请消息") }
                 Box {
                     IconButton(onClick = { menuOpen = true }) {
                         Icon(Icons.Rounded.MoreVert, contentDescription = "菜单")
