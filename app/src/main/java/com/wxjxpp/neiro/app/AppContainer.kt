@@ -226,7 +226,12 @@ private val registry = DefaultMusicSourceRegistry(
     override val onlineSearch = OnlineSearchRepository(sourcesProvider = { activeOnlineSources })
 
     override val downloadManager =
-        com.wxjxpp.neiro.core.download.DownloadManager(application, registry)
+        com.wxjxpp.neiro.core.download.DownloadManager(
+            application,
+            registry,
+            appSettings,
+            httpClient,
+        )
 
     /** 按脚本启用状态重建外置音源集合，并同步进注册表与搜索页。 */
     private fun refreshOnlineSources(enabled: Boolean) {

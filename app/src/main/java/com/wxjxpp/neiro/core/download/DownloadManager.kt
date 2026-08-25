@@ -9,6 +9,7 @@ import com.wxjxpp.neiro.core.player.DownloadNotifier
 import com.wxjxpp.neiro.core.source.OnlineMusicSource
 import com.wxjxpp.neiro.core.source.MusicSourceRegistry
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import java.io.File
 
@@ -24,6 +25,8 @@ import java.io.File
 class DownloadManager(
     private val context: Context,
     private val registry: MusicSourceRegistry,
+    private val settings: com.wxjxpp.neiro.core.data.DataStoreSettingsRepository,
+    private val httpClient: com.wxjxpp.neiro.core.net.HttpClient,
 ) {
     /** 下载事件回调：(歌曲标题, 是否结束, 用户可读消息)。由 ViewModel 转成横幅。 */
     var onEvent: ((String, Boolean, String) -> Unit)? = null
@@ -52,8 +55,8 @@ class DownloadManager(
 
     /** 通知槽位：同一首歌的开始/完成通知共用一个 id，避免通知堆积。 */
     private fun notifySlot(songId: String): Int = songId.hashCode().mod(1000)
-
-    /** 下载歌曲文件。返回用户可读的结果消息，同时发通知 + 事件回调。 */
+    /** 下载歌曲文件。返回用户可读的结果消息，同时发通知 + 事件回调。
+     *  流程：直链下载到缓存 → 按设置嵌入标题/歌手/专辑/封面/歌词 → 落位（自定义目录或公共音乐）。 */
     suspend fun downloadSong(song: Song): String = withContext(Dispatchers.IO) {
         val slot = notifySlot(song.id)
         DownloadNotifier.showStart(context, song.title, slot)
@@ -64,30 +67,93 @@ class DownloadManager(
             onEvent?.invoke(song.title, true, msg)
             return@withContext msg
         }
+        // 1) 先落到缓存临时文件（便于嵌入标签后再搬运）
+        val ext = url.substringBefore('?').substringAfterLast('.', "").lowercase()
+            .takeIf { it in setOf("mp3", "flac", "m4a", "ogg", "opus", "wav") } ?: "mp3"
+        val tmp = File(context.cacheDir, "neiro_dl_${System.currentTimeMillis()}.$ext")
+        val downloaded = runCatching { FileDownloader.downloadToFile(url, tmp) > 0L }
+            .getOrElse { false }
+        if (!downloaded) {
+            tmp.delete()
+            val msg = "下载失败：服务器返回空内容"
+            DownloadNotifier.showDone(context, "下载失败", "${song.title} · $msg", slot)
+            onEvent?.invoke(song.title, true, msg)
+            return@withContext msg
+        }
+        // 2) 元数据嵌入（失败不阻断下载，只跳过增强项）
+        var embedNote = ""
         runCatching {
-            val musicDir = File(
-                Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
-                "Neiro",
-            ).apply { mkdirs() }
-            val target = File(musicDir, safeFileName(song.title, song.artistName, "mp3"))
-            val bytes = FileDownloader.downloadToFile(url, target)
-            if (bytes <= 0L) error("服务器返回空内容")
-            target.absolutePath
-        }.fold(
+            val embedCover = first(settings.downloadEmbedCover)
+            val embedLyrics = first(settings.downloadEmbedLyrics)
+            val cover = if (embedCover) fetchCoverBytes(song) else null
+            val lyric = if (embedLyrics) fetchLyricsLrc(song) else null
+            AudioTagWriter.embed(tmp, song, cover, null, lyric)
+            embedNote = listOfNotNull(
+                if (cover != null) "封面" else null,
+                if (lyric != null) "歌词" else null,
+            ).joinToString("、").let { if (it.isEmpty()) "" else "（已嵌入$it）" }
+        }
+        // 3) 落位：自定义 SAF 目录优先，否则公共 Music/Neiro
+        val dirUri = first(settings.observeDownloadDirUri())
+        val result = runCatching {
+            if (dirUri.isNotBlank()) {
+                val name = safeFileName(song.title, song.artistName, ext)
+                AudioTagWriter.copyIntoSafDir(context, dirUri, tmp, name)
+                tmp.delete()
+                name
+            } else {
+                val musicDir = File(
+                    Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
+                    "Neiro",
+                ).apply { mkdirs() }
+                val target = File(musicDir, safeFileName(song.title, song.artistName, ext))
+                tmp.renameTo(target) || runCatching {
+                    tmp.copyTo(target, overwrite = true); tmp.delete(); true
+                }.getOrDefault(false)
+                target.absolutePath
+            }
+        }
+        result.fold(
             onSuccess = { path ->
                 val fileName = path.substringAfterLast('/')
-                val msg = "下载完成「$fileName」，请到 Music/Neiro 查看"
-                DownloadNotifier.showDone(context, "下载完成", "$msg\n完整路径：$path", slot)
+                val msg = "下载完成「$fileName」$embedNote"
+                DownloadNotifier.showDone(context, "下载完成", "$msg\n位置：$path", slot)
                 onEvent?.invoke(song.title, true, msg)
                 path
             },
             onFailure = {
+                tmp.delete()
                 val msg = "下载失败：${it.message ?: "未知错误"}"
                 DownloadNotifier.showDone(context, "下载失败", "${song.title} · $msg", slot)
                 onEvent?.invoke(song.title, true, msg)
                 msg
             },
         )
+    }
+
+    /** 抓取专辑图字节：http(s) 直取；content:// 走 ContentResolver。 */
+    private suspend fun fetchCoverBytes(song: Song): ByteArray? {
+        val uri = song.coverUri.orEmpty()
+        if (uri.isEmpty()) return null
+        return runCatching {
+            when {
+                uri.startsWith("http") ->
+                    httpClient.execute(uri).bytes.takeIf { it.isNotEmpty() }
+                uri.startsWith("content") ->
+                    context.contentResolver.openInputStream(android.net.Uri.parse(uri))?.use { it.readBytes() }
+                else -> null
+            }
+        }.getOrNull()?.takeIf { it.size > 1024 } // 过滤占位小图
+    }
+
+    /** 抓取 LRC 歌词文本：本机音源优先，其余在线音源兜底。 */
+    private suspend fun fetchLyricsLrc(song: Song): String? {
+        val candidates = registry.sources.filterIsInstance<com.wxjxpp.neiro.core.source.OnlineMusicSource>()
+        for (source in candidates) {
+            val raw = runCatching { source.fetchLyricsRaw(song) }.getOrNull() ?: continue
+            if (raw.content.isNotBlank()) return raw.content
+        }
+        return null
     }
 
     /** 下载歌词（LRC）。 */

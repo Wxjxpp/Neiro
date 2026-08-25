@@ -198,9 +198,14 @@ fun MusicPlayerApp(container: AppContainer) {
 
     /**
      * 返回优先级（严格单层回退，绝不跳级）：
-     * 多选态 → 错误横幅不拦截 → 歌词页(2→1) → 播放页(1→0) → 抽屉 → 根页面回首页
+     * 多选态 → 错误横幅不拦截 → 歌词页(2→1) → 播放页(1→0) → 抽屉 → 根页面回首页。
+     * 例外：发现页不拦截返回手势——冷启动即发现页，按返回应直接退出到桌面，
+     * 而不是被劫持回歌曲页/首页。
      */
-    BackHandler(enabled = inSelectionMode || lyricsOpen || playerOpen || drawerState.isOpen || route != Destination.Home.route) {
+    BackHandler(
+        enabled = inSelectionMode || lyricsOpen || playerOpen || drawerState.isOpen ||
+            (route != Destination.Home.route && route != Destination.Discover.route),
+    ) {
         when {
             inSelectionMode -> viewModel.clearSelection()
             lyricsOpen -> animateTo(1f)                    // 歌词页 → 播放页
@@ -707,6 +712,12 @@ private fun RouteContent(
                     appFontFamily = uiState.appFontFamily,
                     onAppFontFamilyChange = viewModel::setAppFontFamily,
                     onLabSpringLyricsChange = viewModel::setLabSpringLyrics,
+                    downloadDirUri = uiState.downloadDirUri,
+                    downloadEmbedCover = uiState.downloadEmbedCover,
+                    downloadEmbedLyrics = uiState.downloadEmbedLyrics,
+                    onDownloadDirChange = viewModel::setDownloadDir,
+                    onDownloadEmbedCoverChange = viewModel::setDownloadEmbedCover,
+                    onDownloadEmbedLyricsChange = viewModel::setDownloadEmbedLyrics,
                     onOpenDrawer = onOpenDrawer,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),

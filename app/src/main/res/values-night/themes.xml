@@ -1,0 +1,6 @@
+<resources>
+    <!-- 暗色模式：平台 Dark 主题（对话框/菜单/输入法等浮层跟随），启动背景走 drawable-night -->
+    <style name="Theme.App" parent="android:Theme.Material.NoActionBar">
+        <item name="android:windowBackground">@drawable/splash_background</item>
+    </style>
+</resources>

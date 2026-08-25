@@ -38,6 +38,9 @@ data class ShellUiState(
     val playlists: List<Playlist> = emptyList(),
     val isRefreshing: Boolean = false,
     val floatingPlayerBar: Boolean = true,
+    val downloadDirUri: String = "",
+    val downloadEmbedCover: Boolean = true,
+    val downloadEmbedLyrics: Boolean = true,
     val shuffleMode: ShuffleMode = ShuffleMode.Pseudo,
     val showTranslation: Boolean = true,
 
@@ -176,6 +179,15 @@ class AppViewModel(
 
         container.settingsRepository.observeFloatingPlayerBar()
             .onEach { enabled -> _uiState.update { it.copy(floatingPlayerBar = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeDownloadDirUri()
+            .onEach { uri -> _uiState.update { it.copy(downloadDirUri = uri) } }
+            .launchIn(viewModelScope)
+        container.appSettings.downloadEmbedCover
+            .onEach { v -> _uiState.update { it.copy(downloadEmbedCover = v) } }
+            .launchIn(viewModelScope)
+        container.appSettings.downloadEmbedLyrics
+            .onEach { v -> _uiState.update { it.copy(downloadEmbedLyrics = v) } }
             .launchIn(viewModelScope)
 
         container.settingsRepository.observeShowTranslation()
@@ -392,6 +404,16 @@ class AppViewModel(
     fun setFloatingPlayerBar(enabled: Boolean) {
         viewModelScope.launch { container.settingsRepository.setFloatingPlayerBar(enabled) }
     }
+    /** 下载目录（SAF tree URI）；空串恢复默认公共目录 */
+    fun setDownloadDir(uri: String?) {
+        viewModelScope.launch {
+            container.appSettings.setDownloadDirUri(uri.orEmpty())
+        }
+    }
+    fun setDownloadEmbedCover(v: Boolean) =
+        viewModelScope.launch { container.appSettings.setDownloadEmbedCover(v) }
+    fun setDownloadEmbedLyrics(v: Boolean) =
+        viewModelScope.launch { container.appSettings.setDownloadEmbedLyrics(v) }
 
     fun setShuffleMode(mode: ShuffleMode) {
         viewModelScope.launch { container.appSettings.setShuffleMode(mode) }

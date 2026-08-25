@@ -1,5 +1,7 @@
 package com.wxjxpp.neiro.feature.settings
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.PaddingValues
@@ -15,6 +17,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+import androidx.compose.material.icons.rounded.Download
+import androidx.compose.material.icons.rounded.FolderOpen
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Menu
@@ -90,11 +94,18 @@ fun SettingsScreen(
     appFontFamily: String = "default",
     onAppFontFamilyChange: (String) -> Unit = {},
     onLabSpringLyricsChange: (Boolean) -> Unit = {},
+    downloadDirUri: String = "",
+    downloadEmbedCover: Boolean = true,
+    downloadEmbedLyrics: Boolean = true,
+    onDownloadDirChange: (String?) -> Unit = {},
+    onDownloadEmbedCoverChange: (Boolean) -> Unit = {},
+    onDownloadEmbedLyricsChange: (Boolean) -> Unit = {},
     onOpenDrawer: () -> Unit = {},
     contentPadding: PaddingValues,
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
+    val context = androidx.compose.ui.platform.LocalContext.current
     // 二级菜单：null=根列表；否则进入对应子页
     var subsection by remember { mutableStateOf<String?>(null) }
     // 子页返回手势：先回设置根页，再走外壳的页面级返回
@@ -106,6 +117,7 @@ fun SettingsScreen(
                 "playback" -> "播放"
                 "source" -> "音源"
                 "appearance" -> "外观"
+                "download" -> "下载"
                 "lab" -> "实验室"
                 else -> ""
             },
@@ -271,6 +283,70 @@ fun SettingsScreen(
                         Text("140%", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
+                "download" -> {
+                    // SAF 目录选择：授权一次，后续下载自动写入
+                    val dirPicker = rememberLauncherForActivityResult(
+                        ActivityResultContracts.OpenDocumentTree(),
+                    ) { uri ->
+                        if (uri != null) {
+                            runCatching {
+                                context.contentResolver.takePersistableUriPermission(
+                                    uri,
+                                    android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                                        android.content.Intent.FLAG_GRANT_WRITE_URI_PERMISSION,
+                                )
+                            }
+                            onDownloadDirChange(uri.toString())
+                        }
+                    }
+                    Text(
+                        text = "下载目录",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
+                    )
+                    val dirDisplay = when {
+                        downloadDirUri.isEmpty() -> "默认（Music/Neiro）"
+                        else -> runCatching {
+                            androidx.documentfile.provider.DocumentFile
+                                .fromTreeUri(context, android.net.Uri.parse(downloadDirUri))
+                                ?.uri?.lastPathSegment ?: "已选择目录"
+                        }.getOrDefault("已选择目录")
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().clickable { dirPicker.launch(null) },
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Column(Modifier.weight(1f)) {
+                            Text(dirDisplay, style = MaterialTheme.typography.bodyMedium)
+                            Text(
+                                "点按选择自定义下载位置",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                        IconButton(onClick = { dirPicker.launch(null) }) {
+                            Icon(Icons.Rounded.FolderOpen, contentDescription = "选择目录")
+                        }
+                    }
+                    if (downloadDirUri.isNotEmpty()) {
+                        androidx.compose.material3.TextButton(onClick = { onDownloadDirChange(null) }) {
+                            Text("恢复默认目录")
+                        }
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    SwitchRow(
+                        title = "嵌入专辑封面",
+                        subtitle = "把专辑图写进音频文件的标签里",
+                        checked = downloadEmbedCover,
+                        onCheckedChange = onDownloadEmbedCoverChange,
+                    )
+                    SwitchRow(
+                        title = "嵌入歌词",
+                        subtitle = "把 LRC 歌词写进音频文件（MP3/M4A/FLAC 均支持）",
+                        checked = downloadEmbedLyrics,
+                        onCheckedChange = onDownloadEmbedLyricsChange,
+                    )
+                }
                 "source" -> {
                     Text(
                         text = "当前在线播放音质",
@@ -383,6 +459,7 @@ fun SettingsScreen(
         SubsectionEntry(title = "播放", icon = Icons.Rounded.PlayCircle) { subsection = "playback" }
         SubsectionEntry(title = "音源", icon = Icons.Rounded.GraphicEq) { subsection = "source" }
         SubsectionEntry(title = "外观", icon = Icons.Rounded.Palette) { subsection = "appearance" }
+        SubsectionEntry(title = "下载", icon = Icons.Rounded.Download) { subsection = "download" }
         SubsectionEntry(title = "实验室", icon = Icons.Rounded.Science) { subsection = "lab" }
         HorizontalDivider(modifier = Modifier.padding(vertical = dimens.spaceSm))
         SectionTitle("在线播放")

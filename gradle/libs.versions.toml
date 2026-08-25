@@ -28,6 +28,8 @@ graphicsShapes = "1.1.0"
 
 # 播放内核
 media3 = "1.11.0"
+jaudiotagger = "3.0.1"
+documentfile = "1.0.1"
 # 本地落库与设置持久化
 room = "2.7.2"
 datastore = "1.2.1"
@@ -63,6 +65,8 @@ androidx-graphics-shapes = { group = "androidx.graphics", name = "graphics-shape
 androidx-media3-exoplayer = { group = "androidx.media3", name = "media3-exoplayer", version.ref = "media3" }
 androidx-media3-session = { group = "androidx.media3", name = "media3-session", version.ref = "media3" }
 androidx-media3-common = { group = "androidx.media3", name = "media3-common", version.ref = "media3" }
+net-jaudiotagger = { group = "net.jthink", name = "jaudiotagger", version.ref = "jaudiotagger" }
+androidx-documentfile = { group = "androidx.documentfile", name = "documentfile", version.ref = "documentfile" }
 
 # Room：曲库 / 歌单 / 播放记录落库
 androidx-room-runtime = { group = "androidx.room", name = "room-runtime", version.ref = "room" }

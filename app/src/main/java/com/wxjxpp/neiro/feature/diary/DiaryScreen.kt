@@ -274,7 +274,11 @@ private fun MonthCalendarView(
     onDayClick: (HeatmapDay?) -> Unit,
 ) {
     var offset by remember { mutableStateOf(0) } // 0=本月，-1=上月…
-    val base = Calendar.getInstance()
+    val base = Calendar.getInstance().apply {
+        // 归一化到今天 0 点再克隆翻月，保证格子时间戳落在 0 点（对齐 dayMap 键）
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
+    }
     fun monthCal(offset: Int): Calendar = (base.clone() as Calendar).apply {
         set(Calendar.DAY_OF_MONTH, 1)
         add(Calendar.MONTH, offset)
@@ -355,23 +359,13 @@ private fun MonthCalendarView(
                                         }
                                     }
                                 } else {
-                                    // 未来日期：灰底 + 「这个月还没过呢」提示
+                                    // 未来日期：仅灰底占位，不渲染任何文字
                                     Box(
-                                        contentAlignment = Alignment.Center,
                                         modifier = Modifier
                                             .fillMaxSize()
                                             .clip(RoundedCornerShape(8.dp))
-                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)),
-                                    ) {
-                                        if (cell == monthFirstFutureDay(cells)) {
-                                            Text(
-                                                text = "这个月还没过呢",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                maxLines = 1,
-                                            )
-                                        }
-                                    }
+                                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.35f)),
+                                    )
                                 }
                             }
                         }
@@ -505,6 +499,10 @@ internal fun buildMonthCells(monthCal: Calendar): List<Long?> {
     val today = todayStart()
     val cal = (monthCal.clone() as Calendar).apply {
         set(Calendar.DAY_OF_MONTH, 1)
+        // 归一化到当天 0 点：与 HeatmapDay.dateMs（0 点键）对齐，
+        // 否则格子时间戳带当前时分秒，dayMap 全部 miss → 整月白块
+        set(Calendar.HOUR_OF_DAY, 0); set(Calendar.MINUTE, 0)
+        set(Calendar.SECOND, 0); set(Calendar.MILLISECOND, 0)
     }
     val dow = (cal.get(Calendar.DAY_OF_WEEK) + 5) % 7 // 周一=0
     val cells = mutableListOf<Long?>()
@@ -518,10 +516,6 @@ internal fun buildMonthCells(monthCal: Calendar): List<Long?> {
     while (cells.size % 7 != 0) cells += null
     return cells
 }
-
-/** 未来日期区的第一天（用于放「这个月还没过呢」提示，只显示一次）。 */
-internal fun monthFirstFutureDay(cells: List<Long?>): Long? =
-    cells.filterNotNull().firstOrNull { it > todayStart() }
 
 /** 年视图周列：今年 1 月所在周的周一开始 → 今天所在周。 */
 internal fun buildYearWeeks(): List<List<Long>> {

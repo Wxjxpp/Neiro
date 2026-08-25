@@ -1,7 +1,8 @@
 <resources>
-    <!-- Android 12+：系统 SplashScreen 定制（白底 + 音符图标，系统自动圆形裁切） -->
+    <!-- Android 12+：系统 SplashScreen 定制（白底 + 黑音符白圆底，系统自动圆形裁切） -->
     <style name="Theme.App" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowSplashScreenBackground">#FFFFFF</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_logo</item>
+        <item name="android:windowSplashScreenIconBackgroundColor">#FFFFFF</item>
     </style>
 </resources>

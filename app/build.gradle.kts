@@ -75,6 +75,10 @@ dependencies {
     implementation(libs.androidx.media3.exoplayer)
     implementation(libs.androidx.media3.session)
     implementation(libs.androidx.media3.common)
+    // 下载文件标签写入（ID3/Vorbis/MP4：标题/歌手/专辑/封面/歌词）
+    implementation(libs.net.jaudiotagger)
+    // SAF 目录访问（自定义下载目录）
+    implementation(libs.androidx.documentfile)
 
     // 落库与设置
     implementation(libs.androidx.room.runtime)

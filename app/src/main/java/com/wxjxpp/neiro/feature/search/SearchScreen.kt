@@ -79,8 +79,11 @@ fun SearchScreen(
     modifier: Modifier = Modifier,
 ) {
     val dimens = AppTheme.dimens
-    // 在线/本地 Tab 状态：仅聚合模式下有意义；默认先看在线结果。
-    var showLocalTab by remember(query, onlineResults) { mutableStateOf(false) }
+    // 在线/本地 Tab 状态：默认智能落位——在线结果为空且本地有命中（典型如断网）
+    // 时直接落在「本地」，不再卡在空白在线页；新搜索或在线结果到达后自动回「在线」。
+    var showLocalTab by remember(query, onlineResults) {
+        mutableStateOf(onlineResults.isEmpty() && localResults.isNotEmpty())
+    }
     // 在线结果多选（长按触发）
     val selectedOnline = remember { androidx.compose.runtime.mutableStateListOf<String>() }
     fun toggleSelect(song: Song) {

@@ -444,29 +444,35 @@ private fun RoomView(
         else -> null
     }
 
-    /** 房间曲目 JSON → Song（withPayload 时才携带取流载荷，队列副本不带）。 */
-    fun songFromTrackJson(t: JSONObject, withPayload: Boolean): Song = when (t.optString("sourceId")) {
-        "url" -> Song(
-            id = "lit-${t.optString("stableKey")}",
-            title = t.optString("title"),
-            artists = listOf(Artist(id = "lit-artist", name = t.optString("artist").ifEmpty { "房间点歌" })),
-            durationMs = t.optLong("durationMs"),
-            coverUri = t.optString("cover").takeIf { it.isNotEmpty() },
-            location = MediaLocation.Local(uri = t.optString("url"), filePath = null),
-        )
-        else -> Song(
-            id = "lit-${t.optString("stableKey")}",
-            title = t.optString("title"),
-            artists = listOf(Artist(id = "lit-artist", name = t.optString("artist"))),
-            album = t.optString("album").takeIf { it.isNotEmpty() }?.let { Album(id = "lit-album", title = it) },
-            durationMs = t.optLong("durationMs"),
-            coverUri = t.optString("cover").takeIf { it.isNotEmpty() },
-            location = MediaLocation.Remote(
-                sourceId = t.optString("sourceId"),
-                songId = t.optString("songId"),
-                payload = t.optString("payload").takeIf { withPayload && it.isNotEmpty() },
-            ),
-        )
+    /** 房间曲目 JSON → Song（withPayload 时才携带取流载荷，队列副本不带）。
+     *  注意：房间里的 sourceId 是裸平台名（wy/kg/tx…），本机注册表只有外置源
+     *  （wy-lx 等），必须映射过去，否则歌词定位器与取流都找不到音源。 */
+    fun songFromTrackJson(t: JSONObject, withPayload: Boolean): Song {
+        val rawSource = t.optString("sourceId")
+        val mapped = if (rawSource.endsWith("-lx")) rawSource else "${rawSource}-lx"
+        return when (rawSource) {
+            "url" -> Song(
+                id = "lit-${t.optString("stableKey")}",
+                title = t.optString("title"),
+                artists = listOf(Artist(id = "lit-artist", name = t.optString("artist").ifEmpty { "房间点歌" })),
+                durationMs = t.optLong("durationMs"),
+                coverUri = t.optString("cover").takeIf { it.isNotEmpty() },
+                location = MediaLocation.Local(uri = t.optString("url"), filePath = null),
+            )
+            else -> Song(
+                id = "lit-${t.optString("stableKey")}",
+                title = t.optString("title"),
+                artists = listOf(Artist(id = "lit-artist", name = t.optString("artist"))),
+                album = t.optString("album").takeIf { it.isNotEmpty() }?.let { Album(id = "lit-album", title = it) },
+                durationMs = t.optLong("durationMs"),
+                coverUri = t.optString("cover").takeIf { it.isNotEmpty() },
+                location = MediaLocation.Remote(
+                    sourceId = mapped,
+                    songId = t.optString("songId"),
+                    payload = t.optString("payload").takeIf { withPayload && it.isNotEmpty() },
+                ),
+            )
+        }
     }
 
     /** 听众的进度/播放状态校正。 */

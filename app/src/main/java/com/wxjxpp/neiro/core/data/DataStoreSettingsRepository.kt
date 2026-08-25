@@ -63,6 +63,9 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val TogetherServerUrl = stringPreferencesKey("together_server_url")
         val TogetherNickname = stringPreferencesKey("together_nickname")
         val TogetherUid = stringPreferencesKey("together_uid")
+        val DownloadDirUri = stringPreferencesKey("download_dir_uri")
+        val DownloadEmbedCover = booleanPreferencesKey("download_embed_cover")
+        val DownloadEmbedLyrics = booleanPreferencesKey("download_embed_lyrics")
         val TogetherRoomId = stringPreferencesKey("together_room_id")
         val TogetherMemberId = stringPreferencesKey("together_member_id")
         val TogetherMemberSecret = stringPreferencesKey("together_member_secret")
@@ -213,6 +216,23 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     suspend fun resetTogetherUid(): String {
         store.edit { it.remove(Keys.TogetherUid) }
         return getOrCreateTogetherUid()
+    }
+    /** 下载目录（SAF tree URI）；空 = 默认公共 Music/Neiro */
+    fun observeDownloadDirUri(): Flow<String> =
+        store.data.map { it[Keys.DownloadDirUri].orEmpty() }
+    suspend fun setDownloadDirUri(uri: String) {
+        store.edit { it[Keys.DownloadDirUri] = uri }
+    }
+    /** 下载时是否嵌入封面/歌词 */
+    val downloadEmbedCover: Flow<Boolean> =
+        store.data.map { it[Keys.DownloadEmbedCover] ?: true }
+    val downloadEmbedLyrics: Flow<Boolean> =
+        store.data.map { it[Keys.DownloadEmbedLyrics] ?: true }
+    suspend fun setDownloadEmbedCover(enabled: Boolean) {
+        store.edit { it[Keys.DownloadEmbedCover] = enabled }
+    }
+    suspend fun setDownloadEmbedLyrics(enabled: Boolean) {
+        store.edit { it[Keys.DownloadEmbedLyrics] = enabled }
     }
     /** 会话凭据：用于断线重连（memberSecret）与恢复房间。 */
     fun observeTogetherSession(): Flow<List<String>> = store.data.map { prefs ->
