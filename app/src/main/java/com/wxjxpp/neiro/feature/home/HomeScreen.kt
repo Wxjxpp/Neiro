@@ -255,21 +255,24 @@ fun HomeScreen(
             }
         }
         // 悬浮操作组：回顶 + 定位当前播放（右侧，抬高避开播放栏）
-        com.wxjxpp.neiro.ui.components.ScrollActions(
-            listState = listState,
-            modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(
-                    end = AppTheme.dimens.spaceLg,
-                    // 抬高到播放栏上方，避免被遮挡
-                    bottom = AppTheme.dimens.playerBarHeight +
-                        AppTheme.dimens.floatingBarBottomMargin + AppTheme.dimens.spaceMd,
-                ),
-            onLocate = {
-                val index = songs.indexOfFirst { it.id == currentPlayingId }
-                if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
-            },
-        )
+        // 拖动字母索引时隐藏，避免与指示球重叠冲突（用户指定）
+        if (activeChar == null) {
+            com.wxjxpp.neiro.ui.components.ScrollActions(
+                listState = listState,
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .padding(
+                        end = AppTheme.dimens.spaceLg,
+                        // 抬高到播放栏上方，避免被遮挡
+                        bottom = AppTheme.dimens.playerBarHeight +
+                            AppTheme.dimens.floatingBarBottomMargin + AppTheme.dimens.spaceMd,
+                    ),
+                onLocate = {
+                    val index = songs.indexOfFirst { it.id == currentPlayingId }
+                    if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
+                },
+            )
+        }
         }
     }
     // 歌曲详情 ActionSheet
