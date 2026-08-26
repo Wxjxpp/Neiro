@@ -63,10 +63,11 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
-import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
 import dev.chrisbanes.haze.rememberHazeState
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.hazeBlur
+import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -261,12 +262,16 @@ fun PlayerDetailScreen(
                 .then(
                     // Expr：Haze 硬件加速模糊优先；关闭时走原 RenderEffect 路径
                     if (useTopBarHaze) {
-                        Modifier.hazeBlur(
-                            input = HazeInput.Sources(topBarHaze),
-                            style = HazeBlurStyle {
-                                blurRadius(22.dp)
-                                backgroundColor(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
-                            },
+                        Modifier.hazeEffect(
+                            state = topBarHaze,
+                            style = HazeStyle(
+                                backgroundColor =
+                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
+                                tints = listOf(
+                                    HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f)),
+                                ),
+                                blurRadius = 22.dp,
+                            ),
                         )
                     } else {
                         Modifier.topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)

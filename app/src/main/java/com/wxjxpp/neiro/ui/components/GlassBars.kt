@@ -19,10 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
-import dev.chrisbanes.haze.HazeInput
 import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.blur.HazeBlurStyle
-import dev.chrisbanes.haze.blur.hazeBlur
+import dev.chrisbanes.haze.HazeStyle
+import dev.chrisbanes.haze.HazeTint
+import dev.chrisbanes.haze.hazeEffect
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -274,12 +274,13 @@ fun GlassBarSurface(
             Box(
                 modifier = Modifier
                     .matchParentSize()
-                    .hazeBlur(
-                        input = HazeInput.Sources(hazeState),
-                        style = HazeBlurStyle {
-                            blurRadius(24.dp)
-                            backgroundColor(cs.surface.copy(alpha = 0.30f))
-                        },
+                    .hazeEffect(
+                        state = hazeState,
+                        style = HazeStyle(
+                            backgroundColor = cs.surface.copy(alpha = 0.30f),
+                            tints = listOf(HazeTint(cs.surface.copy(alpha = 0.30f))),
+                            blurRadius = 24.dp,
+                        ),
                     ),
             )
             // 底缘渐隐：与清晰内容软衔接
