@@ -70,6 +70,7 @@ import dev.chrisbanes.haze.rememberHazeState
 import dev.chrisbanes.haze.hazeEffect
 import dev.chrisbanes.haze.hazeSource
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -206,7 +207,9 @@ fun PlayerDetailScreen(
         }
     }
     // 从缩略图提取主色混入深色画布；取色未就绪时先用中性深底，不闪白
-    val immersiveScheme = remember(coverBitmapForPalette, song.id) {
+    // Expr：主题自适应——浅色模式提鲜亮（提高主色保留量），暗色模式更深沉
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val immersiveScheme = remember(coverBitmapForPalette, song.id, isDarkTheme) {
         var dark = darkColorScheme(
             primary = Color(song.coverSeedColor),
             onPrimary = Color.White,
@@ -220,17 +223,19 @@ fun PlayerDetailScreen(
         )
         coverBitmapForPalette?.let { bmp ->
             val c = bmp.extractDominantArgb().takeIf { it != 0 } ?: return@let
+            // 主题自适应混合比：浅色提鲜亮（主色保留多），暗色更深沉（混黑更多）
+            val bgMix = if (isDarkTheme) 0.34f else 0.62f
+            val sfMix = if (isDarkTheme) 0.22f else 0.46f
             dark = dark.copy(
                 primary = Color(c),
-                // 提亮画布（用户反馈浅色模式下流光太暗）：混黑比例下调
                 background = Color(
                     androidx.core.graphics.ColorUtils.blendARGB(
-                        Color.Black.toArgb(), c, 0.55f,
+                        Color.Black.toArgb(), c, bgMix,
                     ),
                 ),
                 surface = Color(
                     androidx.core.graphics.ColorUtils.blendARGB(
-                        Color.Black.toArgb(), c, 0.40f,
+                        Color.Black.toArgb(), c, sfMix,
                     ),
                 ),
             )
@@ -448,6 +453,8 @@ fun PlayerDetailScreen(
                 radius = with(density) {
                     androidx.compose.ui.unit.lerp(dimens.detailCoverRadius, 9.dp, tMorph)
                 },
+                // 详情页大图走独立全清缓存键：歌词页往返不再命中低清缓存
+                fullQuality = true,
                 modifier = Modifier
                     .offset(
                         x = with(density) { (bigLeft + (smallLeftPx - bigLeft) * tMorph).toDp() },
@@ -542,6 +549,8 @@ fun PlayerDetailScreen(
                             detectTapGestures(onLongPress = { onCycleRepeat() })
                         },
                     ) {
+                        // Expr：控制区图标固定单色（用户指定：流光背景不改变图标颜色，始终白/黑），
+                        // 深色沉浸画布上用白色系；激活态仅加粗字重+不透明度区分
                         Icon(
                             imageVector = if (state.shuffle) Icons.Rounded.Shuffle else when (state.repeatMode) {
                                 RepeatMode.One -> Icons.Rounded.RepeatOne
@@ -550,9 +559,9 @@ fun PlayerDetailScreen(
                             },
                             contentDescription = "随机/循环（长按切循环）",
                             tint = if (state.shuffle || state.repeatMode != RepeatMode.Off) {
-                                MaterialTheme.colorScheme.primary
+                                Color.White.copy(alpha = 0.95f)
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                Color.White.copy(alpha = 0.55f)
                             },
                         )
                     }
@@ -611,7 +620,7 @@ fun PlayerDetailScreen(
                             Icon(
                                 if (fav) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder,
                                 contentDescription = if (fav) "取消收藏" else "收藏",
-                                tint = if (fav) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant,
+                                tint = if (fav) MaterialTheme.colorScheme.error else Color.White.copy(alpha = 0.60f),
                             )
                         }
                     }
@@ -622,9 +631,9 @@ fun PlayerDetailScreen(
                             Icons.Rounded.Lyrics,
                             contentDescription = "显示歌词",
                             tint = if (lyricsMode) {
-                                MaterialTheme.colorScheme.primary
+                                Color.White.copy(alpha = 0.95f)
                             } else {
-                                MaterialTheme.colorScheme.onSurfaceVariant
+                                Color.White.copy(alpha = 0.55f)
                             },
                         )
                     }

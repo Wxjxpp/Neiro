@@ -70,9 +70,11 @@ fun AmbientGlowBackground(
             }.getOrNull()
         }
     }
-    // 从 seed 色派生两个邻近色相光斑（提亮：alpha 上调，补偿浅色主题下的暗淡感）
-    val spotA = remember(baseColor) { baseColor.copy(alpha = 0.72f).shiftHue(24f) }
-    val spotB = remember(baseColor) { baseColor.copy(alpha = 0.62f).shiftHue(-32f) }
+    // 从 seed 色派生两个邻近色相光斑（主题自适应强度：浅色鲜亮/暗色深沉）
+    val glowAlphaA = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) 0.55f else 0.85f
+    val glowAlphaB = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) 0.45f else 0.72f
+    val spotA = remember(baseColor, glowAlphaA) { baseColor.copy(alpha = glowAlphaA).shiftHue(24f) }
+    val spotB = remember(baseColor, glowAlphaB) { baseColor.copy(alpha = glowAlphaB).shiftHue(-32f) }
     val transition = rememberInfiniteTransition(label = "ambientGlow")
     // 光斑相位：周期长、错开，避免同步感
     val phase1 by transition.animateFloat(
@@ -89,8 +91,10 @@ fun AmbientGlowBackground(
         val w = size.width
         val h = size.height
         // 第 1 层：封面位图铺底（低分辨率放大 = 天然重度模糊）
+        // alpha 压到 0.45：给第 2 层流光光斑留出透出空间——
+        // 原实现 0.85 不透明把光斑完全盖死，用户只看到纯色底看不到"流动"
         coverBitmap?.let { bmp ->
-            drawCoverBlurred(bmp, alpha = 0.85f)
+            drawCoverBlurred(bmp, alpha = 0.45f)
         } ?: run {
             // 无封面：seed 色对角渐变兜底
             drawRect(
@@ -103,7 +107,12 @@ fun AmbientGlowBackground(
                 )
             )
         }
-        // 第 2 层：两个大光斑缓慢漂移（李萨如轨迹）
+        // 第 2 层：两个大光斑缓慢漂移（李萨如轨迹）——Plus 混合让光斑在暗底上发亮流动
+        val glowBlend = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
+            androidx.compose.ui.graphics.BlendMode.Plus
+        } else {
+            androidx.compose.ui.graphics.BlendMode.SrcOver
+        }
         drawSpot(
             center = Offset(
                 x = w * (0.5f + 0.38f * cos(phase1)),
@@ -111,6 +120,7 @@ fun AmbientGlowBackground(
             ),
             radius = maxOf(w, h) * 0.75f,
             color = spotA,
+            blendMode = glowBlend,
         )
         drawSpot(
             center = Offset(
@@ -119,6 +129,7 @@ fun AmbientGlowBackground(
             ),
             radius = maxOf(w, h) * 0.65f,
             color = spotB,
+            blendMode = glowBlend,
         )
         // 第 3 层：上下暗角收边（减淡：原 0.35/0.45 过重导致整体偏暗）
         drawRect(
@@ -146,7 +157,7 @@ private fun DrawScope.drawCoverBlurred(bitmap: ImageBitmap, alpha: Float) {
     )
 }
 /** 径向渐变大光斑。 */
-private fun DrawScope.drawSpot(center: Offset, radius: Float, color: Color) {
+private fun DrawScope.drawSpot(center: Offset, radius: Float, color: Color, blendMode: androidx.compose.ui.graphics.BlendMode = androidx.compose.ui.graphics.BlendMode.SrcOver) {
     drawCircle(
         brush = Brush.radialGradient(
             colors = listOf(color, Color.Transparent),
@@ -155,6 +166,7 @@ private fun DrawScope.drawSpot(center: Offset, radius: Float, color: Color) {
         ),
         radius = radius,
         center = center,
+        blendMode = blendMode,
     )
 }
 /** HSL 色相偏移，用于从主色派生邻近色。 */

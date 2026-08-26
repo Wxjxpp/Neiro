@@ -76,6 +76,19 @@ class Media3PlayerController(
         onPlayer { p ->
             PlaybackSessionHolder.getOrCreate(context, p)
         }
+        // Expr：拉起前台媒体服务——MediaSessionService 只有被启动后才会
+        // 构建系统媒体样式通知（锁屏/通知栏控制）。此前从未启动过服务，
+        // 所以系统媒体通知一直没出现。
+        runCatching {
+            val intent = android.content.Intent(context, PlaybackService::class.java)
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        }.onFailure {
+            android.util.Log.w("Media3PlayerController", "启动播放前台服务失败", it)
+        }
     }
 
     /** AUDIO_BECOMING_NOISY 广播接收器：拔出耳机/断开蓝牙时系统会发此广播。 */

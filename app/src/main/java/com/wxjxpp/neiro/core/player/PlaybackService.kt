@@ -7,6 +7,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.core.app.NotificationCompat
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.wxjxpp.neiro.MainActivity
@@ -65,6 +66,118 @@ class PlaybackService : MediaSessionService() {
  *
  * 单独用一个轻量对象而不是塞进 Service，避免为了一条通知拉起前台服务。
  */
+/**
+ * Expr：实时下载进度通知（独立渠道，带百分比进度条 + 取消按钮）。
+ *
+ * 与 [DownloadNotifier] 的区别：Notifier 是"开始/结束"两条留痕通知；
+ * 本对象是下载过程中的**实时进度条**，完成后自动消失（由 showDone 接棒）。
+ */
+object DownloadProgressNotifier {
+    const val CHANNEL_ID = "download_progress"
+    private const val BASE_ID = 50000
+
+    /** songId → 通知 id（同一首歌始终复用同一条通知，避免闪烁堆积）。 */
+    private val ids = mutableMapOf<String, Int>()
+
+    private fun idFor(songId: String): Int = ids.getOrPut(songId) {
+        BASE_ID + songId.hashCode().mod(1000)
+    }
+
+    /** 首次回调时创建渠道 + 发出初始进度条。 */
+    fun start(context: Context, songId: String, title: String, artistName: String) {
+        titles[songId] = title
+        artists[songId] = artistName
+        channel(context)
+        val builder = baseBuilder(context)
+            .setContentTitle(title)
+            .setContentText(artistName)
+            .setProgress(100, 0, true) // total 未知 → 不定式转圈
+            .setOngoing(true)
+        post(context, songId, builder)
+    }
+
+    /** 进度更新：total > 0 时显示确定百分比，否则保持不定式。节流由调用方负责。 */
+    fun update(context: Context, songId: String, downloaded: Long, total: Long) {
+        if (!ids.containsKey(songId)) return // 已取消/未开始，忽略过期回调
+        val indeterminate = total <= 0L
+        val percent = if (indeterminate) 0 else (downloaded * 100 / total).toInt().coerceIn(0, 100)
+        val title = titles[songId].orEmpty()
+        val artist = artists[songId].orEmpty()
+        val builder = baseBuilder(context)
+            .setContentTitle(title.ifEmpty { "正在下载" })
+            .setContentText(if (indeterminate) artist else "$artist · $percent%")
+            .setProgress(100, percent, indeterminate)
+            .setOngoing(true)
+        post(context, songId, builder)
+    }
+
+    /** 结束（成功/失败）：撤掉进度条，交给 DownloadNotifier.showDone 留痕。 */
+    fun finish(context: Context, songId: String) {
+        ids.remove(songId)?.let { notifyId ->
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            runCatching { manager.cancel(notifyId) }
+        }
+        titles.remove(songId); artists.remove(songId)
+    }
+
+    private val titles = mutableMapOf<String, String>()
+    private val artists = mutableMapOf<String, String>()
+
+    private fun baseBuilder(context: Context) =
+        NotificationCompat.Builder(context, CHANNEL_ID)
+            .setSmallIcon(android.R.drawable.stat_sys_download)
+            .setOnlyAlertOnce(true)
+            .setSilent(true)
+            .setColorized(false)
+
+    /** 组装最终通知：内容意图进 App；动作按钮发 CANCEL_DOWNLOAD 给 PlaybackService。 */
+    private fun post(context: Context, songId: String, builder: NotificationCompat.Builder) {
+        builder.setContentIntent(
+            PendingIntent.getActivity(
+                context,
+                0,
+                Intent(context, MainActivity::class.java),
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        builder.addAction(
+            android.R.drawable.ic_menu_close_clear_cancel,
+            "取消",
+            PendingIntent.getService(
+                context,
+                ("cancel_$songId").hashCode(),
+                Intent(context, PlaybackService::class.java).apply {
+                    action = ACTION_CANCEL_DOWNLOAD
+                    putExtra(EXTRA_CANCEL_SONG_ID, songId)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            ),
+        )
+        val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+        runCatching { manager.notify(idFor(songId), builder.build()) }
+    }
+
+    private fun channel(context: Context) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+            if (manager.getNotificationChannel(CHANNEL_ID) == null) {
+                manager.createNotificationChannel(
+                    NotificationChannel(
+                        CHANNEL_ID,
+                        "下载进度",
+                        NotificationManager.IMPORTANCE_LOW,
+                    ).apply { setShowBadge(false) },
+                )
+            }
+        }
+    }
+
+    companion object {
+        const val ACTION_CANCEL_DOWNLOAD = "com.wxjxpp.neiro.action.CANCEL_DOWNLOAD"
+        const val EXTRA_CANCEL_SONG_ID = "songId"
+    }
+}
+
 object DownloadNotifier {
     const val CHANNEL_ID = "download"
     private const val BASE_ID = 40000

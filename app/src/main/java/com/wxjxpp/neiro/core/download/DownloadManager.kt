@@ -6,6 +6,7 @@ import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.net.FileDownloader
 import com.wxjxpp.neiro.core.player.DownloadNotifier
+import com.wxjxpp.neiro.core.player.DownloadProgressNotifier
 import com.wxjxpp.neiro.core.source.OnlineMusicSource
 import com.wxjxpp.neiro.core.source.MusicSourceRegistry
 import kotlinx.coroutines.Dispatchers
@@ -71,8 +72,27 @@ class DownloadManager(
         val ext = url.substringBefore('?').substringAfterLast('.', "").lowercase()
             .takeIf { it in setOf("mp3", "flac", "m4a", "ogg", "opus", "wav") } ?: "mp3"
         val tmp = File(context.cacheDir, "neiro_dl_${System.currentTimeMillis()}.$ext")
-        val downloaded = runCatching { FileDownloader.downloadToFile(url, tmp) > 0L }
-            .getOrElse { false }
+        // Expr：实时进度通知——FileDownloader 每 64KB 回调一次，节流至 ≥250ms 刷新，
+        // 避免高频 notify 造成通知栏闪烁；结束时撤掉进度条交给 showDone 留痕。
+        var lastNotifyAt = 0L
+        var contentLength = -1L
+        DownloadProgressNotifier.start(context, song.id, song.title, song.artistName)
+        val downloaded = runCatching {
+            FileDownloader.downloadToFile(url, tmp) { bytesRead, totalBytes ->
+                if (totalBytes > 0) contentLength = totalBytes
+                val now = System.currentTimeMillis()
+                if (now - lastNotifyAt >= 250 || bytesRead == contentLength) {
+                    lastNotifyAt = now
+                    DownloadProgressNotifier.update(
+                        context,
+                        song.id,
+                        bytesRead,
+                        if (totalBytes > 0) totalBytes else contentLength,
+                    )
+                }
+            } > 0L
+        }.getOrElse { false }
+        DownloadProgressNotifier.finish(context, song.id)
         if (!downloaded) {
             tmp.delete()
             val msg = "下载失败：服务器返回空内容"

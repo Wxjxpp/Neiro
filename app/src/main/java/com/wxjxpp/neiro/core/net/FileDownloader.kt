@@ -15,12 +15,13 @@ import java.net.URL
  * 音频文件（几 MB 到几十 MB）必须边读边写盘，避免 OOM。
  */
 object FileDownloader {
-
-    /** 流式下载到输出流；返回写入字节数。非 2xx 抛异常。 */
+    /** 流式下载到输出流；返回写入字节数。非 2xx 抛异常。
+     *  [onProgress] 每 64KB 回调一次（已读字节, 总字节；总字节未知时为 -1）。 */
     suspend fun download(
         url: String,
         sink: OutputStream,
         headers: Map<String, String> = emptyMap(),
+        onProgress: (bytesRead: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ): Long = withContext(Dispatchers.IO) {
         val connection = (URL(url).openConnection() as HttpURLConnection).apply {
             requestMethod = "GET"
@@ -36,6 +37,7 @@ object FileDownloader {
             if (connection.responseCode >= 400) {
                 error("HTTP ${connection.responseCode}")
             }
+            val totalBytes = connection.contentLengthLong
             var total = 0L
             connection.inputStream.use { input ->
                 val buffer = ByteArray(64 * 1024)
@@ -44,6 +46,7 @@ object FileDownloader {
                     if (n < 0) break
                     sink.write(buffer, 0, n)
                     total += n
+                    onProgress(total, totalBytes)
                 }
             }
             total
@@ -51,11 +54,12 @@ object FileDownloader {
             connection.disconnect()
         }
     }
-
     /** 下载到本地文件（覆盖写）。 */
     suspend fun downloadToFile(
         url: String,
         target: File,
         headers: Map<String, String> = emptyMap(),
-    ): Long = FileOutputStream(target).use { download(url, it, headers) }
+        onProgress: (bytesRead: Long, totalBytes: Long) -> Unit = { _, _ -> },
+    ): Long = FileOutputStream(target).use { download(url, it, headers, onProgress) }
+}
 }

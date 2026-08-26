@@ -46,22 +46,32 @@ fun SongCover(
     size: Dp,
     radius: Dp,
     modifier: Modifier = Modifier,
+    /** Expr：详情页大图模式——按原图解码并固定缓存键，避免动画尺寸变化命中低清缓存。 */
+    fullQuality: Boolean = false,
 ) {
     val shaped = modifier.size(size).clip(RoundedCornerShape(radius))
-
     if (coverUri.isNullOrBlank()) {
         GradientPlaceholder(seedColor, shaped)
         return
     }
-
     val context = LocalContext.current
     SubcomposeAsyncImage(
         model = ImageRequest.Builder(context)
             .data(coverUri)
             .crossfade(true)
-            // 按物理像素精确解码，禁止 Coil 缩到逻辑像素导致大图发糊
-            .precision(Precision.EXACT)
-            .scale(Scale.FIT)
+            .apply {
+                if (fullQuality) {
+                    // 固定全尺寸缓存键：详情页封面在播放页↔歌词页之间尺寸连续变化，
+                    // Coil 默认按请求尺寸缓存——从歌词页回来时命中小图缓存导致低清
+                    precision(Precision.EXACT)
+                    scale(Scale.FIT)
+                    memoryCacheKey("neiro_full_$coverUri")
+                } else {
+                    // 按物理像素精确解码，禁止 Coil 缩到逻辑像素导致大图发糊
+                    precision(Precision.EXACT)
+                    scale(Scale.FIT)
+                }
+            }
             .build(),
         contentDescription = null,
         contentScale = ContentScale.Crop,
