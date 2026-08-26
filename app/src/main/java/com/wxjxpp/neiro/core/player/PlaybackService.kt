@@ -6,8 +6,10 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.core.app.ServiceCompat
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.wxjxpp.neiro.MainActivity
@@ -22,11 +24,41 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
-        // 会话可能尚未创建（App 未播放过）：此时不强行建会话，
-        // onGetSession 返回 null 即可；App 开始播放后会话就位。
-        PlaybackSessionHolder.peek()?.let {
-            // 确保通知渠道存在（Android 8+ 必需）
-            ensureChannel()
+        // 关键：startForegroundService 拉起后必须在时限内调 startForeground()，
+        // 否则系统直接抛 ForegroundServiceDidNotStartInTimeException 崩掉整个进程。
+        // Media3 的自动通知要等 session 就位才发，点播放瞬间 session 可能还没建好——
+        // 所以这里先挂一条占位通知立即进前台保命；session 就位后 Media3 会用
+        // 媒体样式通知自动接管（同 id 替换）。
+        ensureChannel()
+        val placeholder = NotificationCompat.Builder(this, CHANNEL_ID)
+            .setContentTitle("Neiro")
+            .setContentText("正在准备播放…")
+            .setSmallIcon(android.R.drawable.ic_media_play)
+            .setOngoing(true)
+            .setContentIntent(
+                PendingIntent.getActivity(
+                    this,
+                    0,
+                    Intent(this, MainActivity::class.java),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                ),
+            )
+            .build()
+        runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                ServiceCompat.startForeground(
+                    this,
+                    NOTIFICATION_ID,
+                    placeholder,
+                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK,
+                )
+            } else {
+                startForeground(NOTIFICATION_ID, placeholder)
+            }
+            // 立即 detach：满足"已调 startForeground"的系统要求、躲过超时崩溃，
+            // 同时解除与占位通知的绑定——session 就位后 Media3 会用自己的
+            // 媒体样式通知重新 startForeground，不会出现两条并存。
+            ServiceCompat.stopForeground(this, ServiceInfo.STOP_FOREGROUND_DETACH)
         }
     }
 
@@ -56,6 +88,8 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "playback"
+        /** 前台服务占位通知 id：Media3 接管后沿用此 id，避免通知闪烁。 */
+        const val NOTIFICATION_ID = 30001
     }
 }
 
