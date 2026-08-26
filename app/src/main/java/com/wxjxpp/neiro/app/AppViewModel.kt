@@ -89,6 +89,8 @@ data class ShellUiState(
     val pauseOnAudioFocusLoss: Boolean = true,
     /** 播放页动态流光背景。 */
     val ambientGlow: Boolean = false,
+    /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮。 */
+    val visualStyle: String = "dynamic",
     /** 顶栏毛玻璃模糊（可选，默认关）。 */
     val topBarBlurEnabled: Boolean = false,
     /** 顶栏模糊模式：gradient / mask。 */
@@ -258,6 +260,9 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeAmbientGlow()
             .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeVisualStyle()
+            .onEach { style -> _uiState.update { it.copy(visualStyle = style) } }
             .launchIn(viewModelScope)
         container.appSettings.observeTopBarBlur()
             .onEach { enabled -> _uiState.update { it.copy(topBarBlurEnabled = enabled) } }
@@ -518,6 +523,10 @@ class AppViewModel(
 
     fun setAmbientGlow(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setAmbientGlow(enabled) }
+    }
+    /** Expr：切换播放页视觉风格（dynamic / vivid）。 */
+    fun setVisualStyle(style: String) {
+        viewModelScope.launch { container.appSettings.setVisualStyle(style) }
     }
     fun setTopBarBlur(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setTopBarBlur(enabled) }

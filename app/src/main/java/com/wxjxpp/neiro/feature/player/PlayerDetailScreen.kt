@@ -91,6 +91,7 @@ import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
+import com.wxjxpp.neiro.ui.components.FluidGlowBackground
 import com.wxjxpp.neiro.ui.components.TopBarBlurMode
 import com.wxjxpp.neiro.ui.components.topBarBlur
 import com.wxjxpp.neiro.ui.components.SongCover
@@ -120,6 +121,8 @@ fun PlayerDetailScreen(
     showTranslation: Boolean,
     lyricsOffsetMs: Long,
     ambientGlow: Boolean,
+    /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和。 */
+    visualStyle: String = "dynamic",
     /** 顶栏模糊总开关（设置页可控，默认关）。 */
     topBarBlurEnabled: Boolean = false,
     /** 顶栏模糊模式：渐变模糊 / 遮罩模糊。 */
@@ -211,8 +214,15 @@ fun PlayerDetailScreen(
     // Expr2：前景黑/白按**采样后的实际背景亮度**自适应——白色专辑封面采样出
     // 亮背景时文字/图标自动转黑，深色封面保持白字（用户指定：纯白底黑字/纯黑底白字）
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    val immersiveScheme = remember(coverBitmapForPalette, song.id, isDarkTheme) {
+    // Expr v2：视觉风格——dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和
+    val vividMode = visualStyle == "vivid"
+    // Expr v2：多点取色板单独派生（remember 内部不能写 state 副作用）
+    val vividPalette = remember(coverBitmapForPalette) {
+        coverBitmapForPalette?.extractVividPalette()?.map { Color(it) } ?: emptyList()
+    }
+    val immersiveScheme = remember(coverBitmapForPalette, song.id, isDarkTheme, vividMode) {
         var dark = darkColorScheme(
+            // Expr vivid 风格：高饱和明亮主色（调色板就绪后二次覆盖）
             primary = Color(song.coverSeedColor),
             onPrimary = Color.White,
             background = Color(0xFF101014),
@@ -224,11 +234,38 @@ fun PlayerDetailScreen(
             outline = Color.White.copy(alpha = 0.35f),
         )
         coverBitmapForPalette?.let { bmp ->
-            val c = bmp.extractDominantArgb().takeIf { it != 0 } ?: return@let
+            // Expr v2：多点取样（≥5 点）明亮调色板，替代单色
+val palette = bmp.extractVividPalette()
+            val c = palette.firstOrNull() ?: return@let
             // 关键修正：不再无条件混黑。
             // 采样色偏亮（白/浅色封面）→ 画布走浅色系 + 黑色前景；
             // 采样色偏暗 → 画布混黑走深色系 + 白色前景。
             // 这样"纯白封面得到白底黑字、深色封面得到深底白字"，与用户要求一致。
+            val coverLum = androidx.core.graphics.ColorUtils.calculateLuminance(c)
+            // vivid 模式：强制明亮鲜艳画布，主色用最高饱和明亮色，前景深色
+            if (vividMode) {
+                val vividPrimary = palette.maxByOrNull { p ->
+                    val hsv = FloatArray(3)
+                    android.graphics.Color.colorToHSV(p, hsv)
+                    hsv[1] * (0.4f + hsv[2])
+                } ?: c
+                dark = dark.copy(
+                    primary = Color(vividPrimary),
+                    onPrimary = Color(0xFF14141A),
+                    background = androidx.core.graphics.ColorUtils.blendARGB(
+                        Color(vividPrimary).toArgb(), Color.White.toArgb(), 0.68f,
+                    ),
+                    surface = androidx.core.graphics.ColorUtils.blendARGB(
+                        Color(palette.last()).toArgb(), Color.White.toArgb(), 0.78f,
+                    ),
+                    onBackground = Color(0xFF14141A).copy(alpha = 0.95f),
+                    onSurface = Color(0xFF14141A).copy(alpha = 0.93f),
+                    onSurfaceVariant = Color(0xFF14141A).copy(alpha = 0.62f),
+                    surfaceVariant = Color(0xFF14141A).copy(alpha = 0.07f),
+                    outline = Color(0xFF14141A).copy(alpha = 0.35f),
+                )
+                return@let
+            }
             val coverLum = androidx.core.graphics.ColorUtils.calculateLuminance(c)
             val lightCanvas = coverLum > 0.42
             val bgArgb: Int
@@ -271,7 +308,18 @@ fun PlayerDetailScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
-        AmbientGlowBackground(
+        if (visualStyle == "dynamic" && vividPalette.isNotEmpty()) {
+            // Expr v2：流体多点取色背景（每个采样色一个流动光斑，明亮画布融合）
+            FluidGlowBackground(
+                palette = vividPalette,
+                enabled = ambientGlow,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(topBarHaze)
+                    .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
+            )
+        } else {
+                AmbientGlowBackground(
             baseColor = Color(song.coverSeedColor),
             coverUri = song.coverUri,
             enabled = ambientGlow,
@@ -282,6 +330,7 @@ fun PlayerDetailScreen(
                 // 进入歌词页时随进度平滑淡出，避免中途突然消失
                 .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
         )
+        }
         // 顶部安全区实心填充 + 下滑整体收起的手势区（可选毛玻璃：先模糊再遮罩）
         Spacer(
             modifier = Modifier
@@ -597,8 +646,29 @@ fun PlayerDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
                 ) {
-                    IconButton(onClick = onPrevious) {
-                        Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一首")
+                    // Expr vivid：鲜艳大按钮风格——上一首/播放/下一首全部实底大圆钮
+                    val vivid = visualStyle == "vivid"
+                    if (vivid) {
+                        IconButton(
+                            onClick = onPrevious,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    androidx.compose.foundation.shape.CircleShape,
+                                ),
+                        ) {
+                            Icon(
+                                Icons.Rounded.SkipPrevious,
+                                contentDescription = "上一首",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onPrevious) {
+                            Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一首")
+                        }
                     }
                     IconButton(
                         onClick = {
@@ -606,7 +676,13 @@ fun PlayerDetailScreen(
                             onTogglePlay()
                         },
                         modifier = Modifier
-                            .size(56.dp)
+                            .size(if (vivid) 84.dp else 56.dp)
+                            .then(
+                                if (vivid) Modifier.background(
+                                    MaterialTheme.colorScheme.primary,
+                                    androidx.compose.foundation.shape.CircleShape,
+                                ) else Modifier
+                            )
                             .pointerInput(Unit) {
                                 detectTapGestures(onLongPress = { pureModeOverride = true })
                             },
@@ -614,11 +690,31 @@ fun PlayerDetailScreen(
                         Icon(
                             imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                            modifier = Modifier.size(44.dp),
+                            modifier = Modifier.size(if (vivid) 52.dp else 44.dp),
+                            tint = if (vivid) MaterialTheme.colorScheme.onPrimary else androidx.compose.material3.LocalContentColor.current,
                         )
                     }
-                    IconButton(onClick = onNext) {
-                        Icon(Icons.Rounded.SkipNext, contentDescription = "下一首")
+                    if (vivid) {
+                        IconButton(
+                            onClick = onNext,
+                            modifier = Modifier
+                                .size(56.dp)
+                                .background(
+                                    MaterialTheme.colorScheme.primary,
+                                    androidx.compose.foundation.shape.CircleShape,
+                                ),
+                        ) {
+                            Icon(
+                                Icons.Rounded.SkipNext,
+                                contentDescription = "下一首",
+                                tint = MaterialTheme.colorScheme.onPrimary,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                    } else {
+                        IconButton(onClick = onNext) {
+                            Icon(Icons.Rounded.SkipNext, contentDescription = "下一首")
+                        }
                     }
                 }
                 if (!pureMode) {
@@ -861,12 +957,75 @@ private fun CurrentLineBanner(
     }
 }
 /**
- * 从缩略图提主色。
- *
- * 修正（用户反馈"白色专辑图采样出深色"）：旧实现用 `mx < 236` 直接**丢弃近白像素**，
- * 于是一张以白为主的封面只剩下少量深色像素参与平均 → 结果必然偏暗。
- * 现在近白/近黑都参与，只是权重较低（按饱和度加权仍保留色相倾向），
- * 再与整幅均色混合，保证输出色的**明度跟随封面真实明度**。
+ * Expr：多点取样取色（v2）。
+ * 在封面布 6 个采样点（中心 + 四象限 + 底部），每点在局部窗口内做
+ * 饱和度加权平均，得到 6 个独立主色；再统一向明亮方向提升
+ * （提亮度、保饱和），营造鲜艳明快的观感。
+ * 返回至少 6 个互不完全相同的候选色，供流体渐变 / 沉浸画布使用。
+ */
+fun android.graphics.Bitmap.extractVividPalette(): List<Int> {
+    val pts = listOf(
+        0.5f to 0.5f, // 中心
+        0.25f to 0.25f,
+        0.75f to 0.28f,
+        0.22f to 0.72f,
+        0.78f to 0.74f,
+        0.5f to 0.9f, // 底部信息区
+    )
+    val win = maxOf(4, minOf(width, height) / 10)
+    val out = mutableListOf<Int>()
+    for ((fx, fy) in pts) {
+        val cx = (fx * width).toInt().coerceIn(1, width - 2)
+        val cy = (fy * height).toInt().coerceIn(1, height - 2)
+        var r = 0L; var g = 0L; var b = 0L; var wsum = 0L
+        val x0 = (cx - win).coerceAtLeast(0); val x1 = (cx + win).coerceAtMost(width - 1)
+        val y0 = (cy - win).coerceAtLeast(0); val y1 = (cy + win).coerceAtMost(height - 1)
+        for (y in y0..y1 step maxOf(1, win / 4)) {
+            for (x in x0..x1 step maxOf(1, win / 4)) {
+                val px = getPixel(x, y)
+                val pr = (px shr 16) and 0xFF; val pg = (px shr 8) and 0xFF; val pb = px and 0xFF
+                val mx = maxOf(pr, pg, pb); val mn = minOf(pr, pg, pb)
+                val sat = mx - mn
+                val lum = (pr * 3 + pg * 6 + pb) / 10
+                // 饱和度加权 + 偏向明亮（亮像素额外加权，压暗部贡献）
+                val w = (sat.toLong() * sat + 64L) * (60L + lum)
+                r += pr * w; g += pg * w; b += pb * w; wsum += w
+            }
+        }
+        if (wsum == 0L) continue
+        var c = android.graphics.Color.rgb(
+            (r / wsum).toInt().coerceIn(0, 255),
+            (g / wsum).toInt().coerceIn(0, 255),
+            (b / wsum).toInt().coerceIn(0, 255),
+        )
+        c = brightenVivid(c)
+        if (out.none { androidx.core.graphics.ColorUtils.calculateLuminance(it) > 0 && colorDistSq(it, c) < 3000 }) {
+            out.add(c)
+        }
+    }
+    if (out.isEmpty()) out.add(android.graphics.Color.rgb(120, 160, 255))
+    return out
+}
+
+/** 向明亮方向提升：HSV 提 V 到 ≥0.62，S 收敛到 0.35~0.9 区间，避免脏暗色。 */
+private fun brightenVivid(argb: Int): Int {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(argb, hsv)
+    hsv[1] = hsv[1].coerceIn(0.35f, 0.90f)
+    hsv[2] = hsv[2].coerceAtLeast(0.62f)
+    return android.graphics.Color.HSVToColor(hsv)
+}
+
+/** 简易 RGB 距离平方（去重用）。 */
+private fun colorDistSq(a: Int, b: Int): Int {
+    val dr = ((a shr 16) and 0xFF) - ((b shr 16) and 0xFF)
+    val dg = ((a shr 8) and 0xFF) - ((b shr 8) and 0xFF)
+    val db = (a and 0xFF) - (b and 0xFF)
+    return dr * dr + dg * dg + db * db
+}
+
+/**
+ * 单点主色兜底取色（保留旧逻辑：饱和度加权 + 均色明度校正，输出偏明亮）。
  */
 private fun android.graphics.Bitmap.extractDominantArgb(): Int {
     val step = maxOf(1, width / 32)
@@ -915,8 +1074,8 @@ private fun android.graphics.Bitmap.extractDominantArgb(): Int {
         (ag / acount).toInt().coerceIn(0, 255),
         (ab / acount).toInt().coerceIn(0, 255),
     )
-    // 40% 均色校正明度：白封面 → 亮色，深封面 → 深色，色相仍来自饱和区
-    return androidx.core.graphics.ColorUtils.blendARGB(hue, avg, 0.40f)
+    // 40% 均色校正明度后，统一向明亮鲜艳方向提升（用户要求：取色偏明亮风）
+    return brightenVivid(androidx.core.graphics.ColorUtils.blendARGB(hue, avg, 0.40f))
 }
 /** 歌词偏移调节面板：紧凑版，±50ms。 */
 @Composable

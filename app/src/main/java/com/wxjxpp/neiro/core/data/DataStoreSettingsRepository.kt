@@ -45,6 +45,8 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val PauseOnHeadphoneDisconnect = booleanPreferencesKey("pause_on_headphone_disconnect")
         val PauseOnAudioFocusLoss = booleanPreferencesKey("pause_on_audio_focus_loss")
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
+        /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和。 */
+        val VisualStyle = stringPreferencesKey("visual_style")
         val LyricsAlign = stringPreferencesKey("lyrics_align")
         val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
 
@@ -316,6 +318,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.AmbientGlow] ?: false }
     suspend fun setAmbientGlow(enabled: Boolean) {
         store.edit { it[Keys.AmbientGlow] = enabled }
+    }
+    /** Expr：播放页视觉风格（dynamic=动态取色 / vivid=鲜艳大按钮）。 */
+    fun observeVisualStyle(): Flow<String> =
+        store.data.map { it[Keys.VisualStyle] ?: "dynamic" }
+    suspend fun setVisualStyle(style: String) {
+        store.edit { it[Keys.VisualStyle] = style }
     }
 
     /** 歌词对齐方式：start / center / end。默认居中。 */

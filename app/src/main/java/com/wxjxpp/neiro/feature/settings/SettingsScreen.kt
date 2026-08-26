@@ -71,6 +71,9 @@ fun SettingsScreen(
     onPauseOnHeadphoneDisconnectChange: (Boolean) -> Unit = {},
     onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
     onAmbientGlowChange: (Boolean) -> Unit = {},
+    /** Expr：播放页视觉风格。 */
+    visualStyle: String = "dynamic",
+    onVisualStyleChange: (String) -> Unit = {},
     onTopBarBlurEnabledChange: (Boolean) -> Unit = {},
     onTopBarBlurModeChange: (String) -> Unit = {},
     lyricsAlign: String = "center",
@@ -420,6 +423,24 @@ fun SettingsScreen(
                         checked = ambientGlow,
                         onCheckedChange = onAmbientGlowChange,
                     )
+                    // Expr v2：播放页视觉风格选择（动态取色 / 鲜艳大按钮）
+                    Text(
+                        text = "播放页视觉风格",
+                        style = MaterialTheme.typography.titleSmall,
+                        modifier = Modifier.padding(top = AppTheme.dimens.spaceMd, bottom = 4.dp),
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(
+                            "dynamic" to "动态流体取色",
+                            "vivid" to "鲜艳大按钮",
+                        ).forEach { (key, label) ->
+                            androidx.compose.material3.FilterChip(
+                                selected = visualStyle == key,
+                                onClick = { onVisualStyleChange(key) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     SwitchRow(
                         title = "顶栏毛玻璃",
