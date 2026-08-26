@@ -62,4 +62,3 @@ object FileDownloader {
         onProgress: (bytesRead: Long, totalBytes: Long) -> Unit = { _, _ -> },
     ): Long = FileOutputStream(target).use { download(url, it, headers, onProgress) }
 }
-}
