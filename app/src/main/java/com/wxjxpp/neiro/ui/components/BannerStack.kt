@@ -1,6 +1,7 @@
 package com.wxjxpp.neiro.ui.components
 
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.MutableTransitionState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
@@ -10,13 +11,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBars
@@ -36,6 +38,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.key
@@ -43,15 +46,17 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.zIndex
 import com.wxjxpp.neiro.app.Banner
 import kotlinx.coroutines.delay
 
 /**
- * 全局横幅栈：顶部安全区内堆叠展示最新 2 条。
+ * 全局横幅栈：顶部安全区内**叠放**展示最新 5 条。
  *
+ * - 新条目出现在最上层（zIndex 更高），旧条目 Y 轴错开一点、被新条目压在下面
  * - 成功绿 / 失败红 / 信息中性，自动按类型着色
- * - 新条目滑入展开；关闭（手动或超时）收起后再从队列移除，露出下一条
- * - 手动点 ✕ 与自动超时共用同一套退出动画
+ * - 进入动画用 MutableTransitionState(false) 起步——AnimatedVisibility 初始
+ *   visible=true 时不会播 enter 动画，这是此前"只有关闭动画"的根因
  */
 @Composable
 fun BannerStack(
@@ -61,11 +66,13 @@ fun BannerStack(
 ) {
     /** 已触发退场动画、等待从队列移除的条目。 */
     val hiding = remember { mutableStateMapOf<Long, Boolean>() }
-    Column(
+    // 最多同时叠 5 条；新的在列表末尾 → 绘制顺序靠后 + zIndex 更高 = 叠在最上
+    val visible = banners.takeLast(5)
+    Box(
         modifier = modifier
             .padding(top = WindowInsets.statusBars.asPaddingValues().calculateTopPadding()),
     ) {
-        banners.takeLast(2).forEach { banner ->
+        visible.forEachIndexed { index, banner ->
             key(banner.id) {
                 // 自动消失：错误停留更久（明细需要阅读时间）
                 LaunchedEffect(banner.id) {
@@ -78,14 +85,22 @@ fun BannerStack(
                         onDismiss(banner.id)
                     }
                 }
+                // 关键：MutableTransitionState(false) 起步 → 组合时从隐藏态向
+                // true 过渡，enter 动画才会真正播放；关闭时只切 targetState，
+                // exit 动画照常播放
+                val enterState = remember(banner.id) { MutableTransitionState(false) }
+                enterState.targetState = hiding[banner.id] != true
                 AnimatedVisibility(
-                    visible = hiding[banner.id] != true,
+                    visibleState = enterState,
                     enter = slideInVertically(tween(280)) { -it } +
                         expandVertically(tween(280)) +
                         fadeIn(tween(220)),
                     exit = slideOutVertically(tween(220)) { -it } +
                         shrinkVertically(tween(220)) +
                         fadeOut(tween(160)),
+                    modifier = Modifier
+                        .zIndex(index.toFloat())
+                        .offset(y = (index * 7).dp),
                 ) {
                     BannerCard(
                         banner = banner,
@@ -140,27 +155,27 @@ private fun BannerCard(
             .fillMaxWidth()
             .padding(horizontal = 14.dp, vertical = 4.dp),
     ) {
-        var expanded by remember(banner.id) { androidx.compose.runtime.mutableStateOf(false) }
+        var expanded by remember(banner.id) { mutableStateOf(false) }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier
                 .clickable { expanded = !expanded }
-                .padding(start = 6.dp, end = 2.dp, top = 6.dp, bottom = 6.dp),
+                .padding(start = 6.dp, end = 2.dp, top = 8.dp, bottom = 8.dp),
         ) {
-            Icon(icon, contentDescription = null, modifier = Modifier.size(20.dp))
-            Spacer(Modifier.width(10.dp))
+            Icon(icon, contentDescription = null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(12.dp))
             Text(
                 text = banner.message,
-                style = MaterialTheme.typography.bodySmall,
-                maxLines = if (expanded) Int.MAX_VALUE else 3,
+                style = MaterialTheme.typography.bodyLarge, // 16sp：可读性优先，放不下自动换行
+                maxLines = if (expanded) Int.MAX_VALUE else 4,
                 overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f).heightIn(min = 24.dp),
+                modifier = Modifier.weight(1f).heightIn(min = 28.dp),
             )
-            IconButton(onClick = onClose, modifier = Modifier.size(30.dp)) {
+            IconButton(onClick = onClose, modifier = Modifier.size(34.dp)) {
                 Icon(
                     Icons.Rounded.Close,
                     contentDescription = "关闭",
-                    modifier = Modifier.size(16.dp),
+                    modifier = Modifier.size(18.dp),
                 )
             }
         }
