@@ -30,4 +30,4 @@ val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { nu
  * `LocalBottomBarSink.current(true/false)` 请求播放栏下沉出屏/回归。
  * 默认空实现——未接线的预览/独立场景安全。
  */
-val LocalBottomBarSink = compositionLocalOf<(Boolean) -> Unit> { }
+val LocalBottomBarSink = compositionLocalOf<(Boolean) -> Unit> { {} }

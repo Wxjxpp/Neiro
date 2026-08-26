@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
@@ -192,6 +193,8 @@ fun HomeScreen(
         var activeChar by remember { mutableStateOf<Char?>(null) }
         var barProgress by remember { mutableFloatStateOf(0f) }
         var lastFastIndex by remember { mutableIntStateOf(-1) }
+        // 底栏联动通道：组合期取出，供手势回调安全调用
+        val barSink = com.wxjxpp.neiro.ui.components.LocalBottomBarSink.current
         val density = androidx.compose.ui.platform.LocalDensity.current
         val ballSizePx = with(density) { 52.dp.toPx() }
         val ballOffsetXpx = with(density) { 42.dp.toPx() }
@@ -211,7 +214,7 @@ fun HomeScreen(
                     }
                 },
                 onTouch = { touched ->
-                    com.wxjxpp.neiro.ui.components.LocalBottomBarSink.current(touched)
+                    barSink(touched)
                     if (!touched) activeChar = null
                 },
                 modifier = Modifier.align(Alignment.CenterEnd),
@@ -248,11 +251,8 @@ fun HomeScreen(
                 if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
             },
         )
-        // 可拖拽指示小球：触摸侧边栏时显示当前字母，松手 Spring 吸附屏幕边缘
-        DraggableIndicatorBall(label = activeChar, visible = activeChar != null)
         }
     }
-
     // 歌曲详情 ActionSheet
     detailSong?.let { song ->
         ModalBottomSheet(onDismissRequest = { detailSong = null }) {

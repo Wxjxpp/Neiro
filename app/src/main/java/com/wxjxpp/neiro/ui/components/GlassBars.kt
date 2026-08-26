@@ -21,15 +21,18 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.GraphicsLayer
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
@@ -237,7 +240,9 @@ private fun DrawScope.drawFluidCircles(colors: List<Color>, phases: List<Float>)
 /** 录制修饰符：内容绘制的同时录进 [layer]，供其他绘制位置重放。 */
 fun Modifier.captureTo(layer: GraphicsLayer): Modifier =
     drawWithContent {
-        layer.record(size = size) { this@drawWithContent.drawContent() }
+        layer.record(
+            size = IntSize(size.width.toInt(), size.height.toInt()),
+        ) { this@drawWithContent.drawContent() }
         drawContent()
     }
 
