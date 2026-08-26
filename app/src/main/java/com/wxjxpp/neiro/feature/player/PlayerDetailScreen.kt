@@ -241,7 +241,6 @@ val palette = bmp.extractVividPalette()
             // 采样色偏亮（白/浅色封面）→ 画布走浅色系 + 黑色前景；
             // 采样色偏暗 → 画布混黑走深色系 + 白色前景。
             // 这样"纯白封面得到白底黑字、深色封面得到深底白字"，与用户要求一致。
-            val coverLum = androidx.core.graphics.ColorUtils.calculateLuminance(c)
             // vivid 模式：强制明亮鲜艳画布，主色用最高饱和明亮色，前景深色
             if (vividMode) {
                 val vividPrimary = palette.maxByOrNull { p ->
@@ -252,11 +251,11 @@ val palette = bmp.extractVividPalette()
                 dark = dark.copy(
                     primary = Color(vividPrimary),
                     onPrimary = Color(0xFF14141A),
-                    background = androidx.core.graphics.ColorUtils.blendARGB(
-                        Color(vividPrimary).toArgb(), Color.White.toArgb(), 0.68f,
+                    background = Color(
+                        androidx.core.graphics.ColorUtils.blendARGB(vividPrimary, Color.White.toArgb(), 0.68f),
                     ),
-                    surface = androidx.core.graphics.ColorUtils.blendARGB(
-                        Color(palette.last()).toArgb(), Color.White.toArgb(), 0.78f,
+                    surface = Color(
+                        androidx.core.graphics.ColorUtils.blendARGB(palette.last(), Color.White.toArgb(), 0.78f),
                     ),
                     onBackground = Color(0xFF14141A).copy(alpha = 0.95f),
                     onSurface = Color(0xFF14141A).copy(alpha = 0.93f),
