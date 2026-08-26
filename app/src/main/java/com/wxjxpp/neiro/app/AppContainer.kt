@@ -75,7 +75,6 @@ interface AppContainer {
 
     /** 需要访问随机/循环等扩展设置时用这个具体类型。 */
     val appSettings: DataStoreSettingsRepository
-
     val playerController: PlayerController
     val sourceRegistry: MusicSourceRegistry
     val lyricsParsers: LyricsParserRegistry

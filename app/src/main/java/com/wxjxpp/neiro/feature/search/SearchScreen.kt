@@ -202,7 +202,7 @@ fun SearchScreen(
                     androidx.compose.material3.LoadingIndicator(modifier = Modifier.height(44.dp))
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        "正在搜索…",
+                        "正在搜索…（已预加载首条结果）",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

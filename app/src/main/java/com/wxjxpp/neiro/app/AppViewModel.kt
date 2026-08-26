@@ -994,8 +994,23 @@ viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
     }
 
     private var onlineSearchJob: kotlinx.coroutines.Job? = null
+    /** 已触发过预解析直链的歌曲 id（去重，避免重复请求）。 */
+    private var preloadedSongId: String? = null
 
-    /** 防抖触发在线搜索：输入停顿 400ms 后执行。 */
+    /**
+     * 在线结果过滤：剔除未返回直链的结果（用户指定，保证点击即播）。
+     *
+     * 聚合脚本源（LX 协议）在 search 时就把取流地址放进 payload 的 `url` 字段；
+     * 没有该字段的条目播放时必然要再走一次取流（等待窗口长）甚至取不到流。
+     */
+    private fun hasDirectLink(song: Song): Boolean {
+        val remote = song.location as? com.wxjxpp.neiro.core.model.MediaLocation.Remote ?: return true
+        val payload = remote.payload ?: return false
+        return runCatching { org.json.JSONObject(payload).optString("url") }
+            .getOrNull()?.isNotBlank() == true
+    }
+
+    /** 防抖触发在线搜索：输入停顿 400ms 后执行；结果过滤无直链项并后台预加载首条。 */
     private fun triggerOnlineSearch() {
         onlineSearchJob?.cancel()
         val state = _uiState.value
@@ -1012,12 +1027,22 @@ viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             val result = runCatching {
                 container.onlineSearch.search(query, state.onlineSearchPlatform)
             }.getOrElse { com.wxjxpp.neiro.core.search.OnlineSearchRepository.Result() }
+            // 过滤未返回直链的结果：点击即播，不让播放器干等取流
+            val playable = result.songs.filter { hasDirectLink(it) }
             _uiState.update {
                 it.copy(
-                    onlineResults = result.songs,
+                    onlineResults = playable,
                     onlineFailedPlatforms = result.failedPlatforms,
                     isSearchingOnline = false,
                 )
+            }
+            // 后台预加载首条（精确匹配搜索词优先）：预解析直链，点击播放零等待
+            (playable.firstOrNull { it.title.contains(query, ignoreCase = true) }
+                ?: playable.firstOrNull())?.let { song ->
+                if (song.id != preloadedSongId) {
+                    preloadedSongId = song.id
+                    container.playerController.prefetch(song)
+                }
             }
         }
     }

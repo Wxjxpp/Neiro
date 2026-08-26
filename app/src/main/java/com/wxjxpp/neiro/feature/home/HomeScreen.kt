@@ -123,8 +123,12 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     // 实时毛玻璃：列表内容录进 GraphicsLayer，供顶栏下缘衔接带重放模糊
     val capturedLayer = rememberGraphicsLayer()
-    // 内容区高度（指示球纵向定位用）
-    var boxH by remember { mutableFloatStateOf(0f) }
+    // 指示球定位：侧边栏在根坐标系中的位置与尺寸（AlphabetSideBar onGloballyPositioned 上报）
+    // boxTop：本屏根 Box 在根坐标系中的 y——球 translationY 是 Box 相对量，
+    // 用 (barTop - boxTop) 差值换算，免疫祖先层（Scaffold/横幅）的布局偏移
+    var boxTop by remember { mutableFloatStateOf(0f) }
+    var barTop by remember { mutableFloatStateOf(0f) }
+    var barHeight by remember { mutableFloatStateOf(1f) }
     // 歌曲详情面板 & 删除确认
     var detailSong by remember { mutableStateOf<Song?>(null) }
     var confirmDelete by remember { mutableStateOf<Song?>(null) }
@@ -142,7 +146,11 @@ fun HomeScreen(
     }
         Column(modifier = modifier.fillMaxSize()) {
         // Under-layout：列表延伸到顶栏后方，顶栏作为毛玻璃覆盖层
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { boxTop = it.positionInRoot().y },
+        ) {
             // 内容层（全屏）：录制画面 + 顶栏高度作为首项顶部留白
             PullToRefreshBox(
                 isRefreshing = isRefreshing,
@@ -201,7 +209,6 @@ fun HomeScreen(
         // 底栏联动通道：组合期取出，供手势回调安全调用
         val barSink = com.wxjxpp.neiro.ui.components.LocalBottomBarSink.current
         val density = androidx.compose.ui.platform.LocalDensity.current
-        val ballSizePx = with(density) { 52.dp.toPx() }
         val ballOffsetXpx = with(density) { 42.dp.toPx() }
         if (alphabetActive) {
             AlphabetSideBar(
@@ -222,20 +229,26 @@ fun HomeScreen(
                     barSink(touched)
                     if (!touched) activeChar = null
                 },
+                onBarTopInRoot = { barTop = it },
+                onBarHeightInRoot = { barHeight = it },
+                // 高度缩短为原来的 70%（用户指定）
+                heightFraction = 0.7f,
                 modifier = Modifier.align(Alignment.CenterEnd),
             )
-            // 指示球：贴在侧边栏左侧，纵向跟随手指比例
+            // 指示球：贴在侧边栏左侧，球心纵向对齐手指在条内的位置
+            // （与侧边栏同一根坐标系：barTop + progress * barHeight = 手指根坐标 y）
             if (activeChar != null) {
                 AlphabetIndicatorBall(
                     label = activeChar,
                     progress = barProgress,
                     visible = activeChar != null,
                     modifier = Modifier
-                        .align(Alignment.CenterEnd)
+                        .align(Alignment.TopEnd)
                         .graphicsLayer {
                             translationX = -ballOffsetXpx
-                            translationY =
-                                barProgress * (boxH - ballSizePx) - size.height / 2f
+                            // 球心纵向对齐手指在条内的位置（根坐标差值换算为 Box 相对量）
+                            translationY = barTop - boxTop + barProgress * barHeight -
+                                size.height / 2f
                         },
                 )
             }

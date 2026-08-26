@@ -31,6 +31,16 @@ interface PlayerController {
 
     fun setQueue(songs: List<Song>, startIndex: Int = 0, autoPlay: Boolean = false)
     fun play(song: Song)
+
+    /**
+     * 后台预解析在线歌曲直链（用户指定：搜索加载时后台预加载一首歌）。
+     *
+     * 成功后缓存直链，[play] 同曲点击时直接复用，跳过取流等待窗口；
+     * 失败静默（播放时走正常取流链路）。本地/WebDAV 歌曲为空操作。
+     * 实现为空操作时（如非 Media3 控制器）也不影响调用方。
+     */
+    fun prefetch(song: Song) {}
+
     fun togglePlay()
     fun pause()
     fun resume()

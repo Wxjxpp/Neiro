@@ -166,6 +166,8 @@ class Media3PlayerController(
     private var progressJob: Job? = null
 
     /** 正在进行的取流任务；切歌时取消，避免旧结果覆盖新歌。 */
+    /** 搜索页预解析的直链缓存（songId → url）：点击播放时零等待复用。 */
+    private val preResolvedUrls = mutableMapOf<String, String>()
     private var resolveJob: Job? = null
 
     /** 在主线程执行播放器操作；已在主线程则直接跑，避免多余调度。 */
@@ -265,6 +267,13 @@ class Media3PlayerController(
         if (_queue.value.none { it.id == song.id }) {
             _queue.update { it + song }
             rebuildShuffleOrder()
+        }
+        // 搜索页预解析过直链的在线歌曲：直接复用，跳过取流等待（用户指定播放提速）
+        preResolvedUrls.remove(song.id)?.let { url ->
+            _state.update { it.copy(current = song, durationMs = song.durationMs, positionMs = 0L) }
+            ensureMediaSession()
+            playUri(song, url, playWhenReady = true)
+            return
         }
         _state.update { it.copy(current = song, durationMs = song.durationMs, positionMs = 0L) }
         ensureMediaSession()
@@ -380,6 +389,23 @@ class Media3PlayerController(
             is MediaLocation.WebDav -> playUri(song, loc.remotePath, playWhenReady)
             // 在线源要先换取临时播放地址
             is MediaLocation.Remote -> resolveAndPlay(song, playWhenReady)
+        }
+    }
+
+    /** 后台预解析直链（搜索页预加载）：成功缓存供 [play] 复用，失败静默。 */
+    override fun prefetch(song: Song) {
+        if (song.location !is MediaLocation.Remote) return
+        if (preResolvedUrls.containsKey(song.id)) return
+        val resolver = remoteUrlResolver ?: return
+        scope.launch {
+            val result = runCatching { resolver(song) }.getOrNull() ?: return@launch
+            if (result is RemoteUrl.Success) {
+                preResolvedUrls[song.id] = result.url
+                // 简单 FIFO 上限，防止长会话内存增长
+                if (preResolvedUrls.size > 12) {
+                    preResolvedUrls.remove(preResolvedUrls.keys.first())
+                }
+            }
         }
     }
 
