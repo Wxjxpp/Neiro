@@ -5,6 +5,7 @@
 package com.wxjxpp.neiro.ui.components
 
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.height
@@ -16,7 +17,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -44,11 +44,14 @@ fun ConnectedChoiceGroup(
     modifier: Modifier = Modifier,
 ) {
     // 官方连通形状（组合上下文内解析）
-    // 注意必须 remember 固定实例：每次重组重建 ToggleButtonShapes 会重置
-    // ToggleButton 的形状动画（表现为选中项变方角，点按后动画走完才恢复圆角）
-    val leadingShapes = remember { ButtonGroupDefaults.connectedLeadingButtonShapes() }
-    val middleShapes = remember { ButtonGroupDefaults.connectedMiddleButtonShapes() }
-    val trailingShapes = remember { ButtonGroupDefaults.connectedTrailingButtonShapes() }
+    // M3E 官方 checkedShape 是小圆角方造型（连通组默认设计），与全圆胶囊带不搭，
+    // 用户指定覆盖为完整胶囊。copy 非 @Composable，可直接链式调用
+    val leadingShapes = ButtonGroupDefaults.connectedLeadingButtonShapes()
+        .copy(checkedShape = CircleShape)
+    val middleShapes = ButtonGroupDefaults.connectedMiddleButtonShapes()
+        .copy(checkedShape = CircleShape)
+    val trailingShapes = ButtonGroupDefaults.connectedTrailingButtonShapes()
+        .copy(checkedShape = CircleShape)
     Box(modifier.height(40.dp).horizontalScroll(rememberScrollState())) {
         ButtonGroup(
             overflowIndicator = { state ->
