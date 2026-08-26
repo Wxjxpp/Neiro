@@ -225,36 +225,41 @@ fun PlayerDetailScreen(
         )
         coverBitmapForPalette?.let { bmp ->
             val c = bmp.extractDominantArgb().takeIf { it != 0 } ?: return@let
-            // 主题自适应混合比：浅色提鲜亮（主色保留多），暗色更深沉（混黑更多）
-            val bgMix = if (isDarkTheme) 0.34f else 0.62f
-            val sfMix = if (isDarkTheme) 0.22f else 0.46f
-            val bgArgb = androidx.core.graphics.ColorUtils.blendARGB(
-                Color.Black.toArgb(), c, bgMix,
-            )
-            val sfArgb = androidx.core.graphics.ColorUtils.blendARGB(
-                Color.Black.toArgb(), c, sfMix,
-            )
-            // 背景亮度决定前景色系：亮底 → 黑字（带不透明度层次），暗底 → 白字
-            val fgBase = if (androidx.core.graphics.ColorUtils.calculateLuminance(bgArgb) > 0.35f) {
-                0xFF1A1A1A.toInt()
+            // 关键修正：不再无条件混黑。
+            // 采样色偏亮（白/浅色封面）→ 画布走浅色系 + 黑色前景；
+            // 采样色偏暗 → 画布混黑走深色系 + 白色前景。
+            // 这样"纯白封面得到白底黑字、深色封面得到深底白字"，与用户要求一致。
+            val coverLum = androidx.core.graphics.ColorUtils.calculateLuminance(c)
+            val lightCanvas = coverLum > 0.42
+            val bgArgb: Int
+            val sfArgb: Int
+            if (lightCanvas) {
+                // 浅色画布：向白提亮（保留封面色相，避免刺眼纯白）
+                bgArgb = androidx.core.graphics.ColorUtils.blendARGB(c, Color.White.toArgb(), 0.55f)
+                sfArgb = androidx.core.graphics.ColorUtils.blendARGB(c, Color.White.toArgb(), 0.38f)
             } else {
-                0xFFFFFFFF.toInt()
+                // 深色画布：混黑沉浸（浅色主题保留主色多一点更鲜亮）
+                val bgMix = if (isDarkTheme) 0.34f else 0.52f
+                val sfMix = if (isDarkTheme) 0.22f else 0.40f
+                bgArgb = androidx.core.graphics.ColorUtils.blendARGB(Color.Black.toArgb(), c, bgMix)
+                sfArgb = androidx.core.graphics.ColorUtils.blendARGB(Color.Black.toArgb(), c, sfMix)
             }
-            val fg = androidx.compose.ui.graphics.Color(fgBase)
+            // 前景由画布明度决定（不是由 App 主题决定）
+            val fg = if (androidx.core.graphics.ColorUtils.calculateLuminance(bgArgb) > 0.35) {
+                Color(0xFF14141A)
+            } else {
+                Color.White
+            }
             dark = dark.copy(
                 primary = Color(c),
                 background = Color(bgArgb),
                 surface = Color(sfArgb),
-                onBackground = fg.copy(alpha = 0.92f),
-                onSurface = fg.copy(alpha = 0.90f),
-                onSurfaceVariant = fg.copy(alpha = 0.62f),
-                surfaceVariant = fg.copy(alpha = 0.08f),
-                outline = fg.copy(alpha = 0.35f),
-                onPrimary = if (androidx.core.graphics.ColorUtils.calculateLuminance(c) > 0.35f) {
-                    androidx.compose.ui.graphics.Color(0xFF1A1A1A)
-                } else {
-                    androidx.compose.ui.graphics.Color.White
-                },
+                onBackground = fg.copy(alpha = 0.94f),
+                onSurface = fg.copy(alpha = 0.92f),
+                onSurfaceVariant = fg.copy(alpha = 0.66f),
+                surfaceVariant = fg.copy(alpha = 0.10f),
+                outline = fg.copy(alpha = 0.38f),
+                onPrimary = if (coverLum > 0.42) Color(0xFF14141A) else Color.White,
             )
         }
         dark
@@ -855,13 +860,25 @@ private fun CurrentLineBanner(
         }
     }
 }
-/** 从缩略图粗提主色：跳过近黑/近白像素，按饱和度加权平均（Salt Player 风格沉浸底色）。 */
+/**
+ * 从缩略图提主色。
+ *
+ * 修正（用户反馈"白色专辑图采样出深色"）：旧实现用 `mx < 236` 直接**丢弃近白像素**，
+ * 于是一张以白为主的封面只剩下少量深色像素参与平均 → 结果必然偏暗。
+ * 现在近白/近黑都参与，只是权重较低（按饱和度加权仍保留色相倾向），
+ * 再与整幅均色混合，保证输出色的**明度跟随封面真实明度**。
+ */
 private fun android.graphics.Bitmap.extractDominantArgb(): Int {
     val step = maxOf(1, width / 32)
     var r = 0L
     var g = 0L
     var b = 0L
     var wsum = 0L
+    // 整幅均色（不加权）：用于校正明度
+    var ar = 0L
+    var ag = 0L
+    var ab = 0L
+    var acount = 0L
     var y = 0
     while (y < height) {
         var x = 0
@@ -872,23 +889,34 @@ private fun android.graphics.Bitmap.extractDominantArgb(): Int {
             val pb = px and 0xFF
             val mx = maxOf(pr, pg, pb)
             val sat = mx - minOf(pr, pg, pb)
-            if (mx > 28 && mx < 236) {
-                val w = (sat * sat + 64).toLong()
-                r += pr * w
-                g += pg * w
-                b += pb * w
-                wsum += w
-            }
+            // 饱和度加权，但极亮/极暗像素不再被丢弃，仅权重降低
+            val edge = mx <= 24 || mx >= 240
+            val w = (sat.toLong() * sat + if (edge) 8L else 96L)
+            r += pr * w
+            g += pg * w
+            b += pb * w
+            wsum += w
+            ar += pr
+            ag += pg
+            ab += pb
+            acount++
             x += step
         }
         y += step
     }
-    if (wsum == 0L) return 0
-    return android.graphics.Color.rgb(
-        (r / wsum).toInt(),
-        (g / wsum).toInt(),
-        (b / wsum).toInt(),
+    if (wsum == 0L || acount == 0L) return 0
+    val hue = android.graphics.Color.rgb(
+        (r / wsum).toInt().coerceIn(0, 255),
+        (g / wsum).toInt().coerceIn(0, 255),
+        (b / wsum).toInt().coerceIn(0, 255),
     )
+    val avg = android.graphics.Color.rgb(
+        (ar / acount).toInt().coerceIn(0, 255),
+        (ag / acount).toInt().coerceIn(0, 255),
+        (ab / acount).toInt().coerceIn(0, 255),
+    )
+    // 40% 均色校正明度：白封面 → 亮色，深封面 → 深色，色相仍来自饱和区
+    return androidx.core.graphics.ColorUtils.blendARGB(hue, avg, 0.40f)
 }
 /** 歌词偏移调节面板：紧凑版，±50ms。 */
 @Composable

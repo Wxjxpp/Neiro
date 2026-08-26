@@ -287,7 +287,8 @@ private fun AlbumDetailList(
         label = "albumCollapseProgress",
     )
     // 布局结构（用户规格）：Box + LazyColumn 占位撑开 + 顶部固定覆盖层
-    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+    // 底色改走主题（原来硬编码 Color.Black，浅色主题下就是一整块黑）
+    Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
@@ -370,7 +371,9 @@ private fun AlbumCollapsingHeader(
     val titleAlpha = (1f - progress * 1.15f).coerceIn(0f, 1f)
     val sts = LocalSharedTransitionScope.current
     Box(modifier = Modifier.fillMaxSize()) {
-        // 封面容器：随 progress 收缩为顶部胶囊；黑底防透明露底（规格样式要求）
+        // 封面容器：随 progress 收缩为顶部胶囊。
+        // 底色走主题 surfaceVariant——原来硬编码 Color.Black，封面未加载/无封面时
+        // 就是用户看到的"大黑块"。
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
@@ -379,7 +382,7 @@ private fun AlbumCollapsingHeader(
                 .fillMaxWidth()
                 .height(height)
                 .clip(shape)
-                .background(Color.Black),
+                .background(MaterialTheme.colorScheme.surfaceVariant),
         ) {
             val baseModifier = Modifier.fillMaxSize()
             if (sts != null && animScope != null && sharedKey != null) {
@@ -418,22 +421,17 @@ private fun AlbumCollapsingHeader(
                 text = entry.title,
                 fontSize = lerp(24.sp, 16.sp, progress),
                 fontWeight = FontWeight.Bold,
-                color = Color.White,
+                // 标题位于列表背景之上，随主题走（原硬编码白色在浅色主题下不可读）
+                color = MaterialTheme.colorScheme.onBackground,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = LocalTextStyle.current.copy(
-                    shadow = Shadow(offset = Offset(0f, 2f), blurRadius = 8f),
-                ),
             )
             Text(
                 text = "${entry.artistName.ifBlank { "未知歌手" }} · $songCount 首 · ${formatTotalDuration(totalMs)}",
                 fontSize = lerp(14.sp, 12.sp, progress),
-                color = Color.White.copy(alpha = 0.7f),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
-                style = LocalTextStyle.current.copy(
-                    shadow = Shadow(offset = Offset(0f, 2f), blurRadius = 8f),
-                ),
             )
         }
     }
