@@ -25,6 +25,7 @@ import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.ShuffleMode
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.core.player.PlaybackService
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -76,31 +77,23 @@ class Media3PlayerController(
         onPlayer { p ->
             PlaybackSessionHolder.getOrCreate(context, p)
         }
-        // Expr：拉起前台媒体服务——MediaSessionService 只有被启动后才会
-        // 构建系统媒体样式通知（锁屏/通知栏控制）。此前从未启动过服务，
-        // 所以系统媒体通知一直没出现。
         runCatching {
-            val intent = android.content.Intent(context, PlaybackService::class.java)
-            // 优先普通 startService：App 前台时合法且无 20 秒 startForeground 死线，
-            // 从根上规避 ForegroundServiceDidNotStartInTimeException；
-            // 后台场景系统会抛 IllegalStateException，此处回退 startForegroundService
-            // （服务端 onCreate 已有占位通知立即进前台兜底）。
+            val intent = Intent(context, PlaybackService::class.java)
             try {
                 context.startService(intent)
             } catch (e: IllegalStateException) {
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     context.startForegroundService(intent)
                 } else {
                     throw e
                 }
             }
-            // Expr：通知服务 player 已就绪，让它创建 MediaNotification 并注册到控制中心
-            android.content.ContextCompat.sendBroadcast(
+            ContextCompat.sendBroadcast(
                 context,
-                Intent(com.wxjxpp.neiro.core.player.PlaybackService.ACTION_PLAYER_READY),
+                Intent(PlaybackService.ACTION_PLAYER_READY),
             )
         }.onFailure {
-            android.util.Log.w("Media3PlayerController", "启动播放前台服务失败", it)
+            Log.w("Media3PlayerController", "启动播放前台服务失败", it)
         }
     }
 

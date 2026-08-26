@@ -9,10 +9,12 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.ServiceInfo
+import android.media.AudioAttributes
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.util.Log
+import androidx.core.content.ContextCompat
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import androidx.media3.common.Player
@@ -21,7 +23,6 @@ import androidx.media3.session.MediaNotification
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
 import com.wxjxpp.neiro.MainActivity
-import java.util.concurrent.Executor
 
 /**
  * 媒体前台服务：承载 MediaSession，让系统媒体通知/控制中心生效。
@@ -69,11 +70,11 @@ class PlaybackService : MediaSessionService() {
     private fun createTempPlayer(): Player =
         androidx.media3.exoplayer.ExoPlayer.Builder(this)
             .setAudioAttributes(
-                androidx.media3.common.AudioAttributes.Builder()
-                    .setContentType(androidx.media3.common.AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(androidx.media3.common.AudioAttributes.USAGE_MEDIA)
+                AudioAttributes.Builder()
+                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .build(),
-                shouldPlayAudioFocus = false,
+                false,
             )
             .build()
 
@@ -122,7 +123,7 @@ class PlaybackService : MediaSessionService() {
         builder.setContentTitle(meta.title?.toString() ?: "Neiro")
             .setContentText(meta.artist?.toString() ?: "")
         // MediaStyle 让控制中心识别这是媒体控件
-        val style = androidx.media3.session.MediaNotification.MediaStyle.Builder(mediaSession)
+        val style = MediaNotification.MediaStyle.Builder(mediaSession)
             .setShowActionsInCompactView(0, 1, 2)
             .build()
         builder.setStyle(style)
@@ -209,7 +210,7 @@ object DownloadProgressNotifier {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notifyId)
         }
-        titles.remove(songId); artists.remove(songId)
+        titles.remove(songId); artists.remove(songId ?: "")
     }
 
     private fun baseBuilder(context: Context) =
