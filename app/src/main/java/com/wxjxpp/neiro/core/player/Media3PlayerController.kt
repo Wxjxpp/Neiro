@@ -94,6 +94,11 @@ class Media3PlayerController(
                     throw e
                 }
             }
+            // Expr：通知服务 player 已就绪，让它创建 MediaNotification 并注册到控制中心
+            android.content.ContextCompat.sendBroadcast(
+                context,
+                Intent(com.wxjxpp.neiro.core.player.PlaybackService.ACTION_PLAYER_READY),
+            )
         }.onFailure {
             android.util.Log.w("Media3PlayerController", "启动播放前台服务失败", it)
         }
