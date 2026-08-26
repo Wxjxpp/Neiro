@@ -70,11 +70,10 @@ class PlaybackService : MediaSessionService() {
     private fun createTempPlayer(): Player =
         androidx.media3.exoplayer.ExoPlayer.Builder(this)
             .setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
+                androidx.media3.common.AudioAttributes.Builder()
+                    .setContentType(androidx.media3.common.AudioAttributes.CONTENT_TYPE_MUSIC)
+                    .setUsage(androidx.media3.common.AudioAttributes.USAGE_MEDIA)
                     .build(),
-                false,
             )
             .build()
 
@@ -122,10 +121,10 @@ class PlaybackService : MediaSessionService() {
         val meta = player.mediaMetadata
         builder.setContentTitle(meta.title?.toString() ?: "Neiro")
             .setContentText(meta.artist?.toString() ?: "")
-        // MediaStyle 让控制中心识别这是媒体控件
-        val style = MediaNotification.MediaStyle.Builder(mediaSession)
+        // MediaStyle 让控制中心识别这是媒体控件（使用标准 Notification.MediaStyle）
+        val style = android.app.Notification.MediaStyle()
             .setShowActionsInCompactView(0, 1, 2)
-            .build()
+            .setMediaSession(session?.sessionToken)
         builder.setStyle(style)
         return builder.build()
     }
@@ -210,7 +209,7 @@ object DownloadProgressNotifier {
             val manager = context.getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
             manager.cancel(notifyId)
         }
-        titles.remove(songId); artists.remove(songId ?: "")
+        titles.remove(songId); artists.remove(songId)
     }
 
     private fun baseBuilder(context: Context) =

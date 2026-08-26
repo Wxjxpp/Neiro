@@ -5,7 +5,9 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Looper
+import android.util.Log
 import androidx.annotation.OptIn
 import androidx.core.content.ContextCompat
 import androidx.media3.common.AudioAttributes
@@ -88,10 +90,7 @@ class Media3PlayerController(
                     throw e
                 }
             }
-            ContextCompat.sendBroadcast(
-                context,
-                Intent(PlaybackService.ACTION_PLAYER_READY),
-            )
+            context.sendBroadcast(Intent(PlaybackService.ACTION_PLAYER_READY))
         }.onFailure {
             Log.w("Media3PlayerController", "启动播放前台服务失败", it)
         }
