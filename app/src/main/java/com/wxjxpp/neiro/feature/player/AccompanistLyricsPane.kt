@@ -13,6 +13,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextMotion
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
 import com.wxjxpp.neiro.core.model.Lyrics
