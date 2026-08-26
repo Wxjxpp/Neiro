@@ -425,6 +425,8 @@ fun KaraokeLineText(
     showPhonetic: Boolean = true,
     precalculatedLayouts: List<SyllableLayout>? = null,
     isDuoView: Boolean = false,
+    /** Expr：行间隙倍率（用户设置），作用于行内距与行高。 */
+    gapScale: Float = 1f,
     textMeasurer: TextMeasurer = rememberTextMeasurer()
 ) {
     val isLineRtl = remember(line.syllables) { line.syllables.any { it.content.isRtl() } }
@@ -512,10 +514,10 @@ fun KaraokeLineText(
 
     Column(
         modifier = modifier.fillMaxWidth().padding(
-            vertical = 8.dp, horizontal = if (line is KaraokeLine.AccompanimentKaraokeLine) 0.dp
+            vertical = 8.dp * gapScale, horizontal = if (line is KaraokeLine.AccompanimentKaraokeLine) 0.dp
             else 16.dp
         ),
-        verticalArrangement = Arrangement.spacedBy(2.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp * gapScale),
         horizontalAlignment = columnHorizontalAlignment
     ) {
         AccompanimentLines(true, accompanimentLinesBeforeMain)

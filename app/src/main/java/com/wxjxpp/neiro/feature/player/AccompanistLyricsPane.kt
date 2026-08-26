@@ -17,6 +17,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
 import com.wxjxpp.neiro.core.model.Lyrics
+import kotlin.math.abs
 
 /**
  * Expr 实验分支：Accompanist 歌词渲染包装器。
@@ -41,6 +42,7 @@ fun AccompanistLyricsPane(
     showTranslation: Boolean = true,
     offsetMs: Long = 0L,
     fontScale: Float = 1f,
+    gapScale: Float = 1f,
     onSeekTo: (Long) -> Unit = {},
 ) {
     val synced = remember(lyrics, title, artistName, offsetMs) {
@@ -61,13 +63,24 @@ fun AccompanistLyricsPane(
     LaunchedEffect(Unit) {
         var anchorPos = positionState.value.toLong()
         var anchorNanos = withFrameNanos { it }
+        var lastExternal = anchorPos
         while (true) {
             withFrameNanos { frame ->
                 val external = positionState.value.toLong()
-                if (external != anchorPos) {
-                    // 外部源刷新（含 seek 回退）：重新锚定
-                    anchorPos = external
-                    anchorNanos = frame
+                if (external != lastExternal) {
+                    lastExternal = external
+                    val shown = smoothPosition.longValue
+                    val drift = shown - external
+                    if (abs(drift) > 300 || !playingState.value) {
+                        // 大偏差（seek / 起播 / 卡顿缓冲）：硬锚定
+                        anchorPos = external
+                        anchorNanos = frame
+                        smoothPosition.longValue = external
+                    } else {
+                        // 小漂移（低频采样滞后）：渐进吸收——原实现硬重置导致
+                        // 每次采样都回跳一次（锯齿），卡拉OK抖动、句尾提前切换、闪烁
+                        anchorPos -= drift / 8
+                    }
                 }
                 smoothPosition.longValue = if (playingState.value) {
                     anchorPos + (frame - anchorNanos) / 1_000_000L
@@ -111,6 +124,7 @@ fun AccompanistLyricsPane(
         blurDelta = 6f,
         // 聚焦行位置下移（用户指定）：行顶对齐到视口约 35%~40% 高度处
         offset = 150.dp,
+        gapScale = gapScale,
         modifier = modifier.graphicsLayer {
             compositingStrategy = CompositingStrategy.Auto
         },

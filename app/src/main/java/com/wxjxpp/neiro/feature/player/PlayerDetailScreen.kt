@@ -418,6 +418,7 @@ fun PlayerDetailScreen(
                             showTranslation = translationOn,
                             offsetMs = lyricsOffsetMs,
                             fontScale = lyricsFontScale,
+                            gapScale = lyricsGapScale,
                             onSeekTo = onSeekTo,
                             modifier = Modifier.fillMaxSize(),
                         )

@@ -21,7 +21,11 @@ import com.wxjxpp.neiro.core.model.Lyrics
 fun Lyrics.toSyncedLyrics(title: String, artistName: String): SyncedLyrics {
     if (isEmpty) return SyncedLyrics(lines = emptyList(), title = title)
     val shift = offsetMs
-    val lines = lines.map { it.toSyncedLine(shift) }
+    // 行结束时间优先级：显式 endMs → 下一行起点前留 60ms → 字数估算兜底。
+    // （纯字数估算普遍短于真实演唱时长，曾导致句子未唱完就切下一句）
+    val lines = lines.mapIndexed { index, line ->
+        line.toSyncedLine(shift, lines.getOrNull(index + 1))
+    }
     return SyncedLyrics(
         lines = lines,
         title = title,
@@ -30,9 +34,12 @@ fun Lyrics.toSyncedLyrics(title: String, artistName: String): SyncedLyrics {
     )
 }
 
-private fun LyricLine.toSyncedLine(offsetMs: Long): ISyncedLine {
+private fun LyricLine.toSyncedLine(offsetMs: Long, next: LyricLine?): ISyncedLine {
     val start = (startMs - offsetMs).toInt()
-    val end = ((endMs ?: estimatedEndMs()) - offsetMs).toInt().coerceAtLeast(start + 1)
+    val rawEnd = endMs
+        ?: next?.startMs?.let { nextStart -> maxOf(nextStart - 60, startMs + 600) }
+        ?: estimatedEndMs()
+    val end = (rawEnd - offsetMs).toInt().coerceAtLeast(start + 1)
     return if (syllables.isEmpty()) {
         SyncedLine(
             content = text,

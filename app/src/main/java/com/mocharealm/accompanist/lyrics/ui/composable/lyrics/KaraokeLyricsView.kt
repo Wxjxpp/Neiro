@@ -133,6 +133,8 @@ fun KaraokeLyricsView(
     offset: Dp = 32.dp,
     keepAliveZone: Dp = 100.dp,
     blurDelta: Float = 3f,
+    /** Expr：行间隙倍率（用户设置穿透），作用于行内距与行高。 */
+    gapScale: Float = 1f,
     showDebugRectangles: Boolean = false
 ) {
     val density = LocalDensity.current
@@ -141,6 +143,7 @@ fun KaraokeLyricsView(
         remember(accompanimentLineTextStyle) { accompanimentLineTextStyle }
     val stablePhoneticTextStyle = remember(phoneticTextStyle) { phoneticTextStyle }
     val stableOffset = remember(offset) { offset }
+    val stableGapScale = remember(gapScale) { gapScale }
     val stableOffsetPx =
         remember(stableOffset) { with(density) { stableOffset.toPx().fastRoundToInt() } }
     val keepAliveZonePx = with(density) { keepAliveZone.toPx() }
@@ -153,7 +156,8 @@ fun KaraokeLyricsView(
         lyrics,
         stableNormalTextStyle,
         stableAccompanimentTextStyle,
-        stablePhoneticTextStyle
+        stablePhoneticTextStyle,
+        stableGapScale
     ) {
         layoutCache.clear()
         withContext(Dispatchers.Default) {
@@ -315,7 +319,8 @@ fun KaraokeLyricsView(
                 }
             }
     }
-    // 空闲轮询：停手 2 秒后解除浏览态，下面的焦点收集器会自动回焦
+    // 空闲轮询：停手 2 秒后解除浏览态并**主动拉回**当前聚焦行
+    // （此前只解除标志不滚动——回焦挂在"焦点变化"上，用户停住时焦点不变永远不触发）
     LaunchedEffect(Unit) {
         while (true) {
             if (userBrowsing && lastDragEndAt > 0L &&
@@ -323,6 +328,16 @@ fun KaraokeLyricsView(
             ) {
                 userBrowsing = false
                 lastDragEndAt = 0L
+                scrollInCode.value = true
+                try {
+                    listState.animateScrollToItem(
+                        lyricsFocusState.firstIndex,
+                        (-stableOffsetPx - keepAliveZonePx).toInt()
+                    )
+                } catch (_: Exception) {
+                } finally {
+                    scrollInCode.value = false
+                }
             }
             kotlinx.coroutines.delay(250)
         }
@@ -506,10 +521,10 @@ fun KaraokeLyricsView(
                                                 phoneticTextStyle = stablePhoneticTextStyle,
                                                 activeColor = textColor,
                                                 blendMode = stableBlendMode,
+                                                gapScale = gapScale,
                                                 showDebugRectangles = showDebugRectangles,
                                                 showTranslation = showTranslation,
                                                 showPhonetic = showPhonetic,
-                                                precalculatedLayouts = layoutCache[index]
                                             )
                                         }
                                     }
