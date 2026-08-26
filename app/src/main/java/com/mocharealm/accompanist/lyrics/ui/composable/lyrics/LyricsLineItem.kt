@@ -35,7 +35,8 @@ fun LyricsLineItem(
     content: @Composable () -> Unit
 ) {
     val scaleState by animateFloatAsState(
-        targetValue = if (isFocused) 1f else 0.98f,
+        // Expr：聚焦行微微放大（1.05x），非聚焦行回到基线——配合距离模糊形成层次
+        targetValue = if (isFocused) 1.05f else 1f,
         animationSpec = if (isFocused) {
             tween(durationMillis = 600, easing = LinearOutSlowInEasing)
         } else {

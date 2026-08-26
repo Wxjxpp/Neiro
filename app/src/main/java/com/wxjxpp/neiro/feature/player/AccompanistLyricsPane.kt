@@ -2,7 +2,9 @@ package com.wxjxpp.neiro.feature.player
 
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -33,6 +35,7 @@ fun AccompanistLyricsPane(
     positionMs: Long,
     title: String,
     artistName: String,
+    isPlaying: Boolean,
     modifier: Modifier = Modifier,
     showTranslation: Boolean = true,
     offsetMs: Long = 0L,
@@ -48,6 +51,31 @@ fun AccompanistLyricsPane(
     // 必须让它读到 Compose State 才会在进度变化时重新求值——
     // 直接捕获普通参数会导致闭包冻结，歌词不滚动不高亮不响应跳转
     val positionState = androidx.compose.runtime.rememberUpdatedState(positionMs.toInt())
+    val playingState = androidx.compose.runtime.rememberUpdatedState(isPlaying)
+    // 帧级插值时钟：播放进度源的采样频率低（数百毫秒级），直接喂给逐字染色会卡顿；
+    // 这里锚定最近一次外部进度，按真实流逝时间每帧外推，卡拉OK才能丝滑走字
+    val smoothPosition = androidx.compose.runtime.remember {
+        androidx.compose.runtime.mutableLongStateOf(positionMs)
+    }
+    LaunchedEffect(Unit) {
+        var anchorPos = positionState.value.toLong()
+        var anchorNanos = withFrameNanos { it }
+        while (true) {
+            withFrameNanos { frame ->
+                val external = positionState.value.toLong()
+                if (external != anchorPos) {
+                    // 外部源刷新（含 seek 回退）：重新锚定
+                    anchorPos = external
+                    anchorNanos = frame
+                }
+                smoothPosition.longValue = if (playingState.value) {
+                    anchorPos + (frame - anchorNanos) / 1_000_000L
+                } else {
+                    anchorPos
+                }
+            }
+        }
+    }
     val normalStyle = remember(cs.primary, fontScale) {
         TextStyle(
             fontSize = 30.sp * fontScale,
@@ -67,7 +95,7 @@ fun AccompanistLyricsPane(
     KaraokeLyricsView(
         listState = listState,
         lyrics = synced,
-        currentPosition = { positionState.value },
+        currentPosition = { smoothPosition.longValue.toInt() },
         onLineClicked = { line -> onSeekTo(line.start.toLong()) },
         onLinePressed = {},
         showTranslation = showTranslation,
@@ -77,7 +105,11 @@ fun AccompanistLyricsPane(
         textColor = cs.onSurface,
         // 关闭 Plus 发光：深色画布上白字叠加会过曝，用普通绘制
         blendMode = BlendMode.SrcOver,
-        useBlurEffect = false,
+        // 距离渐变模糊（用户要求恢复）：距聚焦行越远模糊越重，梯度加大更明显
+        useBlurEffect = true,
+        blurDelta = 6f,
+        // 聚焦行位置下移（用户指定）：行顶对齐到视口约 35%~40% 高度处
+        offset = 150.dp,
         modifier = modifier.graphicsLayer {
             compositingStrategy = CompositingStrategy.Auto
         },

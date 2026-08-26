@@ -24,6 +24,7 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Alignment
@@ -298,12 +299,47 @@ fun KaraokeLyricsView(
         }
     }
 
+    // Expr：浏览态状态机——用户拖动查看歌词时暂停自动跟随与距离模糊；
+// 停止滑动超过 2 秒，或播放推进到下一句且未在拖动时，重新聚焦当前歌词
+    var userBrowsing by remember { mutableStateOf(false) }
+    var lastDragEndAt by remember { mutableLongStateOf(0L) }
+    LaunchedEffect(Unit) {
+        androidx.compose.runtime.snapshotFlow { listState.isScrollInProgress }
+            .collect { scrolling ->
+                if (scrolling && !scrollInCode.value) {
+                    // 用户手拖（非代码滚动）：进入浏览态
+                    userBrowsing = true
+                } else if (!scrolling && userBrowsing) {
+                    lastDragEndAt = android.os.SystemClock.uptimeMillis()
+                }
+            }
+    }
+    // 空闲轮询：停手 2 秒后解除浏览态，下面的焦点收集器会自动回焦
+    LaunchedEffect(Unit) {
+        while (true) {
+            if (userBrowsing && lastDragEndAt > 0L &&
+                android.os.SystemClock.uptimeMillis() - lastDragEndAt > 2_000L
+            ) {
+                userBrowsing = false
+                lastDragEndAt = 0L
+            }
+            kotlinx.coroutines.delay(250)
+        }
+    }
     LaunchedEffect(
         layoutCache,
         stableOffsetPx,
     ) {
         androidx.compose.runtime.snapshotFlow { lyricsFocusState.firstIndex }
             .collect { firstIndex ->
+                if (userBrowsing) {
+                    // 用户指定：歌词切到下一句时即使还在浏览态也重新聚焦（拖动进行中除外）
+                    if (!listState.isScrollInProgress) {
+                        userBrowsing = false
+                    } else {
+                        return@collect
+                    }
+                }
                 if (!scrollInCode.value) {
                     val items = listState.layoutInfo.visibleItemsInfo
                     val targetItem = items.firstOrNull { it.index == firstIndex }
@@ -442,7 +478,8 @@ fun KaraokeLyricsView(
 
                             val blurRadiusState = animateFloatAsState(
                                 targetValue = (
-                                        if (!useBlurEffect) 0f
+                                        // Expr：用户浏览态整体取消模糊（用户指定）
+                                        if (!useBlurEffect || userBrowsing) 0f
                                         else if (distanceWeightState.value > 0 && (!listState.isScrollInProgress || scrollInCode.value)) {
                                             distanceWeightState.value * blurDelta
                                         } else 0f),

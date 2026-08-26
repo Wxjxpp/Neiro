@@ -414,6 +414,7 @@ fun PlayerDetailScreen(
                             positionMs = state.positionMs,
                             title = song.title,
                             artistName = song.artistName,
+                            isPlaying = state.isPlaying,
                             showTranslation = translationOn,
                             offsetMs = lyricsOffsetMs,
                             fontScale = lyricsFontScale,
