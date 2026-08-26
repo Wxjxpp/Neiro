@@ -8,26 +8,36 @@ package com.wxjxpp.neiro.feature.albums
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibilityScope
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items as lazyItems
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -44,6 +54,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.LocalTextStyle
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -52,10 +63,19 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Shadow
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.lerp
+import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope
@@ -245,14 +265,42 @@ private fun AlbumDetailList(
             }
         }
     }
-    LazyColumn(
-        modifier = Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
-    ) {
-        item(key = "album_header") {
-            AlbumHeader(entry = album, songCount = merged.size, sharedKey = sharedKey, animScope = animScope)
-        }
-        lazyItems(merged, key = { it.id }) { song ->
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val headerHeight = 280.dp
+    val titleBlockHeight = 80.dp
+    val maxOffsetPx = with(density) { headerHeight.toPx() }
+    val listState = rememberLazyListState()
+    // 收缩进度 = 首个可见 item 的累计滚动偏移 / 最大偏移；
+    // 用户指定：progress 改为带阻尼的缓动（spring 无回弹），收缩过程更自然
+    val rawProgress = if (maxOffset > 0f) {
+        (listState.firstVisibleItemIndex * maxOffset +
+            listState.firstVisibleItemScrollOffset) / maxOffset
+    } else {
+        0f
+    }
+    val progress by animateFloatAsState(
+        targetValue = rawProgress.coerceIn(0f, 1f),
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioNoBounce,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "albumCollapseProgress",
+    )
+    // 布局结构（用户规格）：Box + LazyColumn 占位撑开 + 顶部固定覆盖层
+    Box(modifier = Modifier.fillMaxSize().background(Color.Black)) {
+        LazyColumn(
+            state = listState,
+            modifier = Modifier.fillMaxSize(),
+            contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+        ) {
+            item(key = "header_spacer") {
+                Spacer(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(headerHeight + titleBlockHeight),
+                )
+            }
+            lazyItems(merged, key = { it.id }) { song ->
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
@@ -287,58 +335,105 @@ private fun AlbumDetailList(
             }
             HorizontalDivider()
         }
+        }
     }
+    AlbumCollapsingHeader(
+        entry = album,
+        songCount = merged.size,
+        sharedKey = sharedKey,
+        animScope = animScope,
+        progress = progress,
+    )
 }
 
-/** 专辑详情头部：小封面 + 歌手 + 总时长 + 曲目数。封面为 Container Transform 共享元素。 */
+/** 专辑详情头部：滚动时封面从大图收缩为顶部胶囊，标题上滑合并（用户指定交互）。 */
 @Composable
-private fun AlbumHeader(entry: AlbumEntry, songCount: Int, sharedKey: String? = null, animScope: AnimatedVisibilityScope? = null) {
+private fun AlbumCollapsingHeader(
+    entry: AlbumEntry,
+    songCount: Int,
+    sharedKey: String?,
+    animScope: AnimatedVisibilityScope?,
+    progress: Float,
+) {
     val dimens = AppTheme.dimens
-    // 总时长：所有曲目 durationMs 求和（在线歌曲元数据缺失时按 0 计）
     val totalMs = entry.songs.sumOf { it.durationMs }
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
-    ) {
-        val baseModifier = Modifier
-            .size(72.dp)
-            .clip(RoundedCornerShape(10.dp))
-        val sts = LocalSharedTransitionScope.current
-        if (sts != null && animScope != null && sharedKey != null) {
-            with(sts) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val headerHeight = 280.dp
+    val collapsedHeight = 56.dp
+    val titleBlockHeight = 80.dp
+    val maxOffsetPx = with(density) { headerHeight.toPx() }
+    // 高度 280→56、圆角 0→28（胶囊）；标题块自下方上滑并淡出，字号 24→16
+    val height = lerp(headerHeight, collapsedHeight, progress)
+    val cornerRadius = lerp(0.dp, 28.dp, progress)
+    val shape = RoundedCornerShape(cornerRadius)
+    val titleOffsetPx = with(density) { titleBlockHeight.toPx() * (1f - progress) }
+    val titleAlpha = (1f - progress * 1.15f).coerceIn(0f, 1f)
+    val sts = LocalSharedTransitionScope.current
+    Box(modifier = Modifier.fillMaxSize()) {
+        // 封面容器：随 progress 收缩为顶部胶囊；黑底防透明露底（规格样式要求）
+        Box(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .padding(horizontal = 12.dp)
+                .fillMaxWidth()
+                .height(height)
+                .clip(shape)
+                .background(Color.Black),
+        ) {
+            val baseModifier = Modifier.fillMaxSize()
+            if (sts != null && animScope != null && sharedKey != null) {
+                with(sts) {
+                    AsyncImage(
+                        model = entry.coverUri,
+                        contentDescription = entry.title,
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier
+                            .sharedElement(
+                                rememberSharedContentState(key = sharedKey),
+                                animatedVisibilityScope = animScope,
+                            )
+                            .then(baseModifier),
+                    )
+                }
+            } else {
                 AsyncImage(
                     model = entry.coverUri,
                     contentDescription = entry.title,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier
-                        .sharedElement(
-                            rememberSharedContentState(key = sharedKey),
-                            animatedVisibilityScope = animScope,
-                        )
-                        .then(baseModifier),
+                    modifier = baseModifier,
                 )
             }
-        } else {
-            AsyncImage(
-                model = entry.coverUri,
-                contentDescription = entry.title,
-                contentScale = ContentScale.Crop,
-                modifier = baseModifier,
-            )
         }
-        Column(modifier = Modifier.weight(1f).padding(start = dimens.spaceMd)) {
+        // 标题区：位于图片下方占位区，滚动时上滑与图片合并、渐隐、缩小（24sp→16sp）
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .statusBarsPadding()
+                .graphicsLayer { translationY = titleOffsetPx; alpha = titleAlpha }
+                .fillMaxWidth()
+                .padding(top = headerHeight + dimens.spaceSm),
+        ) {
             Text(
-                text = entry.artistName.ifBlank { "未知歌手" },
-                style = MaterialTheme.typography.titleMedium,
+                text = entry.title,
+                fontSize = lerp(24.sp, 16.sp, progress),
+                fontWeight = FontWeight.Bold,
+                color = Color.White,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
+                style = LocalTextStyle.current.copy(
+                    shadow = Shadow(offset = Offset(0f, 2f), blurRadius = 8f),
+                ),
             )
             Text(
-                text = "$songCount 首 · ${formatTotalDuration(totalMs)}",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                text = "${entry.artistName.ifBlank { "未知歌手" }} · $songCount 首 · ${formatTotalDuration(totalMs)}",
+                fontSize = lerp(14.sp, 12.sp, progress),
+                color = Color.White.copy(alpha = 0.7f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                style = LocalTextStyle.current.copy(
+                    shadow = Shadow(offset = Offset(0f, 2f), blurRadius = 8f),
+                ),
             )
         }
     }

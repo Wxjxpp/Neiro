@@ -82,6 +82,8 @@ import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
+import com.wxjxpp.neiro.ui.components.TopBarBlurMode
+import com.wxjxpp.neiro.ui.components.topBarBlur
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 
@@ -109,6 +111,10 @@ fun PlayerDetailScreen(
     showTranslation: Boolean,
     lyricsOffsetMs: Long,
     ambientGlow: Boolean,
+    /** 顶栏模糊总开关（设置页可控，默认关）。 */
+    topBarBlurEnabled: Boolean = false,
+    /** 顶栏模糊模式：渐变模糊 / 遮罩模糊。 */
+    topBarBlurMode: TopBarBlurMode = TopBarBlurMode.Gradient,
     queue: List<Song>,
     lyricsAlign: String = "center",
     springLyrics: Boolean = false,
@@ -173,12 +179,13 @@ fun PlayerDetailScreen(
                 // 进入歌词页时随进度平滑淡出，避免中途突然消失
                 .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
         )
-        // 顶部安全区实心填充 + 下滑整体收起的手势区
+        // 顶部安全区实心填充 + 下滑整体收起的手势区（可选毛玻璃：先模糊再遮罩）
         Spacer(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(statusBarPadding.calculateTopPadding() + 88.dp)
+                .topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)
                 .background(
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.surface,
@@ -313,6 +320,7 @@ fun PlayerDetailScreen(
                             positionMs = state.positionMs,
                             showTranslation = translationOn,
                             offsetMs = lyricsOffsetMs,
+                            progressiveBlur = true,
                             align = when (lyricsAlign) {
                                 "start" -> LyricsAlign.Start
                                 "end" -> LyricsAlign.End

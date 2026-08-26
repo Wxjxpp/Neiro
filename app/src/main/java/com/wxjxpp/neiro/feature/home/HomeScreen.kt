@@ -61,10 +61,14 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.core.model.SongSortField
+import com.wxjxpp.neiro.ui.components.AlphabetSideBar
+import com.wxjxpp.neiro.ui.components.DraggableIndicatorBall
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
 import kotlinx.coroutines.launch
@@ -92,6 +96,8 @@ fun HomeScreen(
     /** 当前正在播放的歌曲 id（用于高亮与"定位当前播放"）。 */
     currentPlayingId: String? = null,
     topBar: @Composable () -> Unit = {},
+    /** 歌曲排序字段：仅 Title（首字母）时启用字母索引侧边栏。 */
+    sortField: SongSortField = SongSortField.Title,
     onRefresh: () -> Unit,
     onSongClick: (Song) -> Unit,
     onSongLongPress: (Song) -> Unit,
@@ -154,8 +160,34 @@ fun HomeScreen(
                 }
             }
         }
-        // 悬浮操作组：回顶 + 定位当前播放（右侧，抬高避开播放栏）
+        // 字母索引侧边栏：仅首字母排序且非多选态时启用；点击/滑动定位对应字母首曲
         val scope = rememberCoroutineScope()
+        val alphabetActive = sortField == SongSortField.Title && selectedIds.isEmpty()
+        var activeChar by remember { mutableStateOf<Char?>(null) }
+        if (alphabetActive) {
+            val charIndices = remember(songs) {
+                buildMap {
+                    songs.forEachIndexed { idx, s ->
+                        val c = com.wxjxpp.neiro.ui.components.initialOf(s.title)
+                        if (!containsKey(c)) put(c, idx)
+                    }
+                }
+            }
+            AlphabetSideBar(
+                activeChar = activeChar,
+                onSelect = { c ->
+                    activeChar = c
+                    charIndices[c]?.let { idx ->
+                        scope.launch { listState.scrollToItem(idx) }
+                    }
+                },
+                onDragState = { dragging -> if (!dragging) activeChar = null },
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 2.dp),
+            )
+        }
+        // 悬浮操作组：回顶 + 定位当前播放（右侧，抬高避开播放栏）
         com.wxjxpp.neiro.ui.components.ScrollActions(
             listState = listState,
             modifier = Modifier
@@ -171,6 +203,8 @@ fun HomeScreen(
                 if (index >= 0) scope.launch { listState.animateScrollToItem(index) }
             },
         )
+        // 可拖拽指示小球：触摸侧边栏时显示当前字母，松手 Spring 吸附屏幕边缘
+        DraggableIndicatorBall(label = activeChar, visible = activeChar != null)
         }
     }
 

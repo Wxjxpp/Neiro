@@ -356,6 +356,11 @@ fun MusicPlayerApp(container: AppContainer) {
                         showTranslation = uiState.showTranslation,
                         lyricsOffsetMs = uiState.lyricsOffsetMs,
                         ambientGlow = uiState.ambientGlow,
+                        topBarBlurEnabled = uiState.topBarBlurEnabled,
+                        topBarBlurMode = when (uiState.topBarBlurMode) {
+                            "mask" -> com.wxjxpp.neiro.ui.components.TopBarBlurMode.Mask
+                            else -> com.wxjxpp.neiro.ui.components.TopBarBlurMode.Gradient
+                        },
                         queue = queue,
                         lyricsAlign = uiState.lyricsAlign,
                         springLyrics = uiState.labSpringLyrics,
@@ -548,6 +553,7 @@ private fun RouteContent(
                         isRefreshing = uiState.isRefreshing,
                         selectedIds = uiState.selectedSongIds,
                         currentPlayingId = currentPlayingId,
+                        sortField = uiState.songSortField,
                         topBar = {
                             if (inSelectionModeCompat(uiState)) {
                                 SelectionTopBar(
@@ -693,6 +699,8 @@ private fun RouteContent(
                     pauseOnHeadphoneDisconnect = uiState.pauseOnHeadphoneDisconnect,
                     pauseOnAudioFocusLoss = uiState.pauseOnAudioFocusLoss,
                     ambientGlow = uiState.ambientGlow,
+                    topBarBlurEnabled = uiState.topBarBlurEnabled,
+                    topBarBlurModeStr = uiState.topBarBlurMode,
                     onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
                     onShowTranslationChange = viewModel::setShowTranslation,
                     onShuffleModeChange = viewModel::setShuffleMode,
@@ -701,6 +709,8 @@ private fun RouteContent(
                     onPauseOnHeadphoneDisconnectChange = viewModel::setPauseOnHeadphoneDisconnect,
                     onPauseOnAudioFocusLossChange = viewModel::setPauseOnAudioFocusLoss,
                     onAmbientGlowChange = viewModel::setAmbientGlow,
+                    onTopBarBlurEnabledChange = viewModel::setTopBarBlur,
+                    onTopBarBlurModeChange = viewModel::setTopBarBlurMode,
                     lyricsAlign = uiState.lyricsAlign,
                     lyricsFontScale = uiState.lyricsFontScale,
                     lyricsGapScale = uiState.lyricsGapScale,

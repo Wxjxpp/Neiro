@@ -47,6 +47,12 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
         val LyricsAlign = stringPreferencesKey("lyrics_align")
         val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
+
+        /** 顶栏毛玻璃模糊（可选）。 */
+        val TopBarBlur = booleanPreferencesKey("top_bar_blur")
+
+        /** 顶栏模糊模式：gradient / mask。 */
+        val TopBarBlurMode = stringPreferencesKey("top_bar_blur_mode")
         val LyricsFontScale = floatPreferencesKey("lyrics_font_scale")
         val LyricsGapScale = floatPreferencesKey("lyrics_gap_scale")
         val PureModeDefault = booleanPreferencesKey("pure_mode_default")
@@ -324,6 +330,18 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.LabSpringLyrics] ?: false }
     suspend fun setLabSpringLyrics(enabled: Boolean) {
         store.edit { it[Keys.LabSpringLyrics] = enabled }
+    }
+    /** 顶栏毛玻璃模糊（可选功能）。默认关。 */
+    fun observeTopBarBlur(): Flow<Boolean> =
+        store.data.map { it[Keys.TopBarBlur] ?: false }
+    suspend fun setTopBarBlur(enabled: Boolean) {
+        store.edit { it[Keys.TopBarBlur] = enabled }
+    }
+    /** 顶栏模糊模式：gradient / mask。默认渐变。 */
+    fun observeTopBarBlurMode(): Flow<String> =
+        store.data.map { it[Keys.TopBarBlurMode] ?: "gradient" }
+    suspend fun setTopBarBlurMode(mode: String) {
+        store.edit { it[Keys.TopBarBlurMode] = mode }
     }
 
 

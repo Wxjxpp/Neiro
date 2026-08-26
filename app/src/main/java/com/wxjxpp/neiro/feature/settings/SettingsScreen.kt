@@ -61,6 +61,8 @@ fun SettingsScreen(
     pauseOnHeadphoneDisconnect: Boolean = true,
     pauseOnAudioFocusLoss: Boolean = true,
     ambientGlow: Boolean = false,
+    topBarBlurEnabled: Boolean = false,
+    topBarBlurModeStr: String = "gradient",
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,
     onShuffleModeChange: (ShuffleMode) -> Unit,
@@ -69,6 +71,8 @@ fun SettingsScreen(
     onPauseOnHeadphoneDisconnectChange: (Boolean) -> Unit = {},
     onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
     onAmbientGlowChange: (Boolean) -> Unit = {},
+    onTopBarBlurEnabledChange: (Boolean) -> Unit = {},
+    onTopBarBlurModeChange: (String) -> Unit = {},
     lyricsAlign: String = "center",
     lyricsFontScale: Float = 1f,
     lyricsGapScale: Float = 1f,
@@ -416,6 +420,29 @@ fun SettingsScreen(
                         checked = ambientGlow,
                         onCheckedChange = onAmbientGlowChange,
                     )
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
+                    SwitchRow(
+                        title = "顶栏毛玻璃",
+                        subtitle = "播放页顶栏对下方内容做模糊衔接（可选，默认关）",
+                        checked = topBarBlurEnabled,
+                        onCheckedChange = onTopBarBlurEnabledChange,
+                    )
+                    if (topBarBlurEnabled) {
+                        Text(
+                            text = "模糊模式",
+                            style = MaterialTheme.typography.titleSmall,
+                            modifier = Modifier.padding(bottom = AppTheme.dimens.spaceXs),
+                        )
+                        ConnectedChoiceGroup(
+                            options = listOf("渐变模糊", "遮罩模糊"),
+                            selectedIndex = if (topBarBlurModeStr == "mask") 1 else 0,
+                            onSelect = { index ->
+                                onTopBarBlurModeChange(if (index == 1) "mask" else "gradient")
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     SwitchRow(
                         title = "歌词弹簧动效",
                         subtitle = "切句与翻译切换时使用带回弹的弹簧动画，更加灵动",

@@ -1,6 +1,7 @@
 package com.wxjxpp.neiro.feature.player
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
+import android.os.Build
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.interaction.collectIsDraggedAsState
@@ -33,7 +34,9 @@ import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -67,6 +70,8 @@ fun LyricsPane(
     springAnimation: Boolean = false,
     fontScale: Float = 1f,
     gapScale: Float = 1f,
+    /** 距聚焦行渐进模糊：越近越清晰（RenderEffect；API<31 自动跳过）。 */
+    progressiveBlur: Boolean = false,
     /** 当前行聚焦位（视口高度比例，从上往下）。 */
     focusFraction: Float = 0.33f,
     onSeekTo: (Long) -> Unit = {},
@@ -158,6 +163,7 @@ fun LyricsPane(
                 positionMs = positionMs - effectiveOffset,
                 showTranslation = showTranslation,
                 fontScale = fontScale,
+                progressiveBlur = progressiveBlur,
                 springAnimation = springAnimation,
                 onClick = { onSeekTo(line.startMs + effectiveOffset + 1) },
             )
@@ -175,6 +181,7 @@ private fun LyricRow(
     positionMs: Long,
     showTranslation: Boolean,
     fontScale: Float,
+    progressiveBlur: Boolean,
     springAnimation: Boolean,
     onClick: () -> Unit,
 ) {
@@ -207,12 +214,32 @@ private fun LyricRow(
         },
         label = "lyricScale",
     )
-    // 非当前行透明度更低，与重度模糊叠加出"退后"的层次
+    // 非当前行透明度更低，与渐进模糊叠加出"退后"的层次
+    // 渐进模糊（用户需求）：越靠近聚焦行模糊越小；|d|=1 起步，每远一行 +6px，
+    // 上限 18px。RenderEffect 链路：graphicsLayer 在外、drawWithContent 在内；
+    // API<31 无 RenderEffect，自动退回纯透明度分层（不降级 BlurMaskFilter——
+    // 每行一个软件模糊层代价过高）
+    val distanceBlurPx = if (progressiveBlur && !isActive && abs(distance) >= 1) {
+        (4f + 6f * (abs(distance) - 1)).coerceAtMost(18f)
+    } else {
+        0f
+    }
+    val rowModifier = if (distanceBlurPx > 0f && Build.VERSION.SDK_INT >= 31) {
+        val effect = android.graphics.RenderEffect.createBlurEffect(
+            distanceBlurPx, distanceBlurPx, android.graphics.Shader.TileMode.CLAMP,
+        ).asComposeRenderEffect()
+        Modifier.graphicsLayer {
+            scaleX = scale; scaleY = scale
+            renderEffect = effect
+        }
+    } else {
+        Modifier.graphicsLayer(scaleX = scale, scaleY = scale)
+    }
 
     Column(
         modifier = Modifier
             .fillMaxWidth()
-            .graphicsLayer(scaleX = scale, scaleY = scale)
+            .then(rowModifier)
             .clickable(onClick = onClick),
         horizontalAlignment = when (align) {
             LyricsAlign.Start -> Alignment.Start

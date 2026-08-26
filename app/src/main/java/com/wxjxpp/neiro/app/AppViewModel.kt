@@ -89,6 +89,10 @@ data class ShellUiState(
     val pauseOnAudioFocusLoss: Boolean = true,
     /** 播放页动态流光背景。 */
     val ambientGlow: Boolean = false,
+    /** 顶栏毛玻璃模糊（可选，默认关）。 */
+    val topBarBlurEnabled: Boolean = false,
+    /** 顶栏模糊模式：gradient / mask。 */
+    val topBarBlurMode: String = "gradient",
 
     /** 歌词对齐：start / center / end。 */
     val lyricsAlign: String = "center",
@@ -254,6 +258,12 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeAmbientGlow()
             .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeTopBarBlur()
+            .onEach { enabled -> _uiState.update { it.copy(topBarBlurEnabled = enabled) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeTopBarBlurMode()
+            .onEach { mode -> _uiState.update { it.copy(topBarBlurMode = mode) } }
             .launchIn(viewModelScope)
         container.appSettings.observeLyricsAlign()
             .onEach { align -> _uiState.update { it.copy(lyricsAlign = align) } }
@@ -508,6 +518,12 @@ class AppViewModel(
 
     fun setAmbientGlow(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setAmbientGlow(enabled) }
+    }
+    fun setTopBarBlur(enabled: Boolean) {
+        viewModelScope.launch { container.appSettings.setTopBarBlur(enabled) }
+    }
+    fun setTopBarBlurMode(mode: String) {
+        viewModelScope.launch { container.appSettings.setTopBarBlurMode(mode) }
     }
 
     fun setLyricsAlign(align: String) {
