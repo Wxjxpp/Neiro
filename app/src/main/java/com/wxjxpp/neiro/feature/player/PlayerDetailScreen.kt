@@ -46,6 +46,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -61,6 +62,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -167,6 +169,68 @@ fun PlayerDetailScreen(
     // 歌词模式判定阈值（内容切换在过半时发生，避免中途闪烁）
     val lyricsMode = lyricPhase > 0.5f
 
+    // ---- 沉浸式配色：真实封面取色 → 全屏深色画布（参考 Salt Player，与主题明暗无关）----
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val coverBitmapForPalette by androidx.compose.runtime.produceState<android.graphics.Bitmap?>(
+        initialValue = null,
+        key1 = song.coverUri,
+    ) {
+        value = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            runCatching {
+                val uri = song.coverUri?.takeIf { it.isNotBlank() }
+                    ?: return@runCatching null
+                val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 24 }
+                when {
+                    uri.startsWith("content://") ->
+                        context.contentResolver.openInputStream(android.net.Uri.parse(uri))
+                            ?.use { android.graphics.BitmapFactory.decodeStream(it, null, opts) }
+                    // 网络歌曲封面走 Coil（原实现只支持本地路径，在线歌加载失败）
+                    uri.startsWith("http") -> {
+                        val req = coil.request.ImageRequest.Builder(context)
+                            .data(uri)
+                            .allowHardware(false)
+                            .build()
+                        (coil.Coil.imageLoader(context).execute(req) as? coil.request.SuccessResult)
+                            ?.let { it.drawable as? android.graphics.drawable.BitmapDrawable }
+                            ?.bitmap
+                    }
+                    else -> android.graphics.BitmapFactory.decodeFile(uri, opts)
+                }
+            }.getOrNull()
+        }
+    }
+    // 从缩略图提取主色混入深色画布；取色未就绪时先用中性深底，不闪白
+    val immersiveScheme = remember(coverBitmapForPalette, song.id) {
+        var dark = darkColorScheme(
+            primary = Color(song.coverSeedColor),
+            onPrimary = Color.White,
+            background = Color(0xFF101014),
+            onBackground = Color.White.copy(alpha = 0.92f),
+            surface = Color(0xFF16161B),
+            onSurface = Color.White.copy(alpha = 0.90f),
+            onSurfaceVariant = Color.White.copy(alpha = 0.62f),
+            surfaceVariant = Color.White.copy(alpha = 0.08f),
+            outline = Color.White.copy(alpha = 0.35f),
+        )
+        coverBitmapForPalette?.let { bmp ->
+            val c = bmp.extractDominantArgb().takeIf { it != 0 } ?: return@let
+            dark = dark.copy(
+                primary = Color(c),
+                background = Color(
+                    androidx.core.graphics.ColorUtils.blendARGB(
+                        Color.Black.toArgb(), c, 0.38f,
+                    ),
+                ),
+                surface = Color(
+                    androidx.core.graphics.ColorUtils.blendARGB(
+                        Color.Black.toArgb(), c, 0.24f,
+                    ),
+                ),
+            )
+        }
+        dark
+    }
+    androidx.compose.material3.MaterialTheme(colorScheme = immersiveScheme) {
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
@@ -735,8 +799,43 @@ private fun CurrentLineBanner(
             }
         }
     }
+    }
 }
-
+/** 从缩略图粗提主色：跳过近黑/近白像素，按饱和度加权平均（Salt Player 风格沉浸底色）。 */
+private fun android.graphics.Bitmap.extractDominantArgb(): Int {
+    val step = maxOf(1, width / 32)
+    var r = 0L
+    var g = 0L
+    var b = 0L
+    var wsum = 0L
+    var y = 0
+    while (y < height) {
+        var x = 0
+        while (x < width) {
+            val px = getPixel(x, y)
+            val pr = (px shr 16) and 0xFF
+            val pg = (px shr 8) and 0xFF
+            val pb = px and 0xFF
+            val mx = maxOf(pr, pg, pb)
+            val sat = mx - minOf(pr, pg, pb)
+            if (mx > 28 && mx < 236) {
+                val w = (sat * sat + 64).toLong()
+                r += pr * w
+                g += pg * w
+                b += pb * w
+                wsum += w
+            }
+            x += step
+        }
+        y += step
+    }
+    if (wsum == 0L) return 0
+    return android.graphics.Color.rgb(
+        (r / wsum).toInt(),
+        (g / wsum).toInt(),
+        (b / wsum).toInt(),
+    )
+}
 /** 歌词偏移调节面板：紧凑版，±50ms。 */
 @Composable
 private fun LyricsOffsetPanel(

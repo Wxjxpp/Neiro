@@ -51,11 +51,21 @@ fun AmbientGlowBackground(
             runCatching {
                 val opts = android.graphics.BitmapFactory.Options().apply { inSampleSize = 48 }
                 val uri = coverUri?.takeIf { it.isNotBlank() } ?: return@runCatching null
-                if (uri.startsWith("content://")) {
-                    context.contentResolver.openInputStream(android.net.Uri.parse(uri))
-                        ?.use { BitmapFactory.decodeStream(it, null, opts) }
-                } else {
-                    BitmapFactory.decodeFile(uri, opts)
+                when {
+                    uri.startsWith("content://") ->
+                        context.contentResolver.openInputStream(android.net.Uri.parse(uri))
+                            ?.use { BitmapFactory.decodeStream(it, null, opts) }
+                    // 网络歌曲封面走 Coil（原实现只支持本地路径，在线歌直接加载失败）
+                    uri.startsWith("http") -> {
+                        val request = coil.request.ImageRequest.Builder(context)
+                            .data(uri)
+                            .allowHardware(false)
+                            .build()
+                        (coil.Coil.imageLoader(context).execute(request)
+                            as? coil.request.SuccessResult)
+                            ?.drawable.let { it as? android.graphics.drawable.BitmapDrawable }?.bitmap
+                    }
+                    else -> BitmapFactory.decodeFile(uri, opts)
                 }?.asImageBitmap()
             }.getOrNull()
         }
