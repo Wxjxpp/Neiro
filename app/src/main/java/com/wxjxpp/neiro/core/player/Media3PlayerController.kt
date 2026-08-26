@@ -81,10 +81,18 @@ class Media3PlayerController(
         // 所以系统媒体通知一直没出现。
         runCatching {
             val intent = android.content.Intent(context, PlaybackService::class.java)
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
+            // 优先普通 startService：App 前台时合法且无 20 秒 startForeground 死线，
+            // 从根上规避 ForegroundServiceDidNotStartInTimeException；
+            // 后台场景系统会抛 IllegalStateException，此处回退 startForegroundService
+            // （服务端 onCreate 已有占位通知立即进前台兜底）。
+            try {
                 context.startService(intent)
+            } catch (e: IllegalStateException) {
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    throw e
+                }
             }
         }.onFailure {
             android.util.Log.w("Media3PlayerController", "启动播放前台服务失败", it)
