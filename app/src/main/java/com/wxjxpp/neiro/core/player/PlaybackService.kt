@@ -58,7 +58,7 @@ class PlaybackService : MediaSessionService() {
             // 立即 detach：满足"已调 startForeground"的系统要求、躲过超时崩溃，
             // 同时解除与占位通知的绑定——session 就位后 Media3 会用自己的
             // 媒体样式通知重新 startForeground，不会出现两条并存。
-            ServiceCompat.stopForeground(this, ServiceInfo.STOP_FOREGROUND_DETACH)
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
         }
     }
 
