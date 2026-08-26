@@ -173,11 +173,6 @@ object DownloadProgressNotifier {
             }
         }
     }
-
-    companion object {
-        const val ACTION_CANCEL_DOWNLOAD = "com.wxjxpp.neiro.action.CANCEL_DOWNLOAD"
-        const val EXTRA_CANCEL_SONG_ID = "songId"
-    }
 }
 
 object DownloadNotifier {
