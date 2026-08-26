@@ -524,7 +524,11 @@ fun KaraokeLineText(
             val density = LocalDensity.current
             val availableWidthPx = with(density) { maxWidth.toPx() }
 
-            val textStyle = remember(line is KaraokeLine.AccompanimentKaraokeLine) {
+            val textStyle = remember(
+                line is KaraokeLine.AccompanimentKaraokeLine,
+                normalLineTextStyle,
+                accompanimentLineTextStyle,
+            ) {
                 val baseStyle =
                     if (line is KaraokeLine.AccompanimentKaraokeLine) accompanimentLineTextStyle
                     else normalLineTextStyle

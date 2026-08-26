@@ -222,14 +222,15 @@ fun PlayerDetailScreen(
             val c = bmp.extractDominantArgb().takeIf { it != 0 } ?: return@let
             dark = dark.copy(
                 primary = Color(c),
+                // 提亮画布（用户反馈浅色模式下流光太暗）：混黑比例下调
                 background = Color(
                     androidx.core.graphics.ColorUtils.blendARGB(
-                        Color.Black.toArgb(), c, 0.38f,
+                        Color.Black.toArgb(), c, 0.55f,
                     ),
                 ),
                 surface = Color(
                     androidx.core.graphics.ColorUtils.blendARGB(
-                        Color.Black.toArgb(), c, 0.24f,
+                        Color.Black.toArgb(), c, 0.40f,
                     ),
                 ),
             )

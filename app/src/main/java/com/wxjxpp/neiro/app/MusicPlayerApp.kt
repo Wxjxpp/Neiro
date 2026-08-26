@@ -553,15 +553,19 @@ private fun RouteContent(
         AnimatedContent(
             targetState = route,
             transitionSpec = {
-                // Expr：搜索页相关跳转使用共享轴（X 轴）过渡，其余保持淡入淡出基线
+                // Expr：搜索页相关跳转使用共享轴（X 轴）过渡，方向遵循进/出语义——
+                // 进搜索：新页从右滑入、旧页向左退；关搜索：镜像反向（旧页向右退）
                 val searchRelated =
                     initialState == Destination.Search.route ||
                         targetState == Destination.Search.route
                 if (searchRelated) {
-                    slideInHorizontally(tween(320)) { it / 4 } +
-                        fadeIn(tween(280)) togetherWith
-                        slideOutHorizontally(tween(320)) { -it / 4 } +
-                        fadeOut(tween(240))
+                    if (targetState == Destination.Search.route) {
+                        (slideInHorizontally(tween(320)) { it / 4 } + fadeIn(tween(280))) togetherWith
+                            (slideOutHorizontally(tween(320)) { -it / 4 } + fadeOut(tween(240)))
+                    } else {
+                        (slideInHorizontally(tween(320)) { -it / 4 } + fadeIn(tween(280))) togetherWith
+                            (slideOutHorizontally(tween(320)) { it / 4 } + fadeOut(tween(240)))
+                    }
                 } else {
                     fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
                 }

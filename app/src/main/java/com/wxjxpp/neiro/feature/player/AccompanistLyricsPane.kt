@@ -44,6 +44,10 @@ fun AccompanistLyricsPane(
     }
     val listState = rememberLazyListState()
     val cs = MaterialTheme.colorScheme
+    // 关键桥接：库内部用 derivedStateOf 调用 currentPosition()，
+    // 必须让它读到 Compose State 才会在进度变化时重新求值——
+    // 直接捕获普通参数会导致闭包冻结，歌词不滚动不高亮不响应跳转
+    val positionState = androidx.compose.runtime.rememberUpdatedState(positionMs.toInt())
     val normalStyle = remember(cs.primary, fontScale) {
         TextStyle(
             fontSize = 30.sp * fontScale,
@@ -63,7 +67,7 @@ fun AccompanistLyricsPane(
     KaraokeLyricsView(
         listState = listState,
         lyrics = synced,
-        currentPosition = { positionMs.toInt() },
+        currentPosition = { positionState.value },
         onLineClicked = { line -> onSeekTo(line.start.toLong()) },
         onLinePressed = {},
         showTranslation = showTranslation,

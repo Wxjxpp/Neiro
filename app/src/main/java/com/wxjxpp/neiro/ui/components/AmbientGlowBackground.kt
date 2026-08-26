@@ -70,9 +70,9 @@ fun AmbientGlowBackground(
             }.getOrNull()
         }
     }
-    // 从 seed 色派生两个邻近色相光斑
-    val spotA = remember(baseColor) { baseColor.copy(alpha = 0.55f).shiftHue(24f) }
-    val spotB = remember(baseColor) { baseColor.copy(alpha = 0.45f).shiftHue(-32f) }
+    // 从 seed 色派生两个邻近色相光斑（提亮：alpha 上调，补偿浅色主题下的暗淡感）
+    val spotA = remember(baseColor) { baseColor.copy(alpha = 0.72f).shiftHue(24f) }
+    val spotB = remember(baseColor) { baseColor.copy(alpha = 0.62f).shiftHue(-32f) }
     val transition = rememberInfiniteTransition(label = "ambientGlow")
     // 光斑相位：周期长、错开，避免同步感
     val phase1 by transition.animateFloat(
@@ -120,13 +120,13 @@ fun AmbientGlowBackground(
             radius = maxOf(w, h) * 0.65f,
             color = spotB,
         )
-        // 第 3 层：上下暗角，保证控制区可读性
+        // 第 3 层：上下暗角收边（减淡：原 0.35/0.45 过重导致整体偏暗）
         drawRect(
             Brush.verticalGradient(
-                0f to Color.Black.copy(alpha = 0.35f),
+                0f to Color.Black.copy(alpha = 0.18f),
                 0.35f to Color.Transparent,
                 0.62f to Color.Transparent,
-                1f to Color.Black.copy(alpha = 0.45f),
+                1f to Color.Black.copy(alpha = 0.26f),
             )
         )
     }
