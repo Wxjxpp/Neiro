@@ -31,12 +31,14 @@ fun SongCover(
     size: Dp,
     radius: Dp,
     modifier: Modifier = Modifier,
+    fullQuality: Boolean = false,
 ) = SongCover(
     coverUri = song.coverUri,
     seedColor = song.coverSeedColor,
     size = size,
     radius = radius,
     modifier = modifier,
+    fullQuality = fullQuality,
 )
 
 @Composable

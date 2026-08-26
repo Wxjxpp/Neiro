@@ -56,10 +56,12 @@ class PlaybackService : MediaSessionService() {
 
     companion object {
         const val CHANNEL_ID = "playback"
-        /** 通知栏关闭动作。 */
-        const val ACTION_STOP = "com.wxjxpp.neiro.action.STOP_PLAYBACK"
     }
 }
+
+// Expr：下载进度取消动作（Kotlin object 内不允许 companion object，常量直接放顶层）
+const val ACTION_CANCEL_DOWNLOAD = "com.wxjxpp.neiro.action.CANCEL_DOWNLOAD"
+const val EXTRA_CANCEL_SONG_ID = "songId"
 
 /**
  * 下载进度通知工具：开始下载 / 完成时在通知栏留痕。
