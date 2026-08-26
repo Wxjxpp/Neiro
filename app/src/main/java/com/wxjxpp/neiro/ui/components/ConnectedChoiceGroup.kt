@@ -16,6 +16,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.ToggleButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -43,9 +44,11 @@ fun ConnectedChoiceGroup(
     modifier: Modifier = Modifier,
 ) {
     // 官方连通形状（组合上下文内解析）
-    val leadingShapes = ButtonGroupDefaults.connectedLeadingButtonShapes()
-    val middleShapes = ButtonGroupDefaults.connectedMiddleButtonShapes()
-    val trailingShapes = ButtonGroupDefaults.connectedTrailingButtonShapes()
+    // 注意必须 remember 固定实例：每次重组重建 ToggleButtonShapes 会重置
+    // ToggleButton 的形状动画（表现为选中项变方角，点按后动画走完才恢复圆角）
+    val leadingShapes = remember { ButtonGroupDefaults.connectedLeadingButtonShapes() }
+    val middleShapes = remember { ButtonGroupDefaults.connectedMiddleButtonShapes() }
+    val trailingShapes = remember { ButtonGroupDefaults.connectedTrailingButtonShapes() }
     Box(modifier.height(40.dp).horizontalScroll(rememberScrollState())) {
         ButtonGroup(
             overflowIndicator = { state ->

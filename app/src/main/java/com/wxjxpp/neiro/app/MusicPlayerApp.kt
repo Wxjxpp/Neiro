@@ -279,6 +279,13 @@ fun MusicPlayerApp(container: AppContainer) {
                             .fillMaxSize()
                             .background(MaterialTheme.colorScheme.background),
                     ) {
+                        // 底栏联动：字母索引拖球快移等页面手势请求播放栏下沉出屏/回归
+                        // provider 必须包住 RouteContent——原 bug 只包住播放栏，页面内读到空实现，下沉指令从未送达
+                        var bottomBarSunken by remember { mutableStateOf(false) }
+                        val barSink: (Boolean) -> Unit = { sunken -> bottomBarSunken = sunken }
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            com.wxjxpp.neiro.ui.components.LocalBottomBarSink provides barSink,
+                        ) {
                         RouteContent(
                             route = route,
                             container = container,
@@ -308,12 +315,6 @@ fun MusicPlayerApp(container: AppContainer) {
                             ),
                             modifier = Modifier.fillMaxSize(),
                         )
-                        // 底栏联动：字母索引拖球快移等页面手势请求播放栏下沉出屏/回归
-                        var bottomBarSunken by remember { mutableStateOf(false) }
-                        val barSink: (Boolean) -> Unit = { sunken -> bottomBarSunken = sunken }
-                        androidx.compose.runtime.CompositionLocalProvider(
-                            com.wxjxpp.neiro.ui.components.LocalBottomBarSink provides barSink,
-                        ) {
                         // 播放栏：floating=浮动样式；关闭开关后仍显示（底部贴合的紧凑条）
                         if (hasSong) {
                             val sinkOffset = with(density) { AppTheme.dimens.playerBarHeight.toPx() } +
