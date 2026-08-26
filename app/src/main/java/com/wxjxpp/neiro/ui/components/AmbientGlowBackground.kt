@@ -19,6 +19,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.platform.LocalContext
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
@@ -72,8 +73,16 @@ fun AmbientGlowBackground(
         }
     }
     // 从 seed 色派生两个邻近色相光斑（主题自适应强度：浅色鲜亮/暗色深沉）
-    val glowAlphaA = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) 0.55f else 0.85f
-    val glowAlphaB = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) 0.45f else 0.72f
+    // 主题判定必须留在 Composable 作用域——Canvas 的 draw lambda 不是 @Composable 上下文，
+    // 在里面读 MaterialTheme 会编译失败
+    val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
+    val glowAlphaA = if (isDarkTheme) 0.55f else 0.85f
+    val glowAlphaB = if (isDarkTheme) 0.45f else 0.72f
+    val glowBlend = if (isDarkTheme) {
+        androidx.compose.ui.graphics.BlendMode.Plus
+    } else {
+        androidx.compose.ui.graphics.BlendMode.SrcOver
+    }
     val spotA = remember(baseColor, glowAlphaA) { baseColor.copy(alpha = glowAlphaA).shiftHue(24f) }
     val spotB = remember(baseColor, glowAlphaB) { baseColor.copy(alpha = glowAlphaB).shiftHue(-32f) }
     val transition = rememberInfiniteTransition(label = "ambientGlow")
@@ -109,11 +118,7 @@ fun AmbientGlowBackground(
             )
         }
         // 第 2 层：两个大光斑缓慢漂移（李萨如轨迹）——Plus 混合让光斑在暗底上发亮流动
-        val glowBlend = if (MaterialTheme.colorScheme.surface.luminance() < 0.5f) {
-            androidx.compose.ui.graphics.BlendMode.Plus
-        } else {
-            androidx.compose.ui.graphics.BlendMode.SrcOver
-        }
+        //（glowBlend 已在 Composable 作用域预算完毕）
         drawSpot(
             center = Offset(
                 x = w * (0.5f + 0.38f * cos(phase1)),
