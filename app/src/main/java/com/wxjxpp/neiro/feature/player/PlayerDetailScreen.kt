@@ -711,8 +711,8 @@ fun PlayerDetailScreen(
             },
         )
     }
+    }
 }
-
 /** 音质档位的短标签。 */
 internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.Low -> "低"
@@ -798,7 +798,6 @@ private fun CurrentLineBanner(
                 }
             }
         }
-    }
     }
 }
 /** 从缩略图粗提主色：跳过近黑/近白像素，按饱和度加权平均（Salt Player 风格沉浸底色）。 */
