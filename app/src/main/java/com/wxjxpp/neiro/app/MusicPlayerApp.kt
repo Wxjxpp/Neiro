@@ -555,8 +555,8 @@ private fun RouteContent(
             transitionSpec = {
                 // Expr：搜索页相关跳转使用共享轴（X 轴）过渡，其余保持淡入淡出基线
                 val searchRelated =
-                    initialState.route == Destination.Search.route ||
-                        targetState.route == Destination.Search.route
+                    initialState == Destination.Search.route ||
+                        targetState == Destination.Search.route
                 if (searchRelated) {
                     slideInHorizontally(tween(320)) { it / 4 } +
                         fadeIn(tween(280)) togetherWith
