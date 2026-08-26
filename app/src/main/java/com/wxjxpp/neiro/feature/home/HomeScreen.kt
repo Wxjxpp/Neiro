@@ -52,6 +52,8 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -60,6 +62,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.rememberGraphicsLayer
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,9 +71,11 @@ import androidx.compose.ui.unit.dp
 import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.SongSortField
+import com.wxjxpp.neiro.ui.components.AlphabetIndicatorBall
 import com.wxjxpp.neiro.ui.components.AlphabetSideBar
-import com.wxjxpp.neiro.ui.components.DraggableIndicatorBall
+import com.wxjxpp.neiro.ui.components.GlassFadeBand
 import com.wxjxpp.neiro.ui.components.SongCover
+import com.wxjxpp.neiro.ui.components.captureTo
 import com.wxjxpp.neiro.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import java.io.File
@@ -98,6 +104,8 @@ fun HomeScreen(
     topBar: @Composable () -> Unit = {},
     /** 歌曲排序字段：仅 Title（首字母）时启用字母索引侧边栏。 */
     sortField: SongSortField = SongSortField.Title,
+    /** 顶栏下缘毛玻璃衔接带开关（设置页可控，默认关）。 */
+    topBarBlurEnabled: Boolean = false,
     onRefresh: () -> Unit,
     onSongClick: (Song) -> Unit,
     onSongLongPress: (Song) -> Unit,
@@ -111,6 +119,10 @@ fun HomeScreen(
     val inSelectionMode = selectedIds.isNotEmpty()
     // 一键回顶 / 定位当前播放
     val listState = rememberLazyListState()
+    // 实时毛玻璃：列表内容录进 GraphicsLayer，供顶栏下缘衔接带重放模糊
+    val capturedLayer = rememberGraphicsLayer()
+    // 内容区高度（指示球纵向定位用）
+    var boxH by remember { mutableFloatStateOf(0f) }
     // 歌曲详情面板 & 删除确认
     var detailSong by remember { mutableStateOf<Song?>(null) }
     var confirmDelete by remember { mutableStateOf<Song?>(null) }
@@ -128,11 +140,17 @@ fun HomeScreen(
     }
         Column(modifier = modifier.fillMaxSize()) {
         topBar()
-        Box(modifier = Modifier.fillMaxSize()) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .onGloballyPositioned { boxH = it.size.height.toFloat() },
+        ) {
         PullToRefreshBox(
             isRefreshing = isRefreshing,
             onRefresh = onRefresh,
-            modifier = Modifier.fillMaxSize(),
+            modifier = Modifier
+                .fillMaxSize()
+                .captureTo(capturedLayer),
             state = refreshState,
             indicator = {
                 PullToRefreshDefaults.LoadingIndicator(
@@ -160,32 +178,59 @@ fun HomeScreen(
                 }
             }
         }
-        // 字母索引侧边栏：仅首字母排序且非多选态时启用；点击/滑动定位对应字母首曲
+        // 字母索引侧边栏：仅首字母排序且非多选态时启用。
+        // 单手势模型：按住即出球跟手、纵向映射列表快滚；松手球消失并联动底栏回归
         val scope = rememberCoroutineScope()
+        // 顶栏下缘毛玻璃衔接带：重放列表画面并模糊，消除顶栏硬边（可选功能）
+        if (topBarBlurEnabled) {
+            GlassFadeBand(
+                captured = capturedLayer,
+                modifier = Modifier.align(Alignment.TopCenter),
+            )
+        }
         val alphabetActive = sortField == SongSortField.Title && selectedIds.isEmpty()
         var activeChar by remember { mutableStateOf<Char?>(null) }
+        var barProgress by remember { mutableFloatStateOf(0f) }
+        var lastFastIndex by remember { mutableIntStateOf(-1) }
+        val density = androidx.compose.ui.platform.LocalDensity.current
+        val ballSizePx = with(density) { 52.dp.toPx() }
+        val ballOffsetXpx = with(density) { 42.dp.toPx() }
         if (alphabetActive) {
-            val charIndices = remember(songs) {
-                buildMap {
-                    songs.forEachIndexed { idx, s ->
-                        val c = com.wxjxpp.neiro.ui.components.initialOf(s.title)
-                        if (!containsKey(c)) put(c, idx)
-                    }
-                }
-            }
             AlphabetSideBar(
                 activeChar = activeChar,
-                onSelect = { c ->
-                    activeChar = c
-                    charIndices[c]?.let { idx ->
-                        scope.launch { listState.scrollToItem(idx) }
+                onSelect = { c -> activeChar = c },
+                onProgress = { p ->
+                    barProgress = p
+                    // 拖球快移：纵向位置直接映射目标曲索引，跳转远比逐格滚快
+                    if (songs.isNotEmpty()) {
+                        val target = (p * (songs.size - 1)).toInt().coerceIn(0, songs.size - 1)
+                        if (target != lastFastIndex) {
+                            lastFastIndex = target
+                            scope.launch { listState.scrollToItem(target) }
+                        }
                     }
                 },
-                onDragState = { dragging -> if (!dragging) activeChar = null },
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 2.dp),
+                onTouch = { touched ->
+                    com.wxjxpp.neiro.ui.components.LocalBottomBarSink.current(touched)
+                    if (!touched) activeChar = null
+                },
+                modifier = Modifier.align(Alignment.CenterEnd),
             )
+            // 指示球：贴在侧边栏左侧，纵向跟随手指比例
+            if (activeChar != null) {
+                AlphabetIndicatorBall(
+                    label = activeChar,
+                    progress = barProgress,
+                    visible = activeChar != null,
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .graphicsLayer {
+                            translationX = -ballOffsetXpx
+                            translationY =
+                                barProgress * (boxH - ballSizePx) - size.height / 2f
+                        },
+                )
+            }
         }
         // 悬浮操作组：回顶 + 定位当前播放（右侧，抬高避开播放栏）
         com.wxjxpp.neiro.ui.components.ScrollActions(

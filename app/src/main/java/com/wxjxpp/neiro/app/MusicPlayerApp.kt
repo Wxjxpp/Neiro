@@ -308,25 +308,43 @@ fun MusicPlayerApp(container: AppContainer) {
                             ),
                             modifier = Modifier.fillMaxSize(),
                         )
+                        // 底栏联动：字母索引拖球快移等页面手势请求播放栏下沉出屏/回归
+                        var bottomBarSunken by remember { mutableStateOf(false) }
+                        val barSink: (Boolean) -> Unit = { sunken -> bottomBarSunken = sunken }
+                        androidx.compose.runtime.CompositionLocalProvider(
+                            com.wxjxpp.neiro.ui.components.LocalBottomBarSink provides barSink,
+                        ) {
                         // 播放栏：floating=浮动样式；关闭开关后仍显示（底部贴合的紧凑条）
                         if (hasSong) {
+                            val sinkOffset = with(density) { AppTheme.dimens.playerBarHeight.toPx() } +
+                                with(density) { AppTheme.dimens.floatingBarBottomMargin.toPx() }
                             androidx.compose.animation.AnimatedVisibility(
                                 visible = !playerOpen,
                                 enter = slideInVertically(tween(280)) { it } + fadeIn(tween(280)),
                                 exit = slideOutVertically(tween(200)) { it } + fadeOut(tween(150)),
                                 modifier = Modifier.align(Alignment.BottomCenter),
                             ) {
-                                PlayerBar(
-                                    state = playback,
-                                    floating = uiState.floatingPlayerBar,
-                                    onExpand = { animateTo(1f) },
-                                    onTogglePlay = viewModel::togglePlay,
-                                    onNext = viewModel::next,
-                                    onOpenQueue = { showQueueSheet = true },
-                                    onDragProgress = { deltaPx -> onDragDelta(deltaPx) },
-                                    onDragEnd = { settleAfterDrag() },
-                                )
+                                androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = if (bottomBarSunken) 1f else 0f,
+                                    animationSpec = tween(220),
+                                    label = "barSink",
+                                ).let { sink ->
+                                    PlayerBar(
+                                        state = playback,
+                                        floating = uiState.floatingPlayerBar,
+                                        onExpand = { animateTo(1f) },
+                                        onTogglePlay = viewModel::togglePlay,
+                                        onNext = viewModel::next,
+                                        onOpenQueue = { showQueueSheet = true },
+                                        onDragProgress = { deltaPx -> onDragDelta(deltaPx) },
+                                        onDragEnd = { settleAfterDrag() },
+                                        modifier = Modifier.graphicsLayer {
+                                            translationY = sink.value * sinkOffset
+                                        },
+                                    )
+                                }
                             }
+                        }
                         }
                         // 顶部错误横幅（安全区内，可关闭 + 上滑关闭）
                         ErrorBanner(
@@ -554,6 +572,7 @@ private fun RouteContent(
                         selectedIds = uiState.selectedSongIds,
                         currentPlayingId = currentPlayingId,
                         sortField = uiState.songSortField,
+                        topBarBlurEnabled = uiState.topBarBlurEnabled,
                         topBar = {
                             if (inSelectionModeCompat(uiState)) {
                                 SelectionTopBar(

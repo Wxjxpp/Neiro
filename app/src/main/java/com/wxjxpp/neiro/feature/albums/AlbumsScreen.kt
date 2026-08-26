@@ -336,14 +336,14 @@ private fun AlbumDetailList(
             HorizontalDivider()
         }
         }
+        AlbumCollapsingHeader(
+            entry = album,
+            songCount = merged.size,
+            sharedKey = sharedKey,
+            animScope = animScope,
+            progress = progress,
+        )
     }
-    AlbumCollapsingHeader(
-        entry = album,
-        songCount = merged.size,
-        sharedKey = sharedKey,
-        animScope = animScope,
-        progress = progress,
-    )
 }
 
 /** 专辑详情头部：滚动时封面从大图收缩为顶部胶囊，标题上滑合并（用户指定交互）。 */

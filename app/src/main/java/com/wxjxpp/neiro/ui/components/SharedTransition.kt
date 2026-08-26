@@ -24,3 +24,10 @@ import androidx.compose.runtime.compositionLocalOf
  * ```
  */
 val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
+
+/**
+ * 底栏下沉联动通道：页面手势（如字母索引拖球快移）调用
+ * `LocalBottomBarSink.current(true/false)` 请求播放栏下沉出屏/回归。
+ * 默认空实现——未接线的预览/独立场景安全。
+ */
+val LocalBottomBarSink = compositionLocalOf<(Boolean) -> Unit> { }

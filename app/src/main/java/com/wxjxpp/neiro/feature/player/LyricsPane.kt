@@ -72,8 +72,8 @@ fun LyricsPane(
     gapScale: Float = 1f,
     /** 距聚焦行渐进模糊：越近越清晰（RenderEffect；API<31 自动跳过）。 */
     progressiveBlur: Boolean = false,
-    /** 当前行聚焦位（视口高度比例，从上往下）。 */
-    focusFraction: Float = 0.33f,
+    /** 当前行聚焦位（视口高度比例，从上往下）。默认贴近顶部（用户指定上移80%）。 */
+    focusFraction: Float = 0.07f,
     onSeekTo: (Long) -> Unit = {},
 ) {
     if (lyrics.isEmpty) return

@@ -8,6 +8,9 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -18,11 +21,16 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.GraphicsLayer
 import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.drawscope.ContentDrawScope
 import androidx.compose.ui.graphics.drawscope.DrawScope
-import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.layer.drawLayer
+import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -216,5 +224,60 @@ private fun DrawScope.drawFluidCircles(colors: List<Color>, phases: List<Float>)
             radius = r,
             center = Offset(cx, cy),
         )
+    }
+}
+
+// ============================================================================
+// 真·实时毛玻璃：把列表内容录进 GraphicsLayer，顶栏下缘的衔接带重绘该画面
+// 并施加 RenderEffect 模糊 + 向下渐隐——内容从顶栏下滚过时即被模糊衔接。
+// 需要 Compose UI 1.7+（rememberGraphicsLayer / GraphicsLayer.record）；
+// API<31 无 RenderEffect 时自动跳过模糊、仅保留渐隐遮罩。
+// ============================================================================
+
+/** 录制修饰符：内容绘制的同时录进 [layer]，供其他绘制位置重放。 */
+fun Modifier.captureTo(layer: GraphicsLayer): Modifier =
+    drawWithContent {
+        layer.record(size = size) { this@drawWithContent.drawContent() }
+        drawContent()
+    }
+
+/**
+ * 顶栏下缘毛玻璃衔接带：重绘被录制的列表画面并整体高斯模糊，
+ * 底部以垂直渐隐融入页面，消除硬边。
+ *
+ * @param captured 录制列表内容的 [GraphicsLayer]（由 [captureTo] 填充）。
+ * @param bandHeight 衔接带高度；模糊带内可见的是列表顶部刚滚过的内容。
+ */
+@Composable
+fun GlassFadeBand(
+    captured: GraphicsLayer?,
+    modifier: Modifier = Modifier,
+    bandHeight: androidx.compose.ui.unit.Dp = 48.dp,
+) {
+    if (captured == null || Build.VERSION.SDK_INT < 31) return
+    Canvas(
+        modifier = modifier
+            .fillMaxWidth()
+            .height(bandHeight)
+            // 外层 graphicsLayer 统一模糊（先内容/遮罩、后整体模糊）
+            .graphicsLayer {
+                renderEffect = android.graphics.RenderEffect
+                    .createBlurEffect(24f, 24f, android.graphics.Shader.TileMode.CLAMP)
+                    .asComposeRenderEffect()
+            },
+    ) {
+        clipRect(0f, 0f, size.width, size.height) {
+            // 重放列表画面：把 band 对准列表最底部 bandHeight 区域
+            translate(left = 0f, top = -size.height) {
+                drawLayer(captured)
+            }
+            // 向下渐隐融入页面，消除硬边
+            drawIntoCanvas { canvas ->
+                canvas.nativeCanvas.drawRect(
+                    android.graphics.RectF(0f, 0f, size.width, size.height),
+                    fadeMaskPaint(TopBarBlurMode.Gradient, size.height * 0.25f, size.height),
+                )
+            }
+        }
     }
 }
