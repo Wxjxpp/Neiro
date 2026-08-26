@@ -79,6 +79,8 @@ import com.wxjxpp.neiro.ui.components.AlphabetSideBar
 import com.wxjxpp.neiro.ui.components.GlassBarSurface
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.components.captureTo
+import dev.chrisbanes.haze.hazeSource
+import dev.chrisbanes.haze.rememberHazeState
 import com.wxjxpp.neiro.ui.theme.AppTheme
 import kotlinx.coroutines.launch
 import java.io.File
@@ -124,6 +126,8 @@ fun HomeScreen(
     val listState = rememberLazyListState()
     // 实时毛玻璃：列表内容录进 GraphicsLayer，供顶栏下缘衔接带重放模糊
     val capturedLayer = rememberGraphicsLayer()
+    // Expr：Haze 硬件加速模糊源（顶栏毛玻璃实验）
+    val hazeState = rememberHazeState()
     // 指示球定位：侧边栏在根坐标系中的位置与尺寸（AlphabetSideBar onGloballyPositioned 上报）
     // boxTop：本屏根 Box 在根坐标系中的 y——球 translationY 是 Box 相对量，
     // 用 (barTop - boxTop) 差值换算，免疫祖先层（Scaffold/横幅）的布局偏移
@@ -160,7 +164,9 @@ fun HomeScreen(
                     .fillMaxSize()
                     // 录制节点自带页面底色：重放时才是完整的"毛玻璃背后"画面
                     .background(MaterialTheme.colorScheme.background)
-                    .captureTo(capturedLayer),
+                    .captureTo(capturedLayer)
+                    // Expr：标记为 Haze 模糊源（顶栏实时采样此处内容）
+                    .hazeSource(hazeState),
                 state = refreshState,
                 indicator = {
                     PullToRefreshDefaults.LoadingIndicator(
@@ -199,6 +205,7 @@ fun HomeScreen(
         GlassBarSurface(
             captured = capturedLayer,
             enabled = topBarBlurEnabled,
+            hazeState = hazeState,
             modifier = Modifier.align(Alignment.TopCenter),
         ) {
             topBar()

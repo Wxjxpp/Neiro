@@ -19,6 +19,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -259,11 +263,45 @@ fun GlassBarSurface(
     captured: GraphicsLayer?,
     enabled: Boolean,
     modifier: Modifier = Modifier,
+    /** Expr 实验：Haze 硬件加速模糊源；null 时回退旧 RenderEffect 录制重放路径。 */
+    hazeState: HazeState? = null,
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Box(modifier.fillMaxWidth()) {
-        if (enabled && captured != null && Build.VERSION.SDK_INT >= 31) {
+        if (enabled && hazeState != null) {
+            // ---- Haze 硬件加速路径（Expr）：实时模糊背后滚过的内容 ----
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .hazeBlur(
+                        input = HazeInput.Sources(hazeState),
+                        style = HazeBlurStyle {
+                            blurRadius(24.dp)
+                            backgroundColor(cs.surface.copy(alpha = 0.30f))
+                        },
+                    ),
+            )
+            // 底缘渐隐：与清晰内容软衔接
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .drawWithCache {
+                        val h = size.height
+                        onDrawBehind {
+                            drawRect(
+                                Brush.verticalGradient(
+                                    0f to Color.Transparent,
+                                    0.72f to Color.Transparent,
+                                    1f to cs.surface,
+                                    startY = 0f,
+                                    endY = h,
+                                ),
+                            )
+                        }
+                    },
+            )
+        } else if (enabled && captured != null && Build.VERSION.SDK_INT >= 31) {
             Canvas(
                 modifier = Modifier
                     .matchParentSize()

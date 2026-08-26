@@ -15,7 +15,9 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
@@ -551,7 +553,18 @@ private fun RouteContent(
         AnimatedContent(
             targetState = route,
             transitionSpec = {
-                fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
+                // Expr：搜索页相关跳转使用共享轴（X 轴）过渡，其余保持淡入淡出基线
+                val searchRelated =
+                    initialState.route == Destination.Search.route ||
+                        targetState.route == Destination.Search.route
+                if (searchRelated) {
+                    slideInHorizontally(tween(320)) { it / 4 } +
+                        fadeIn(tween(280)) togetherWith
+                        slideOutHorizontally(tween(320)) { -it / 4 } +
+                        fadeOut(tween(240))
+                } else {
+                    fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
+                }
             },
             label = "rootRoute",
             modifier = modifier,

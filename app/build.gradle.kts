@@ -91,5 +91,10 @@ dependencies {
 
     // 封面加载
     implementation(libs.coil.compose)
+    // Haze 硬件加速毛玻璃（Expr 实验）
+    implementation(libs.haze)
+    implementation(libs.haze.blur)
+    // accompanist 歌词 core 的 KRC 元数据解码需要
+    implementation(libs.kotlinx.serialization.json)
     debugImplementation(libs.androidx.ui.tooling)
 }

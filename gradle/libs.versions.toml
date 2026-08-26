@@ -37,6 +37,10 @@ datastore = "1.2.1"
 quickjs = "3.2.3"
 # 封面图片加载
 coil = "2.7.0"
+# Haze 硬件加速模糊（顶栏/控制台毛玻璃，Expr 实验分支）
+haze = "2.0.0-beta01"
+# KugouKrcMetadataDecoder 需要（accompanist 歌词 core 源码依赖）
+kotlinxSerializationJson = "1.7.3"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -81,6 +85,10 @@ quickjs-wrapper = { group = "wang.harlon.quickjs", name = "wrapper-android", ver
 
 # Coil：专辑封面加载
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
+# Haze：Compose 硬件加速模糊（事实标准库）
+haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
+haze-blur = { group = "dev.chrisbanes.haze", name = "haze-blur", version.ref = "haze" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }

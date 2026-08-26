@@ -63,6 +63,10 @@ import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.toArgb
+import dev.chrisbanes.haze.HazeInput
+import dev.chrisbanes.haze.rememberHazeState
+import dev.chrisbanes.haze.blur.HazeBlurStyle
+import dev.chrisbanes.haze.blur.hazeBlur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
@@ -231,6 +235,9 @@ fun PlayerDetailScreen(
         dark
     }
     androidx.compose.material3.MaterialTheme(colorScheme = immersiveScheme) {
+    // Expr：Haze 硬件加速模糊源与开关（顶栏毛玻璃实验；Haze 内部自带低版本回退）
+    val topBarHaze = rememberHazeState()
+    val useTopBarHaze = topBarBlurEnabled
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
@@ -240,6 +247,8 @@ fun PlayerDetailScreen(
             enabled = ambientGlow,
             modifier = Modifier
                 .fillMaxSize()
+                // Expr：标记为 Haze 模糊源（顶栏实时采样流光画面）
+                .hazeSource(topBarHaze)
                 // 进入歌词页时随进度平滑淡出，避免中途突然消失
                 .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
         )
@@ -249,13 +258,26 @@ fun PlayerDetailScreen(
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(statusBarPadding.calculateTopPadding() + 88.dp)
-                .topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)
-                .background(
-                    Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.surface,
-                        0.82f to MaterialTheme.colorScheme.surface,
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                    ),
+                .then(
+                    // Expr：Haze 硬件加速模糊优先；关闭时走原 RenderEffect 路径
+                    if (useTopBarHaze) {
+                        Modifier.hazeBlur(
+                            input = HazeInput.Sources(topBarHaze),
+                            style = HazeBlurStyle {
+                                blurRadius(22.dp)
+                                backgroundColor(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f))
+                            },
+                        )
+                    } else {
+                        Modifier.topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)
+                            .background(
+                                Brush.verticalGradient(
+                                    0f to MaterialTheme.colorScheme.surface,
+                                    0.82f to MaterialTheme.colorScheme.surface,
+                                    1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                                ),
+                            )
+                    },
                 )
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
@@ -379,20 +401,15 @@ fun PlayerDetailScreen(
                             }
                         }
                     } else {
-                        LyricsPane(
+                        // Expr 实验：Accompanist 歌词渲染（黏滞弹簧行切换动画）
+                        AccompanistLyricsPane(
                             lyrics = lyrics,
                             positionMs = state.positionMs,
+                            title = song.title,
+                            artistName = song.artistName,
                             showTranslation = translationOn,
                             offsetMs = lyricsOffsetMs,
-                            progressiveBlur = true,
-                            align = when (lyricsAlign) {
-                                "start" -> LyricsAlign.Start
-                                "end" -> LyricsAlign.End
-                                else -> LyricsAlign.Center
-                            },
-                            springAnimation = springLyrics,
                             fontScale = lyricsFontScale,
-                            gapScale = lyricsGapScale,
                             onSeekTo = onSeekTo,
                             modifier = Modifier.fillMaxSize(),
                         )
