@@ -2,6 +2,7 @@ package com.wxjxpp.neiro.ui.components
 
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -19,9 +20,9 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.TileMode as AndroidTileMode
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -63,8 +64,8 @@ fun Modifier.topBarBlur(
     // 外层：统一高斯模糊（管线后置执行，保证先内容/遮罩、后整体模糊）
     val outer = if (useRenderEffect) {
         Modifier.graphicsLayer {
-            renderEffect = androidx.compose.ui.graphics.RenderEffect
-                .createBlurEffect(radius, radius, AndroidTileMode.CLAMP)
+            renderEffect = android.graphics.RenderEffect
+                .createBlurEffect(radius, radius, android.graphics.Shader.TileMode.CLAMP)
                 .asComposeRenderEffect()
         }
     } else {
@@ -154,10 +155,11 @@ fun FluidBackground(
         modifier = modifier
             .fillMaxSize()
             .then(if (useRenderEffect) {
-                // 整体柔化：graphicsLayer 挂 RenderEffect（用户给定框架）
+                // 整体柔化：graphicsLayer 挂 RenderEffect（用户给定框架：
+                // RenderEffect.createBlurEffect(40f, 40f, Shader.TileMode.CLAMP)）
                 Modifier.graphicsLayer {
-                    renderEffect = androidx.compose.ui.graphics.RenderEffect
-                        .createBlurEffect(40f, 40f, AndroidTileMode.CLAMP)
+                    renderEffect = android.graphics.RenderEffect
+                        .createBlurEffect(40f, 40f, android.graphics.Shader.TileMode.CLAMP)
                         .asComposeRenderEffect()
                 }
             } else {
