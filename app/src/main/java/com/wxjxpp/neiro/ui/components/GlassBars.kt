@@ -1,6 +1,5 @@
 package com.wxjxpp.neiro.ui.components
 
-import android.graphics.BlurMaskFilter
 import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.infiniteRepeatable
@@ -12,19 +11,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.composed
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Paint
-import androidx.compose.ui.graphics.RenderEffect
 import androidx.compose.ui.graphics.asComposeRenderEffect
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.graphicsLayer
-import androidx.compose.ui.graphics.Shader
 import androidx.compose.ui.graphics.TileMode as AndroidTileMode
 import kotlin.math.PI
 import kotlin.math.cos
@@ -36,7 +32,7 @@ import kotlin.math.sin
 //
 // 结构铁律（用户指定）：graphicsLayer 必须放在 drawWithContent 外层——
 // 渲染管线先执行内层 drawWithContent（含遮罩/渐隐），再由外层 graphicsLayer
-// 统一模糊，得到"先模糊再遮罩"的合成结果；顺序颠倒会糊掉硬边或让遮罩失效。
+// 统一模糊；顺序颠倒会把遮罩硬边一起糊掉或让遮罩失效。
 // ============================================================================
 
 /** 顶栏模糊底部过渡模式。 */
@@ -61,65 +57,71 @@ fun Modifier.topBarBlur(
     mode: TopBarBlurMode = TopBarBlurMode.Gradient,
     endYFraction: Float = 0.6f,
     radius: Float = 24f,
-): Modifier = this.then(
-    androidx.compose.ui.composed {
-        if (!enabled) return@composed Modifier
-        val useRenderEffect = Build.VERSION.SDK_INT >= 31
-        // 外层：统一高斯模糊（管线后置执行，保证先内容/遮罩、后整体模糊）
-        val outer = if (useRenderEffect) {
-            Modifier.graphicsLayer {
-                renderEffect = RenderEffect
-                    .createBlurEffect(radius, radius, Shader.TileMode.CLAMP)
-                    .asComposeRenderEffect()
-            }
-        } else {
-            Modifier
+): Modifier = composed {
+    if (!enabled) return@composed Modifier
+    val useRenderEffect = Build.VERSION.SDK_INT >= 31
+    // 外层：统一高斯模糊（管线后置执行，保证先内容/遮罩、后整体模糊）
+    val outer = if (useRenderEffect) {
+        Modifier.graphicsLayer {
+            renderEffect = androidx.compose.ui.graphics.RenderEffect
+                .createBlurEffect(radius, radius, AndroidTileMode.CLAMP)
+                .asComposeRenderEffect()
         }
-        // 内层：隔离图层中绘制内容 → DST_IN 渐隐擦掉底部硬边
-        val inner = Modifier.drawWithContent {
-            drawIntoCanvas { canvas ->
-                val w = size.width
-                val h = size.height
-                // API<31：BlurMaskFilter 挂在 saveLayer 的 paint 上，restore 时整层模糊
-                val canvasBlurRadius = if (!useRenderEffect) radius else null
-                val pad = canvasBlurRadius?.times(3f) ?: 0f
-                val layerPaint = Paint().also { p ->
-                    p.asFrameworkPaint().maskFilter = canvasBlurRadius?.let {
-                        BlurMaskFilter(it, BlurMaskFilter.Blur.NORMAL)
-                    }
-                }
-                val sc = canvas.saveLayer(Rect(-pad, -pad, w + pad, h + pad), layerPaint)
-                drawContent()
-                val fadeTop = h * endYFraction
-                if (fadeTop < h) {
-                    canvas.drawRect(Rect(0f, fadeTop, w, h), fadeMaskPaint(mode, fadeTop, h))
-                }
-                canvas.restoreToCount(sc)
-            }
-        }
-        inner.then(outer)
+    } else {
+        Modifier
     }
-)
+    // 内层：隔离图层中绘制内容 → DST_IN 渐隐擦掉底部硬边
+    val inner = Modifier.drawWithContent {
+        drawIntoCanvas { canvas ->
+            // 走底层画布：saveLayer/restoreToCount 语义最明确，类型全部显式
+            val nc = canvas.nativeCanvas
+            val w = size.width
+            val h = size.height
+            // API<31：BlurMaskFilter 挂在 saveLayer 的 paint 上，restore 时整层模糊
+            val canvasBlurRadius = if (!useRenderEffect) radius else null
+            val pad = canvasBlurRadius?.times(3f) ?: 0f
+            val layerPaint = android.graphics.Paint()
+            layerPaint.maskFilter = canvasBlurRadius?.let {
+                android.graphics.BlurMaskFilter(it, android.graphics.BlurMaskFilter.Blur.NORMAL)
+            }
+            val sc = nc.saveLayer(
+                android.graphics.RectF(-pad, -pad, w + pad, h + pad),
+                layerPaint,
+            )
+            drawContent()
+            val fadeTop = h * endYFraction
+            if (fadeTop < h) {
+                nc.drawRect(
+                    android.graphics.RectF(0f, fadeTop, w, h),
+                    fadeMaskPaint(mode, fadeTop, h),
+                )
+            }
+            nc.restoreToCount(sc)
+        }
+    }
+    inner.then(outer)
+}
 
 /** 底部渐隐遮罩笔刷：Gradient 线性渐隐 / Mask 阶梯式先实心后快速渐隐。 */
-private fun fadeMaskPaint(mode: TopBarBlurMode, fadeTop: Float, height: Float): android.graphics.Paint =
-    Paint().asFrameworkPaint().apply {
-        shader = android.graphics.LinearGradient(
-            0f, fadeTop, 0f, height,
-            intArrayOf(
-                android.graphics.Color.BLACK,
-                android.graphics.Color.BLACK,
-                android.graphics.Color.TRANSPARENT,
-            ),
-            floatArrayOf(
-                0f,
-                if (mode == TopBarBlurMode.Mask) 0.55f else 0.12f,
-                1f,
-            ),
-            android.graphics.Shader.TileMode.CLAMP,
-        )
-        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
-    }
+private fun fadeMaskPaint(mode: TopBarBlurMode, fadeTop: Float, height: Float): android.graphics.Paint {
+    val p = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG)
+    p.shader = android.graphics.LinearGradient(
+        0f, fadeTop, 0f, height,
+        intArrayOf(
+            android.graphics.Color.BLACK,
+            android.graphics.Color.BLACK,
+            android.graphics.Color.TRANSPARENT,
+        ),
+        floatArrayOf(
+            0f,
+            if (mode == TopBarBlurMode.Mask) 0.55f else 0.12f,
+            1f,
+        ),
+        android.graphics.Shader.TileMode.CLAMP,
+    )
+    p.xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.DST_IN)
+    return p
+}
 
 // ============================================================================
 // FluidBackground：Apple Music 风格流体渐变动态背景。
@@ -154,7 +156,7 @@ fun FluidBackground(
             .then(if (useRenderEffect) {
                 // 整体柔化：graphicsLayer 挂 RenderEffect（用户给定框架）
                 Modifier.graphicsLayer {
-                    renderEffect = RenderEffect
+                    renderEffect = androidx.compose.ui.graphics.RenderEffect
                         .createBlurEffect(40f, 40f, AndroidTileMode.CLAMP)
                         .asComposeRenderEffect()
                 }
@@ -163,25 +165,21 @@ fun FluidBackground(
             })
             .drawWithCache {
                 // API<31：drawIntoCanvas 配合 BlurMaskFilter 替代（性能稍差）
-                val lowApiBlur = if (!useRenderEffect) {
-                    Paint().asFrameworkPaint().apply {
-                        maskFilter = BlurMaskFilter(40f, BlurMaskFilter.Blur.NORMAL)
-                    }
-                } else {
-                    null
-                }
                 val phaseValues = progresses.map { it.value }
                 onDrawBehind {
-                    if (lowApiBlur != null) {
-                        drawIntoCanvas { canvas ->
-                            val pad = 120f
-                            val sc = canvas.saveLayer(
-                                Rect(-pad, -pad, size.width + pad, size.height + pad),
-                                Paint().asFrameworkPaint().apply { maskFilter = lowApiBlur.maskFilter },
-                            )
-                            drawFluidCircles(colors, phaseValues)
-                            canvas.restoreToCount(sc)
-                        }
+                    if (!useRenderEffect) {
+                        val nc = drawContext.canvas.nativeCanvas
+                        val pad = 120f
+                        val blurPaint = android.graphics.Paint()
+                        blurPaint.maskFilter = android.graphics.BlurMaskFilter(
+                            40f, android.graphics.BlurMaskFilter.Blur.NORMAL,
+                        )
+                        val sc = nc.saveLayer(
+                            android.graphics.RectF(-pad, -pad, size.width + pad, size.height + pad),
+                            blurPaint,
+                        )
+                        drawFluidCircles(colors, phaseValues)
+                        nc.restoreToCount(sc)
                     } else {
                         drawFluidCircles(colors, phaseValues)
                     }

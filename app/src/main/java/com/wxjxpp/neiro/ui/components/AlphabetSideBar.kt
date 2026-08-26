@@ -142,8 +142,10 @@ fun DraggableIndicatorBall(
     val scope = rememberCoroutineScope()
     var containerW by remember { mutableFloatStateOf(0f) }
     var containerH by remember { mutableFloatStateOf(0f) }
-    // 小球中心点位置（px）；首次布局停靠右缘中部
-    val center = remember { Animatable(Offset.Zero) }
+    // 小球中心坐标（px），X/Y 分开动画：显式 <Float> 类型转换器，
+    // 规避 Animatable<Offset> 类型推断失败；首次布局停靠右缘中部
+    val centerX = remember { Animatable(0f) }
+    val centerY = remember { Animatable(0f) }
     val radiusPx = with(density) { sizeDp.toPx() } / 2f
     val ballAlpha by animateFloatAsState(
         targetValue = if (visible) 0.95f else 0.45f,
@@ -151,18 +153,15 @@ fun DraggableIndicatorBall(
         label = "ballAlpha",
     )
 
-    fun edgeTarget(): Offset = if (containerW <= 0f) {
-        Offset.Zero
-    } else {
-        Offset(
-            x = if (center.value.x < containerW / 2f) radiusPx else containerW - radiusPx,
-            y = center.value.y.coerceIn(radiusPx, containerH - radiusPx),
-        )
-    }
+    fun edgeTargetX(): Float =
+        if (centerX.value < containerW / 2f) radiusPx else containerW - radiusPx
+
+    fun edgeTargetY(): Float = centerY.value.coerceIn(radiusPx, containerH - radiusPx)
 
     LaunchedEffect(containerW, containerH) {
-        if (containerW > 0f && center.value == Offset.Zero) {
-            center.snapTo(Offset(containerW - radiusPx, containerH / 2f))
+        if (containerW > 0f && centerX.value == 0f && centerY.value == 0f) {
+            centerX.snapTo(containerW - radiusPx)
+            centerY.snapTo(containerH / 2f)
         }
     }
 
@@ -178,8 +177,8 @@ fun DraggableIndicatorBall(
         Box(
             modifier = Modifier
                 .graphicsLayer {
-                    translationX = center.value.x - size.width / 2f
-                    translationY = center.value.y - size.height / 2f
+                    translationX = centerX.value - size.width / 2f
+                    translationY = centerY.value - size.height / 2f
                     alpha = ballAlpha
                 }
                 .shadow(elevation = 6.dp, shape = CircleShape)
@@ -190,20 +189,29 @@ fun DraggableIndicatorBall(
                 .pointerInput(containerW, containerH, radiusPx) {
                     detectDragGestures(
                         onDragEnd = {
-                            scope.launch { center.animateTo(edgeTarget(), edgeSpring()) }
+                            scope.launch {
+                                centerX.animateTo(edgeTargetX(), edgeSpring())
+                                centerY.animateTo(edgeTargetY(), edgeSpring())
+                            }
                         },
                         onDragCancel = {
-                            scope.launch { center.animateTo(edgeTarget(), edgeSpring()) }
+                            scope.launch {
+                                centerX.animateTo(edgeTargetX(), edgeSpring())
+                                centerY.animateTo(edgeTargetY(), edgeSpring())
+                            }
                         },
                     ) { change, _ ->
                         change.consume()
                         val delta = change.positionChange()
-                        val target = Offset(
-                            (center.value.x + delta.x).coerceIn(radiusPx, containerW - radiusPx),
-                            (center.value.y + delta.y).coerceIn(radiusPx, containerH - radiusPx),
-                        )
                         // 非挂起回调内的同步定位：UNDISPATCHED 启动立即执行
-                        scope.launch(start = CoroutineStart.UNDISPATCHED) { center.snapTo(target) }
+                        scope.launch(start = CoroutineStart.UNDISPATCHED) {
+                            centerX.snapTo(
+                                (centerX.value + delta.x).coerceIn(radiusPx, containerW - radiusPx),
+                            )
+                            centerY.snapTo(
+                                (centerY.value + delta.y).coerceIn(radiusPx, containerH - radiusPx),
+                            )
+                        }
                     }
                 },
             contentAlignment = Alignment.Center,
@@ -216,9 +224,8 @@ fun DraggableIndicatorBall(
         }
     }
 }
-
 /** 松手吸附用的弹性曲线（MediumBouncy，规格要求的 Spring 弹性吸附）。 */
-private fun edgeSpring() = spring<Offset>(
+private fun edgeSpring() = spring<Float>(
     dampingRatio = Spring.DampingRatioMediumBouncy,
     stiffness = Spring.StiffnessMediumLow,
 )

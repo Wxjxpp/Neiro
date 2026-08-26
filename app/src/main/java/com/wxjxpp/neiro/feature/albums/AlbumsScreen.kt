@@ -272,16 +272,16 @@ private fun AlbumDetailList(
     val listState = rememberLazyListState()
     // 收缩进度 = 首个可见 item 的累计滚动偏移 / 最大偏移；
     // 用户指定：progress 改为带阻尼的缓动（spring 无回弹），收缩过程更自然
-    val rawProgress = if (maxOffset > 0f) {
-        (listState.firstVisibleItemIndex * maxOffset +
-            listState.firstVisibleItemScrollOffset) / maxOffset
+    val rawProgress = if (maxOffsetPx > 0f) {
+        (listState.firstVisibleItemIndex * maxOffsetPx +
+            listState.firstVisibleItemScrollOffset) / maxOffsetPx
     } else {
         0f
     }
     val progress by animateFloatAsState(
         targetValue = rawProgress.coerceIn(0f, 1f),
         animationSpec = spring(
-            dampingRatio = Spring.DampingRatioNoBounce,
+            dampingRatio = Spring.DampingRatioNoBouncy,
             stiffness = Spring.StiffnessMediumLow,
         ),
         label = "albumCollapseProgress",
