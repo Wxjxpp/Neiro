@@ -95,5 +95,7 @@ dependencies {
     implementation(libs.haze)
     // accompanist 歌词 core 的 KRC 元数据解码需要
     implementation(libs.kotlinx.serialization.json)
+    // accompanist 歌词 UI 的平滑圆角组件
+    implementation(libs.gaze.capsule)
     debugImplementation(libs.androidx.ui.tooling)
 }
