@@ -71,9 +71,10 @@ class PlaybackService : MediaSessionService() {
         androidx.media3.exoplayer.ExoPlayer.Builder(this)
             .setAudioAttributes(
                 androidx.media3.common.AudioAttributes.Builder()
-                    .setContentType(androidx.media3.common.AudioAttributes.CONTENT_TYPE_MUSIC)
-                    .setUsage(androidx.media3.common.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(androidx.media3.common.C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setUsage(androidx.media3.common.C.USAGE_MEDIA)
                     .build(),
+                /* handleAudioFocus = */ false,
             )
             .build()
 
@@ -121,10 +122,11 @@ class PlaybackService : MediaSessionService() {
         val meta = player.mediaMetadata
         builder.setContentTitle(meta.title?.toString() ?: "Neiro")
             .setContentText(meta.artist?.toString() ?: "")
-        // MediaStyle 让控制中心识别这是媒体控件（使用标准 Notification.MediaStyle）
+        // MediaStyle 让控制中心识别这是媒体控件
+        val sessionToken = session?.platformToken
         val style = android.app.Notification.MediaStyle()
             .setShowActionsInCompactView(0, 1, 2)
-            .setMediaSession(session?.sessionToken)
+            .setMediaSession(sessionToken)
         builder.setStyle(style)
         return builder.build()
     }
@@ -198,7 +200,7 @@ object DownloadProgressNotifier {
         val indeterminate = total <= 0L
         val percent = if (indeterminate) 0 else (downloaded * 100 / total).toInt().coerceIn(0, 100)
         post(context, songId, baseBuilder(context)
-            .setContentTitle(titles[songId].ifEmpty { "正在下载" })
+            .setContentTitle(titles[songId].orEmpty().ifEmpty { "正在下载" })
             .setContentText(if (indeterminate) artists[songId].orEmpty() else "${artists[songId].orEmpty()} · $percent%")
             .setProgress(100, percent, indeterminate)
             .setOngoing(true))
