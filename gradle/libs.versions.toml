@@ -86,9 +86,8 @@ quickjs-wrapper = { group = "wang.harlon.quickjs", name = "wrapper-android", ver
 
 # Coil：专辑封面加载
 coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coil" }
-# Haze：Compose 硬件加速模糊（事实标准库）
+# Haze：Compose 硬件加速模糊（事实标准库；1.x 单工件，2.0 起才拆 haze-blur）
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
-haze-blur = { group = "dev.chrisbanes.haze", name = "haze-blur", version.ref = "haze" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
