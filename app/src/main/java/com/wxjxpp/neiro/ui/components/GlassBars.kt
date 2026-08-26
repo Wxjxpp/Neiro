@@ -247,42 +247,54 @@ fun Modifier.captureTo(layer: GraphicsLayer): Modifier =
     }
 
 /**
- * 顶栏下缘毛玻璃衔接带：重绘被录制的列表画面并整体高斯模糊，
- * 底部以垂直渐隐融入页面，消除硬边。
- *
- * @param captured 录制列表内容的 [GraphicsLayer]（由 [captureTo] 填充）。
- * @param bandHeight 衔接带高度；模糊带内可见的是列表顶部刚滚过的内容。
+ * 顶栏毛玻璃表面：[enabled] 时重放 [captured] 录制的整幅画面——
+ * 顶栏层与内容层处于同一坐标系，原位重放即为"顶栏背后滚过的真实内容"，
+ * 再施加整体高斯模糊 + surface 蒙版保证可读性 + 底缘渐隐软衔接；
+ * 未启用或 API<31 时回退为不透明 surface 实底。
  */
 @Composable
-fun GlassFadeBand(
+fun GlassBarSurface(
     captured: GraphicsLayer?,
+    enabled: Boolean,
     modifier: Modifier = Modifier,
-    bandHeight: androidx.compose.ui.unit.Dp = 48.dp,
+    content: @Composable () -> Unit,
 ) {
-    if (captured == null || Build.VERSION.SDK_INT < 31) return
-    Canvas(
-        modifier = modifier
-            .fillMaxWidth()
-            .height(bandHeight)
-            // 外层 graphicsLayer 统一模糊（先内容/遮罩、后整体模糊）
-            .graphicsLayer {
-                renderEffect = android.graphics.RenderEffect
-                    .createBlurEffect(24f, 24f, android.graphics.Shader.TileMode.CLAMP)
-                    .asComposeRenderEffect()
-            },
-    ) {
-        clipRect(0f, 0f, size.width, size.height) {
-            // 重放列表画面：把 band 对准列表最底部 bandHeight 区域
-            translate(left = 0f, top = -size.height) {
-                drawLayer(captured)
+    val cs = MaterialTheme.colorScheme
+    Box(modifier.fillMaxWidth()) {
+        if (enabled && captured != null && Build.VERSION.SDK_INT >= 31) {
+            Canvas(
+                modifier = Modifier
+                    .matchParentSize()
+                    // 外层 graphicsLayer 统一模糊（先内容、后整体模糊）
+                    .graphicsLayer {
+                        renderEffect = android.graphics.RenderEffect
+                            .createBlurEffect(28f, 28f, android.graphics.Shader.TileMode.CLAMP)
+                            .asComposeRenderEffect()
+                    },
+            ) {
+                clipRect(0f, 0f, size.width, size.height) {
+                    drawIntoCanvas { c ->
+                        val sv = c.nativeCanvas.saveLayer(
+                            android.graphics.RectF(0f, 0f, size.width, size.height),
+                            null,
+                        )
+                        // 顶栏与内容层同根坐标系：原位重放即"顶栏背后的内容"
+                        // （录制节点自带页面底色，重放即为完整的模糊背景）
+                        drawLayer(captured)
+                        // 可读性蒙版
+                        drawRect(cs.surface.copy(alpha = 0.32f))
+                        // 底缘渐隐，与清晰内容软衔接
+                        c.nativeCanvas.drawRect(
+                            android.graphics.RectF(0f, 0f, size.width, size.height),
+                            fadeMaskPaint(TopBarBlurMode.Gradient, size.height * 0.72f, size.height),
+                        )
+                        c.nativeCanvas.restoreToCount(sv)
+                    }
+                }
             }
-            // 向下渐隐融入页面，消除硬边
-            drawIntoCanvas { canvas ->
-                canvas.nativeCanvas.drawRect(
-                    android.graphics.RectF(0f, 0f, size.width, size.height),
-                    fadeMaskPaint(TopBarBlurMode.Gradient, size.height * 0.25f, size.height),
-                )
-            }
+        } else {
+            Box(modifier = Modifier.matchParentSize().background(cs.surface))
         }
+        content()
     }
 }

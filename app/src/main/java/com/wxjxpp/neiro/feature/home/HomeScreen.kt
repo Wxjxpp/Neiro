@@ -74,7 +74,7 @@ import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.SongSortField
 import com.wxjxpp.neiro.ui.components.AlphabetIndicatorBall
 import com.wxjxpp.neiro.ui.components.AlphabetSideBar
-import com.wxjxpp.neiro.ui.components.GlassFadeBand
+import com.wxjxpp.neiro.ui.components.GlassBarSurface
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.components.captureTo
 import com.wxjxpp.neiro.ui.theme.AppTheme
@@ -140,32 +140,35 @@ fun HomeScreen(
         }
     }
         Column(modifier = modifier.fillMaxSize()) {
-        topBar()
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .onGloballyPositioned { boxH = it.size.height.toFloat() },
-        ) {
-        PullToRefreshBox(
-            isRefreshing = isRefreshing,
-            onRefresh = onRefresh,
-            modifier = Modifier
-                .fillMaxSize()
-                .captureTo(capturedLayer),
-            state = refreshState,
-            indicator = {
-                PullToRefreshDefaults.LoadingIndicator(
-                    state = refreshState,
-                    isRefreshing = isRefreshing,
-                    modifier = Modifier.align(Alignment.TopCenter),
-                )
-            },
-        ) {
-            LazyColumn(
-                modifier = Modifier.fillMaxSize(),
-                state = listState,
-                contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
+        // Under-layout：列表延伸到顶栏后方，顶栏作为毛玻璃覆盖层
+        Box(modifier = Modifier.fillMaxSize()) {
+            // 内容层（全屏）：录制画面 + 顶栏高度作为首项顶部留白
+            PullToRefreshBox(
+                isRefreshing = isRefreshing,
+                onRefresh = onRefresh,
+                modifier = Modifier
+                    .fillMaxSize()
+                    // 录制节点自带页面底色：重放时才是完整的"毛玻璃背后"画面
+                    .background(MaterialTheme.colorScheme.background)
+                    .captureTo(capturedLayer),
+                state = refreshState,
+                indicator = {
+                    PullToRefreshDefaults.LoadingIndicator(
+                        state = refreshState,
+                        isRefreshing = isRefreshing,
+                        modifier = Modifier.align(Alignment.TopCenter),
+                    )
+                },
             ) {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    state = listState,
+                    contentPadding = PaddingValues(
+                        // 首项从顶栏下方开始；滚动时内容穿过顶栏被毛玻璃实时模糊透出
+                        top = 72.dp,
+                        bottom = contentPadding.calculateBottomPadding(),
+                    ),
+                ) {
                 items(songs, key = { it.id }) { song ->
                     SongRow(
                         song = song,
@@ -182,12 +185,13 @@ fun HomeScreen(
         // 字母索引侧边栏：仅首字母排序且非多选态时启用。
         // 单手势模型：按住即出球跟手、纵向映射列表快滚；松手球消失并联动底栏回归
         val scope = rememberCoroutineScope()
-        // 顶栏下缘毛玻璃衔接带：重放列表画面并模糊，消除顶栏硬边（可选功能）
-        if (topBarBlurEnabled) {
-            GlassFadeBand(
-                captured = capturedLayer,
-                modifier = Modifier.align(Alignment.TopCenter),
-            )
+// 覆盖层顶栏：毛玻璃（可选）——重放列表画面并模糊，内容滚过顶栏即被实时衔接
+        GlassBarSurface(
+            captured = capturedLayer,
+            enabled = topBarBlurEnabled,
+            modifier = Modifier.align(Alignment.TopCenter),
+        ) {
+            topBar()
         }
         val alphabetActive = sortField == SongSortField.Title && selectedIds.isEmpty()
         var activeChar by remember { mutableStateOf<Char?>(null) }
@@ -467,7 +471,11 @@ fun SongsTopBar(
 ) {
     var showSortMenu by remember { mutableStateOf(false) }
     TopAppBar(
-        windowInsets = WindowInsets(0),
+        windowInsets = WindowInsets(0, 0, 0, 0),
+        // 透明背景：实底由外层 GlassBarSurface（毛玻璃/不透明 surface）负责
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = Color.Transparent,
+        ),
         title = {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Icon(Icons.Rounded.MusicNote, contentDescription = null)
