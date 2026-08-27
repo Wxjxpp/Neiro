@@ -795,7 +795,12 @@ val palette = bmp.extractVividPalette()
     }
     // Expr：更多操作底部 Sheet（替代原 DropdownMenu——大字号全宽行，不再挤在一团）
     if (showMoreMenu && !pureMode) {
-        ModalBottomSheet(onDismissRequest = { showMoreMenu = false }) {
+        ModalBottomSheet(
+            onDismissRequest = { showMoreMenu = false },
+            // Expr：强制跟随沉浸主题 surface——默认 sheetContainer 在鲜艳明亮画布上会渲染成一坨黑
+            containerColor = MaterialTheme.colorScheme.surface,
+            tonalElevation = 0.dp,
+        ) {
             Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
                 Text(
                     text = "更多操作",

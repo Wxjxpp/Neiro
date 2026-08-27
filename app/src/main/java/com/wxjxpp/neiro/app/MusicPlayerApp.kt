@@ -160,6 +160,8 @@ fun MusicPlayerApp(container: AppContainer) {
     }
 
     var route by rememberSaveable { mutableStateOf(Destination.Discover.route) }
+    // Expr：搜索页来源页记录——返回键回到打开搜索的那个页面（歌曲页/发现页），而非固定回歌曲页
+    var searchReturnRoute by rememberSaveable { mutableStateOf(Destination.Home.route) }
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val dimens = AppTheme.dimens
 
@@ -217,6 +219,7 @@ fun MusicPlayerApp(container: AppContainer) {
             lyricsOpen -> animateTo(1f)                    // 歌词页 → 播放页
             playerOpen -> animateTo(0f)                    // 播放页 → 播放栏
             drawerState.isOpen -> scope.launch { drawerState.close() }
+            route == Destination.Search.route -> route = searchReturnRoute
             route != Destination.Home.route -> route = Destination.Home.route
         }
     }
@@ -229,6 +232,9 @@ fun MusicPlayerApp(container: AppContainer) {
             AppDrawerSheet(
                 currentRoute = route,
                 onNavigate = { destination ->
+                    if (destination == Destination.Search) {
+                        searchReturnRoute = route
+                    }
                     route = destination.route
                     scope.launch { drawerState.close() }
                 },
@@ -297,7 +303,10 @@ fun MusicPlayerApp(container: AppContainer) {
                             onRequestPermission = requestPermission,
                             onScan = scanLibrary,
                             onOpenDrawer = { scope.launch { drawerState.open() } },
-                            onNavigate = { target -> route = target },
+                            onNavigate = { target ->
+                                if (target == Destination.Search.route) searchReturnRoute = route
+                                route = target
+                            },
                             onToast = { message -> container.notifyInfo(message) },
                             currentPlayingId = playback.current?.id,
                             onBatchOperate = { songs ->
@@ -560,7 +569,13 @@ private fun RouteContent(
                     initialState == Destination.Search.route ||
                         targetState == Destination.Search.route
                 if (searchRelated) {
-                    fadeIn(tween(260)) togetherWith fadeOut(tween(220))
+                    // Expr：返回方向加轻微缩放纵深感（1.04→1.0），配合 sharedBounds 反向变形
+                    if (initialState == Destination.Search.route) {
+                        (fadeIn(tween(260)) + scaleIn(initialScale = 1.04f, animationSpec = tween(260))) togetherWith
+                            fadeOut(tween(220))
+                    } else {
+                        fadeIn(tween(260)) togetherWith fadeOut(tween(220))
+                    }
                 } else {
                     fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
                 }
