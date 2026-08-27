@@ -334,7 +334,7 @@ val palette = bmp.extractVividPalette()
             val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(argb, it) }
             if (hsv[1] < 0.18f) return@mapNotNull null
             val contrast = kotlin.math.abs(lum(argb) - canvasLum)
-            Cand(hsv, contrast * (0.35f + hsv[1]))
+            Cand(hsv, contrast * (0.35f + hsv[1]).toFloat())
         }.maxByOrNull { it.score }
         if (best == null) immersiveScheme.primary else {
             val hsv = floatArrayOf(best.hsv[0], best.hsv[1], best.hsv[2])
