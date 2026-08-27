@@ -49,6 +49,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
@@ -171,6 +172,8 @@ fun PlayerDetailScreen(
     var pureModeOverride by remember { mutableStateOf<Boolean?>(null) }
     val pureMode = pureModeOverride ?: pureModeDefault
     var showQueue by remember { mutableStateOf(false) }
+    // Expr：更多操作 Sheet 开关（根部作用域，供底部 ModalBottomSheet 使用）
+    var showMoreMenu by remember { mutableStateOf(false) }
     var showOffsetPanel by remember { mutableStateOf(false) }
     // 主区域顶部相对根 Box 的 Y 偏移（含状态栏+标题高度），供封面矩形插值定位
     var mainAreaTopPx by remember { mutableFloatStateOf(0f) }
@@ -728,7 +731,6 @@ val palette = bmp.extractVividPalette()
                 }
             }
             // 功能区：收藏 / 歌词切换 / 更多菜单（下载、歌词偏移、翻译、倍速、音质并入菜单）
-            var showMoreMenu by remember { mutableStateOf(false) }
             if (!pureMode) {
                 Row(
                     modifier = Modifier
