@@ -328,16 +328,16 @@ val palette = bmp.extractVividPalette()
     val canvasLum = androidx.core.graphics.ColorUtils.calculateLuminance(immersiveScheme.background.toArgb())
     val accentColor = remember(vividPalette, song.id, isDarkTheme, canvasLum) {
         fun lum(argb: Int) = androidx.core.graphics.ColorUtils.calculateLuminance(argb)
-        val best = vividPalette.mapNotNull { col ->
+        data class Cand(val hsv: FloatArray, val score: Float)
+        val best: Cand? = vividPalette.mapNotNull { col ->
             val argb = col.toArgb()
             val hsv = FloatArray(3).also { android.graphics.Color.colorToHSV(argb, it) }
             if (hsv[1] < 0.18f) return@mapNotNull null
             val contrast = kotlin.math.abs(lum(argb) - canvasLum)
-            Triple(col, contrast * (0.35f + hsv[1]), hsv)
-        }.maxByOrNull { it.second } ?: vividPalette.firstOrNull()
+            Cand(hsv, contrast * (0.35f + hsv[1]))
+        }.maxByOrNull { it.score }
         if (best == null) immersiveScheme.primary else {
-            val hsv0: FloatArray = best.third
-            val hsv = floatArrayOf(hsv0[0], hsv0[1], hsv0[2])
+            val hsv = floatArrayOf(best.hsv[0], best.hsv[1], best.hsv[2])
             if (canvasLum < 0.5f && hsv[2] < 0.72f) hsv[2] = 0.72f
             if (canvasLum >= 0.5f && hsv[2] > 0.55f) hsv[2] = 0.55f
             Color(android.graphics.Color.HSVToColor(hsv))
