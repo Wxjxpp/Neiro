@@ -727,12 +727,16 @@ val palette = bmp.extractVividPalette()
                             modifier = Modifier
                                 .size(96.dp, 76.dp)
                                 .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(30.dp))
-                                .clickable {
-                                    if (pureMode && state.isPlaying) pureModeOverride = false
-                                    onTogglePlay()
-                                }
+                                // Expr fix：clickable 与 pointerInput 不能并存（后者吞掉 down 事件），
+                                // 点击 + 长按统一由 detectTapGestures 处理
                                 .pointerInput(Unit) {
-                                    detectTapGestures(onLongPress = { pureModeOverride = true })
+                                    detectTapGestures(
+                                        onTap = {
+                                            if (pureMode && state.isPlaying) pureModeOverride = false
+                                            onTogglePlay()
+                                        },
+                                        onLongPress = { pureModeOverride = true },
+                                    )
                                 },
                             contentAlignment = Alignment.Center,
                         ) {
@@ -749,9 +753,7 @@ val palette = bmp.extractVividPalette()
                                 if (pureMode && state.isPlaying) pureModeOverride = false
                                 onTogglePlay()
                             },
-                            modifier = Modifier.size(56.dp).pointerInput(Unit) {
-                                detectTapGestures(onLongPress = { pureModeOverride = true })
-                            },
+                            modifier = Modifier.size(56.dp),
                         ) {
                             Icon(
                                 imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
@@ -777,23 +779,7 @@ val palette = bmp.extractVividPalette()
                         }
                     }
                 }
-                    // Expr v3：音质与音效 pill（与控制行同排，对称放置）
-                    Surface(
-                        onClick = { showAudioFxSheet = true },
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
-                        ) {
-                            Icon(Icons.Rounded.Equalizer, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("音质与音效", style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary)
-                        }
-                    }
+                // 播放列表按钮（控制行右端，与左端随机/循环对称）
                 if (!pureMode) {
                     IconButton(onClick = { showQueue = true }) {
                         Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
@@ -832,6 +818,14 @@ val palette = bmp.extractVividPalette()
                             } else {
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                             },
+                        )
+                    }
+                    // Expr v3：音质与音效入口——与同排图标同规格的 IconButton（不再用突兀的大 pill）
+                    IconButton(onClick = { showAudioFxSheet = true }) {
+                        Icon(
+                            Icons.Rounded.Equalizer,
+                            contentDescription = "音质与音效",
+                            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                         )
                     }
                     // 更多菜单：下载 / 歌词偏移 / 翻译
@@ -909,7 +903,9 @@ val palette = bmp.extractVividPalette()
                         },
                     )
                 }
-    } // ModalBottomSheet content
+            }
+        }
+    }
     // Expr v3：音质与音效独立 Sheet（倍速 / 音质 / EQ）
     if (showAudioFxSheet && !pureMode) {
         ModalBottomSheet(
@@ -995,8 +991,6 @@ val palette = bmp.extractVividPalette()
             }
         }
     }
-            }
-        }
     }
 }
 /** 更多操作 Sheet 的全宽动作行：大图标 + 大字号 + 可选选中勾。 */

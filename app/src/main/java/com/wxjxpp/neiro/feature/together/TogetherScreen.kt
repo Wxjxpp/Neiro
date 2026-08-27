@@ -740,8 +740,11 @@ private fun RoomView(
         }
         // 平台标签分类条：官方连通按钮组（与全局聚合搜索一致），横向滚动防溢出
         item {
+            // Expr fix（一起听闪退）：ConnectedChoiceGroup 内部自带 horizontalScroll，
+            // 外层再套一层会让内层收到「无限最大宽约束」，Compose 直接抛 IllegalStateException。
+            // 这里只保留内层滚动，外层用普通 Row 承载。
             Row(
-                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                modifier = Modifier.fillMaxWidth(),
             ) {
                 ConnectedChoiceGroup(
                     options = search.platforms.map { it.displayName },

@@ -73,13 +73,32 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
         preampDb = db.coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
     }
 
+    /**
+     * Expr fix（严重）：必须覆写 isActive。
+     *
+     * BaseAudioProcessor 的默认实现是「只要 configure 过就永远 active」，
+     * 于是 EQ 关闭时本处理器仍然留在 DefaultAudioSink 的处理链里，
+     * 一旦格式或状态与声明不一致就会输出脏数据，解码链随即报错，
+     * ExoPlayer 自动跳下一首 —— 表现为「无限跳歌且放不出声」。
+     * 只在「开关打开 + 16bit PCM + 采样率/声道有效」时才进链，其余彻底旁路。
+     */
+    override fun isActive(): Boolean =
+        enabled && sampleRate > 0 && channelCount > 0 && state.isNotEmpty()
+
+    @Throws(AudioProcessor.UnhandledAudioFormatException::class)
     override fun onConfigure(inputAudioFormat: AudioProcessor.AudioFormat): AudioProcessor.AudioFormat {
+        // 非 16-bit PCM 明确声明不支持，让 media3 跳过本处理器而不是静默输出脏数据
+        if (inputAudioFormat.encoding != C.ENCODING_PCM_16BIT) {
+            sampleRate = 0
+            channelCount = 0
+            state = emptyArray()
+            throw AudioProcessor.UnhandledAudioFormatException(inputAudioFormat)
+        }
         sampleRate = inputAudioFormat.sampleRate
         channelCount = inputAudioFormat.channelCount
-        if (enabled && inputAudioFormat.encoding == C.ENCODING_PCM_16BIT && sampleRate > 0) {
-            // 超出奈奎斯特的频段自动禁用该段系数（直通）
-            recalcCoeffs()
-        }
+        // 无论开关状态都备好状态数组，避免开关切换瞬间 state 为空导致误判
+        state = Array(channelCount.coerceAtLeast(1)) { FloatArray(10 * 4) }
+        if (sampleRate > 0) runCatching { recalcCoeffs() }
         return inputAudioFormat
     }
 
