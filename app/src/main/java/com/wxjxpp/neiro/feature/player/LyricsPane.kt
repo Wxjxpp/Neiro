@@ -154,13 +154,19 @@ fun LyricsPane(
         verticalArrangement = Arrangement.spacedBy((26 * gapScale).dp),
     ) {
         itemsIndexed(lines, key = { i, _ -> i }) { index, line ->
+            val rowActive = index == activeIndex
             LyricRow(
                 line = line,
                 align = align,
-                isActive = index == activeIndex,
+                isActive = rowActive,
                 distance = index - activeIndex,
                 isUserScrolling = userDragging,
-                positionMs = positionMs - effectiveOffset,
+                // 性能（v5）：positionMs 每 250ms 变一次。原来把它传给**每一行**，
+                // 导致所有可见行（十几个）每 250ms 全量重组一次——而非当前行的
+                // 渲染分支根本不读 positionMs（isActive=false 时提前 return）。
+                // 现在只有当前行接收真实进度，其余行收到常量 0L 从而被 Compose
+                // 跳过重组。
+                positionMs = if (rowActive) positionMs - effectiveOffset else 0L,
                 showTranslation = showTranslation,
                 fontScale = fontScale,
                 progressiveBlur = progressiveBlur,

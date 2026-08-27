@@ -593,8 +593,18 @@ override suspend fun resolveRemoteUrl(song: Song): Media3PlayerController.Remote
     }
 }
 
-/** Application 入口，持有全局容器。 */
-class MusicPlayerApplication : Application() {
+/**
+ * Application 入口，持有全局容器。
+ *
+ * 同时实现 [coil.ImageLoaderFactory]。Coil 2 默认内存缓存只占可用堆的 25%，
+ * 列表快速滚动时封面会被挤出缓存、反复从 MediaStore 重新解码——这是首页/
+ * 专辑页滑动卡顿的一个直接来源。这里放宽到 30% 堆并显式启用 96MB 磁盘缓存
+ * （在线封面二次加载不再走网络）。
+ *
+ * 不开启 `allowRgb565`：封面里的渐变在 RGB_565 下会出现可见色带，
+ * 省下的内存不值得这个画质代价。
+ */
+class MusicPlayerApplication : Application(), coil.ImageLoaderFactory {
 
     lateinit var container: AppContainer
         private set
@@ -603,4 +613,19 @@ class MusicPlayerApplication : Application() {
         super.onCreate()
         container = DefaultAppContainer(this)
     }
+
+    override fun newImageLoader(): coil.ImageLoader =
+        coil.ImageLoader.Builder(this)
+            .memoryCache {
+                coil.memory.MemoryCache.Builder(this)
+                    .maxSizePercent(0.30)
+                    .build()
+            }
+            .diskCache {
+                coil.disk.DiskCache.Builder()
+                    .directory(cacheDir.resolve("image_cache"))
+                    .maxSizeBytes(96L * 1024 * 1024)
+                    .build()
+            }
+            .build()
 }

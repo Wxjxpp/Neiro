@@ -242,11 +242,26 @@ fun PlayerDetailScreen(
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
     // Expr v2：视觉风格——dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和
     val vividMode = visualStyle == "vivid"
-    // Expr v2：多点取色板单独派生（remember 内部不能写 state 副作用）
-    val vividPalette = remember(coverBitmapForPalette) {
-        coverBitmapForPalette?.extractVividPalette()?.map { Color(it) } ?: emptyList()
+    // Expr v2：多点取色板（v5 性能：移到后台线程，且全页只算一次）
+    //
+    // 原实现有两处问题：① `remember { bmp.extractVividPalette() }` 在**主线程组合期**
+    // 跑 6 组窗口采样（每组约 80 次 getPixel，getPixel 是 JNI 调用），换歌瞬间直接
+    // 占用 UI 线程；② immersiveScheme 里又独立调了一次 extractVividPalette，
+    // 同一张图算两遍。现在统一在 Default 调度器算一次，两处共用。
+    val vividPalette by androidx.compose.runtime.produceState(
+        initialValue = emptyList<Color>(),
+        key1 = coverBitmapForPalette,
+    ) {
+        val bmp = coverBitmapForPalette
+        value = if (bmp == null) {
+            emptyList()
+        } else {
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching { bmp.extractVividPalette().map { Color(it) } }.getOrDefault(emptyList())
+            }
+        }
     }
-    val immersiveScheme = remember(coverBitmapForPalette, song.id, isDarkTheme, vividMode) {
+    val immersiveScheme = remember(vividPalette, song.id, isDarkTheme, vividMode) {
         var dark = darkColorScheme(
             // Expr vivid 风格：高饱和明亮主色（调色板就绪后二次覆盖）
             primary = Color(song.coverSeedColor),
@@ -259,9 +274,9 @@ fun PlayerDetailScreen(
             surfaceVariant = Color.White.copy(alpha = 0.08f),
             outline = Color.White.copy(alpha = 0.35f),
         )
-        coverBitmapForPalette?.let { bmp ->
-            // Expr v2：多点取样（≥5 点）明亮调色板，替代单色
-val palette = bmp.extractVividPalette()
+        vividPalette.takeIf { it.isNotEmpty() }?.let { pal ->
+            // 复用上面后台算好的调色板，不再重复采样
+            val palette = pal.map { it.toArgb() }
             val c = palette.firstOrNull() ?: return@let
             // 关键修正：不再无条件混黑。
             // 采样色偏亮（白/浅色封面）→ 画布走浅色系 + 黑色前景；
@@ -673,6 +688,7 @@ val palette = bmp.extractVividPalette()
             // 按钮：统一用官方 FilledIconButton + IconButtonDefaults 尺寸令牌，
             // 不再手写 Box + background。形状/按压变形/配色交给组件库，
             // 后期维护只需替换尺寸令牌（extraLarge / large / medium / small）。
+            // 当前用 medium：large 在常见机型上会占满整行，把左右辅助键挤出可视区。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -722,15 +738,15 @@ val palette = bmp.extractVividPalette()
                     } else {
                         IconButtonDefaults.filledTonalIconButtonColors()
                     }
-                    // 上一首：large 容器 + Uniform 宽度
+                    // 上一首：侧键用 medium 容器 + Uniform 宽度
                     FilledIconButton(
                         onClick = onPrevious,
                         shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.largeRoundShape,
-                            pressedShape = IconButtonDefaults.largePressedShape,
+                            shape = IconButtonDefaults.mediumRoundShape,
+                            pressedShape = IconButtonDefaults.mediumPressedShape,
                         ),
                         modifier = Modifier.size(
-                            IconButtonDefaults.largeContainerSize(
+                            IconButtonDefaults.mediumContainerSize(
                                 IconButtonDefaults.IconButtonWidthOption.Uniform,
                             ),
                         ),
@@ -739,10 +755,10 @@ val palette = bmp.extractVividPalette()
                         Icon(
                             Icons.Rounded.SkipPrevious,
                             contentDescription = "上一首",
-                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                            modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
                         )
                     }
-                    // 播放/暂停：主键，large 容器 + Wide 宽度（比侧键更宽，主次分明）
+                    // 播放/暂停：主键，medium 容器 + Wide 宽度（比侧键更宽，主次分明）
                     // 点击与长按同源，避免两套手势互相吞事件
                     FilledIconButton(
                         onClick = {
@@ -750,12 +766,12 @@ val palette = bmp.extractVividPalette()
                             onTogglePlay()
                         },
                         shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.largeRoundShape,
-                            pressedShape = IconButtonDefaults.largePressedShape,
+                            shape = IconButtonDefaults.mediumRoundShape,
+                            pressedShape = IconButtonDefaults.mediumPressedShape,
                         ),
                         modifier = Modifier
                             .size(
-                                IconButtonDefaults.largeContainerSize(
+                                IconButtonDefaults.mediumContainerSize(
                                     IconButtonDefaults.IconButtonWidthOption.Wide,
                                 ),
                             )
@@ -773,18 +789,18 @@ val palette = bmp.extractVividPalette()
                         Icon(
                             imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
                             contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                            modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
                         )
                     }
                     // 下一首：与上一首同规格
                     FilledIconButton(
                         onClick = onNext,
                         shapes = IconButtonDefaults.shapes(
-                            shape = IconButtonDefaults.largeRoundShape,
-                            pressedShape = IconButtonDefaults.largePressedShape,
+                            shape = IconButtonDefaults.mediumRoundShape,
+                            pressedShape = IconButtonDefaults.mediumPressedShape,
                         ),
                         modifier = Modifier.size(
-                            IconButtonDefaults.largeContainerSize(
+                            IconButtonDefaults.mediumContainerSize(
                                 IconButtonDefaults.IconButtonWidthOption.Uniform,
                             ),
                         ),
@@ -793,7 +809,7 @@ val palette = bmp.extractVividPalette()
                         Icon(
                             Icons.Rounded.SkipNext,
                             contentDescription = "下一首",
-                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                            modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
                         )
                     }
                 }
@@ -1169,6 +1185,10 @@ private fun CurrentLineBanner(
  * 饱和度加权平均，得到 6 个独立主色；再统一向明亮方向提升
  * （提亮度、保饱和），营造鲜艳明快的观感。
  * 返回至少 6 个互不完全相同的候选色，供流体渐变 / 沉浸画布使用。
+ *
+ * v5 性能：原实现逐点调 [android.graphics.Bitmap.getPixel]，每次都是一次 JNI
+ * 往返（6 窗口 × 约 80 点 ≈ 500 次 JNI）。改为一次 `getPixels` 批量拷进 IntArray
+ * 后纯 JVM 侧遍历，JNI 调用降到 1 次。**必须在后台线程调用。**
  */
 fun android.graphics.Bitmap.extractVividPalette(): List<Int> {
     val pts = listOf(
@@ -1181,15 +1201,20 @@ fun android.graphics.Bitmap.extractVividPalette(): List<Int> {
     )
     val win = maxOf(4, minOf(width, height) / 10)
     val out = mutableListOf<Int>()
+    // 一次性批量取出全部像素（缩略图 inSampleSize=24，通常只有百来像素宽，内存可忽略）
+    val pixels = IntArray(width * height)
+    getPixels(pixels, 0, width, 0, 0, width, height)
     for ((fx, fy) in pts) {
         val cx = (fx * width).toInt().coerceIn(1, width - 2)
         val cy = (fy * height).toInt().coerceIn(1, height - 2)
         var r = 0L; var g = 0L; var b = 0L; var wsum = 0L
         val x0 = (cx - win).coerceAtLeast(0); val x1 = (cx + win).coerceAtMost(width - 1)
         val y0 = (cy - win).coerceAtLeast(0); val y1 = (cy + win).coerceAtMost(height - 1)
-        for (y in y0..y1 step maxOf(1, win / 4)) {
-            for (x in x0..x1 step maxOf(1, win / 4)) {
-                val px = getPixel(x, y)
+        val stride = maxOf(1, win / 4)
+        for (y in y0..y1 step stride) {
+            val rowBase = y * width
+            for (x in x0..x1 step stride) {
+                val px = pixels[rowBase + x]
                 val pr = (px shr 16) and 0xFF; val pg = (px shr 8) and 0xFF; val pb = px and 0xFF
                 val mx = maxOf(pr, pg, pb); val mn = minOf(pr, pg, pb)
                 val sat = mx - mn

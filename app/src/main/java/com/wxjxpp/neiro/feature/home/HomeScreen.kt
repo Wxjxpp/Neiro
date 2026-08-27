@@ -193,9 +193,18 @@ fun HomeScreen(
                     .fillMaxSize()
                     // 录制节点自带页面底色：重放时才是完整的"毛玻璃背后"画面
                     .background(MaterialTheme.colorScheme.background)
-                    .captureTo(capturedLayer)
-                    // Expr：标记为 Haze 模糊源（顶栏实时采样此处内容）
-                    .hazeSource(hazeState),
+                    // 性能（v5）：captureTo 每帧把整个列表**额外**录一遍进
+                    // GraphicsLayer（= 全屏 double draw），hazeSource 同理会挂
+                    // 采样节点。毛玻璃关闭时这两者的产物无人消费，纯浪费；
+                    // 而 topBarBlurEnabled 默认就是 false ——滑动卡顿的直接来源。
+                    // 因此改为按开关条件挂载。
+                    .then(
+                        if (topBarBlurEnabled) {
+                            Modifier.captureTo(capturedLayer).hazeSource(hazeState)
+                        } else {
+                            Modifier
+                        },
+                    ),
                 state = refreshState,
                 indicator = {
                     PullToRefreshDefaults.LoadingIndicator(
