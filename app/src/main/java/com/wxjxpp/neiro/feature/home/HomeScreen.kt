@@ -546,77 +546,8 @@ fun SongsTopBar(
                 label = "searchModeTitle",
             ) { mode ->
                 if (mode) {
-                    // Expr：与搜索页同款的 Material3 SearchBar（56dp 胶囊）——
-                    // 点击后在本容器弹簧放大到全宽（对齐搜索页展开尺寸），320ms 后切页。
-                    // 尺寸连续：顶栏收起态 = 搜索页收起态，视觉上是同一个控件在长大
-                    var launching by remember { mutableStateOf(false) }
-                    val expand by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (launching) 1.1f else 1f,
-                        animationSpec = androidx.compose.animation.core.spring(
-                            dampingRatio = 0.62f,
-                            stiffness = 260f,
-                        ),
-                        label = "searchBarExpand",
-                    )
-                    val glow by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (launching) 1f else 0f,
-                        animationSpec = androidx.compose.animation.core.tween(280),
-                        label = "searchBarGlow",
-                    )
-                    LaunchedEffect(launching) {
-                        if (launching) {
-                            kotlinx.coroutines.delay(320)
-                            onSearch()
-                        }
-                    }
-                    Surface(
-                        onClick = { if (!launching) launching = true },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
-                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                        shadowElevation = if (launching) 10.dp else 0.dp,
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(56.dp)
-                            .then(
-                                com.wxjxpp.neiro.ui.components.LocalRouteAnimScope.current?.let { animScope ->
-                                    com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope.current?.let { sts ->
-                                        with(sts) {
-                                            Modifier.sharedBounds(
-                                                sharedContentState = rememberSharedContentState(key = "search_bar"),
-                                                animatedVisibilityScope = animScope,
-                                            )
-                                        }
-                                    }
-                                } ?: Modifier
-                            )
-                            .graphicsLayer {
-                                scaleX = expand; scaleY = expand
-                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
-                            }
-                            .blur(if (launching) 3.dp else 0.dp),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .padding(start = 16.dp),
-                        ) {
-                            Icon(
-                                Icons.Rounded.Search,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(24.dp),
-                            )
-                            Text(
-                                text = "歌名 / 歌手 / 专辑 / 标签",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                    .copy(alpha = 1f - glow * 0.5f),
-                                maxLines = 1,
-                                modifier = Modifier.padding(start = 12.dp),
-                            )
-                        }
-                    }
+                    // Expr：与搜索页同规格的 SearchBar 胶囊（公共组件，sharedBounds 跨页变形）
+                    com.wxjxpp.neiro.ui.components.TopBarSearchPill(onSearch = onSearch)
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Rounded.MusicNote, contentDescription = null)

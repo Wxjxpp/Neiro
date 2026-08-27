@@ -40,6 +40,9 @@ import androidx.compose.material.icons.rounded.SkipPrevious
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
+import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.rounded.Speed
+import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
@@ -757,87 +760,9 @@ val palette = bmp.extractVividPalette()
                             },
                         )
                     }
-                    // 更多菜单：下载 / 歌词偏移 / 翻译 / 倍速 / 音质
-                    Box {
-                        IconButton(onClick = { showMoreMenu = true }) {
-                            Icon(Icons.Rounded.MoreVert, contentDescription = "更多")
-                        }
-                        DropdownMenu(
-                            expanded = showMoreMenu,
-                            onDismissRequest = { showMoreMenu = false },
-                        ) {
-                            if (isRemoteSong && onDownload != null) {
-                                DropdownMenuItem(
-                                    text = { Text(if (isDownloading) "正在下载…" else "下载歌曲") },
-                                    leadingIcon = { Icon(Icons.Rounded.Download, contentDescription = null) },
-                                    enabled = !isDownloading,
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onDownload?.invoke()
-                                    },
-                                )
-                            }
-                            DropdownMenuItem(
-                                text = {
-                                    Text(if (lyricsOffsetMs == 0L) "歌词偏移" else "歌词偏移 (${lyricsOffsetMs}ms)")
-                                },
-                                leadingIcon = { Icon(Icons.Rounded.Schedule, contentDescription = null) },
-                                onClick = {
-                                    showMoreMenu = false
-                                    showOffsetPanel = !showOffsetPanel
-                                },
-                            )
-                            if (lyrics.hasTranslation) {
-                                DropdownMenuItem(
-                                    text = { Text("歌词翻译") },
-                                    leadingIcon = { Icon(Icons.Rounded.Translate, contentDescription = null) },
-                                    trailingIcon = {
-                                        if (translationOn) Icon(Icons.Rounded.Check, contentDescription = null)
-                                    },
-                                    onClick = {
-                                        translationOn = !translationOn
-                                        onToggleTranslation()
-                                    },
-                                )
-                            }
-                            listOf(1f, 1.25f, 1.5f, 2f).forEachIndexed { idx, sp ->
-                                val label = listOf("1x 正常", "1.25x", "1.5x", "2x")[idx]
-                                DropdownMenuItem(
-                                    text = { Text(label) },
-                                    trailingIcon = {
-                                        if (abs(state.speed - sp) < 0.01f) {
-                                            Icon(Icons.Rounded.Check, contentDescription = null)
-                                        }
-                                    },
-                                    onClick = {
-                                        showMoreMenu = false
-                                        onSpeedChange(sp)
-                                    },
-                                )
-                            }
-                            if (isRemoteSong) {
-                                listOf(
-                                    Quality.Low,
-                                    Quality.Standard,
-                                    Quality.High,
-                                    Quality.Lossless,
-                                    Quality.HiRes,
-                                ).forEach { q ->
-                                    DropdownMenuItem(
-                                        text = { Text("音质 · " + qualityLabel(q)) },
-                                        trailingIcon = {
-                                            if (currentQuality == q) {
-                                                Icon(Icons.Rounded.Check, contentDescription = null)
-                                            }
-                                        },
-                                        onClick = {
-                                            showMoreMenu = false
-                                            if (q != currentQuality) onQualityChange(q)
-                                        },
-                                    )
-                                }
-                            }
-                        }
+                    // 更多菜单：下载 / 歌词偏移 / 翻译 / 倍速 / 音质（Expr：改为底部 Sheet 展开，替代挤在一团的下拉）
+                    IconButton(onClick = { showMoreMenu = true }) {
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多")
                     }
                 }
             }
@@ -866,6 +791,116 @@ val palette = bmp.extractVividPalette()
             },
         )
     }
+    // Expr：更多操作底部 Sheet（替代原 DropdownMenu——大字号全宽行，不再挤在一团）
+    if (showMoreMenu && !pureMode) {
+        ModalBottomSheet(onDismissRequest = { showMoreMenu = false }) {
+            Column(modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp)) {
+                Text(
+                    text = "更多操作",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+                )
+                if (isRemoteSong && onDownload != null) {
+                    SheetActionRow(
+                        icon = Icons.Rounded.Download,
+                        label = if (isDownloading) "正在下载…" else "下载歌曲",
+                        enabled = !isDownloading,
+                        onClick = {
+                            showMoreMenu = false
+                            onDownload?.invoke()
+                        },
+                    )
+                }
+                SheetActionRow(
+                    icon = Icons.Rounded.Schedule,
+                    label = if (lyricsOffsetMs == 0L) "歌词偏移" else "歌词偏移 (${lyricsOffsetMs}ms)",
+                    onClick = {
+                        showMoreMenu = false
+                        showOffsetPanel = !showOffsetPanel
+                    },
+                )
+                if (lyrics.hasTranslation) {
+                    SheetActionRow(
+                        icon = Icons.Rounded.Translate,
+                        label = "歌词翻译",
+                        checked = translationOn,
+                        onClick = {
+                            translationOn = !translationOn
+                            onToggleTranslation()
+                        },
+                    )
+                }
+                listOf(1f, 1.25f, 1.5f, 2f).forEach { sp ->
+                    val label = when (sp) {
+                        1f -> "倍速 · 1x 正常"; 1.25f -> "倍速 · 1.25x"
+                        1.5f -> "倍速 · 1.5x"; else -> "倍速 · 2x"
+                    }
+                    SheetActionRow(
+                        icon = Icons.Rounded.Speed,
+                        label = label,
+                        checked = abs(state.speed - sp) < 0.01f,
+                        onClick = {
+                            showMoreMenu = false
+                            onSpeedChange(sp)
+                        },
+                    )
+                }
+                if (isRemoteSong) {
+                    listOf(
+                        Quality.Low,
+                        Quality.Standard,
+                        Quality.High,
+                        Quality.Lossless,
+                        Quality.HiRes,
+                    ).forEach { q ->
+                        SheetActionRow(
+                            icon = Icons.Rounded.GraphicEq,
+                            label = "音质 · " + qualityLabel(q),
+                            checked = currentQuality == q,
+                            onClick = {
+                                showMoreMenu = false
+                                if (q != currentQuality) onQualityChange(q)
+                            },
+                                                )
+                    }
+                }
+            }
+        }
+    }
+    } // ModalBottomSheet content
+}
+/** 更多操作 Sheet 的全宽动作行：大图标 + 大字号 + 可选选中勾。 */
+@Composable
+private fun SheetActionRow(
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    label: String,
+    checked: Boolean = false,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(horizontal = 24.dp, vertical = 14.dp),
+    ) {
+        Icon(
+            icon,
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.85f else 0.35f),
+            modifier = Modifier.size(24.dp),
+        )
+        Text(
+            text = label,
+            style = MaterialTheme.typography.bodyLarge,
+            color = MaterialTheme.colorScheme.onSurface.copy(alpha = if (enabled) 0.92f else 0.38f),
+            modifier = Modifier.padding(start = 16.dp).weight(1f),
+        )
+        if (checked) {
+            Icon(Icons.Rounded.Check, contentDescription = "已选",
+                tint = MaterialTheme.colorScheme.primary)
+        }
     }
 }
 /** 音质档位的短标签。 */

@@ -87,19 +87,43 @@ fun DiscoverScreen(
     modifier: Modifier = Modifier,
 ) {
     val inDetail = detailId != null
-    // 二级菜单返回手势：先回一级，再走外壳的页面级返回
+    // Expr：与歌曲页同款——下滑展开 SearchBar，滚回顶部还原（容器变换由外壳路由层驱动）
+    val discoverListState = androidx.compose.foundation.lazy.rememberLazyListState()
+    val discoverScrollSearch by androidx.compose.runtime.remember {
+        androidx.compose.runtime.derivedStateOf {
+            !inDetail && (discoverListState.firstVisibleItemIndex > 0 ||
+                discoverListState.firstVisibleItemScrollOffset > 480)
+        }
+    }
     BackHandler(enabled = inDetail) { onCloseDetail() }
     Column(modifier = modifier.fillMaxSize()) {
         TopAppBar(
             windowInsets = WindowInsets(0),
             title = {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Rounded.Explore, contentDescription = null)
-                    Text(
-                        text = "发现",
-                        style = MaterialTheme.typography.labelLarge,
-                        modifier = Modifier.padding(start = AppTheme.dimens.spaceSm),
-                    )
+                // Expr：与歌曲页同款 SearchBar 模式——详情态保持原样，列表态下滑展开搜索条
+                val searchMode = !inDetail && discoverScrollSearch
+                androidx.compose.animation.AnimatedContent(
+                    targetState = inDetail to searchMode,
+                    transitionSpec = {
+                        androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) togetherWith
+                            androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+                    },
+                    label = "discoverTopTitle",
+                ) { (detail, sm) ->
+                    when {
+                        detail -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("榜单详情", style = MaterialTheme.typography.labelLarge)
+                        }
+                        sm -> com.wxjxpp.neiro.ui.components.TopBarSearchPill(onSearch = onOpenSearch)
+                        else -> Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Explore, contentDescription = null)
+                            Text(
+                                text = "发现",
+                                style = MaterialTheme.typography.labelLarge,
+                                modifier = Modifier.padding(start = AppTheme.dimens.spaceSm),
+                            )
+                        }
+                    }
                 }
             },
             navigationIcon = {
@@ -111,7 +135,7 @@ fun DiscoverScreen(
                 }
             },
             actions = {
-                if (!inDetail) {
+                if (!inDetail && !discoverScrollSearch) {
                     IconButton(onClick = onOpenSearch) {
                         Icon(Icons.Rounded.Search, contentDescription = "搜索")
                     }
@@ -153,6 +177,7 @@ fun DiscoverScreen(
             ) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
+                state = discoverListState,
                 contentPadding = PaddingValues(bottom = contentPadding.calculateBottomPadding()),
             ) {
                 // 时段问候语
