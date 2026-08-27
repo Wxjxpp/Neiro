@@ -545,11 +545,12 @@ fun SongsTopBar(
                 label = "searchModeTitle",
             ) { mode ->
                 if (mode) {
-                    // Expr：点击后 SearchBar 在源容器**原地弹簧展开放大 + 光晕渐变增强**，
-                    // 300ms 后才真正切页——变形发生在当前页，而非跳过去再变（Google 容器变换规范）
+                    // Expr：与搜索页同款的 Material3 SearchBar（56dp 胶囊）——
+                    // 点击后在本容器弹簧放大到全宽（对齐搜索页展开尺寸），320ms 后切页。
+                    // 尺寸连续：顶栏收起态 = 搜索页收起态，视觉上是同一个控件在长大
                     var launching by remember { mutableStateOf(false) }
                     val expand by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (launching) 1.22f else 1f,
+                        targetValue = if (launching) 1.1f else 1f,
                         animationSpec = androidx.compose.animation.core.spring(
                             dampingRatio = 0.62f,
                             stiffness = 260f,
@@ -569,41 +570,37 @@ fun SongsTopBar(
                     }
                     Surface(
                         onClick = { if (!launching) launching = true },
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
-                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp),
+                        color = MaterialTheme.colorScheme.surfaceContainerHigh,
                         shadowElevation = if (launching) 10.dp else 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
-                            .height(40.dp)
+                            .height(56.dp)
                             .graphicsLayer {
                                 scaleX = expand; scaleY = expand
-                                // 展开时轻微下沉居中放大，避免顶部裁切
                                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
-                                shape = androidx.compose.foundation.shape.RoundedCornerShape(
-                                    androidx.compose.ui.unit.lerp(24.dp, 28.dp, glow),
-                                )
-                                clip = true
-                                shapeElevation = if (launching) 10.dp else 0.dp
                             }
                             .blur(if (launching) 3.dp else 0.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 14.dp),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .padding(start = 16.dp),
                         ) {
                             Icon(
                                 Icons.Rounded.Search,
                                 contentDescription = null,
                                 tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                modifier = Modifier.size(20.dp),
+                                modifier = Modifier.size(24.dp),
                             )
                             Text(
-                                text = "搜索歌曲、歌手…",
-                                style = MaterialTheme.typography.bodyMedium,
+                                text = "歌名 / 歌手 / 专辑 / 标签",
+                                style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                     .copy(alpha = 1f - glow * 0.5f),
                                 maxLines = 1,
-                                modifier = Modifier.padding(start = 8.dp),
+                                modifier = Modifier.padding(start = 12.dp),
                             )
                         }
                     }
