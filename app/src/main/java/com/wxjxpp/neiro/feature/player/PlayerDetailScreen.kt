@@ -777,6 +777,23 @@ val palette = bmp.extractVividPalette()
                         }
                     }
                 }
+                    // Expr v3：音质与音效 pill（与控制行同排，对称放置）
+                    Surface(
+                        onClick = { showAudioFxSheet = true },
+                        shape = RoundedCornerShape(50),
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        ) {
+                            Icon(Icons.Rounded.Equalizer, contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(6.dp))
+                            Text("音质与音效", style = MaterialTheme.typography.labelLarge,
+                                color = MaterialTheme.colorScheme.onPrimary)
+                        }
+                    }
                 if (!pureMode) {
                     IconButton(onClick = { showQueue = true }) {
                         Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
@@ -816,23 +833,6 @@ val palette = bmp.extractVividPalette()
                                 MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
                             },
                         )
-                    }
-                    // Expr v3：音质与音效独立 Sheet 入口（accent pill）
-                    Surface(
-                        onClick = { showAudioFxSheet = true },
-                        shape = RoundedCornerShape(50),
-                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.85f),
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-                        ) {
-                            Icon(Icons.Rounded.Equalizer, contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text("音质与音效", style = MaterialTheme.typography.labelLarge,
-                                color = MaterialTheme.colorScheme.onPrimary)
-                        }
                     }
                     // 更多菜单：下载 / 歌词偏移 / 翻译
                     IconButton(onClick = { showMoreMenu = true }) {
