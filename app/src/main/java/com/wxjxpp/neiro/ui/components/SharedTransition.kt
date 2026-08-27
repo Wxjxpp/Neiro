@@ -24,6 +24,12 @@ import androidx.compose.runtime.compositionLocalOf
  * ```
  */
 val LocalSharedTransitionScope = compositionLocalOf<SharedTransitionScope?> { null }
+/**
+ * 路由级 AnimatedContent 的动画作用域：跨页面共享元素（如歌曲页 SearchBar ↔ 搜索页
+ * SearchBar 容器变换）两端都必须挂到驱动路由转场的同一 AnimatedContent 上。
+ * 由外壳在 AnimatedContent body 内 provide 当前 `this`，页面内取用。
+ */
+val LocalRouteAnimScope = compositionLocalOf<AnimatedVisibilityScope?> { null }
 
 /**
  * 底栏下沉联动通道：页面手势（如字母索引拖球快移）调用

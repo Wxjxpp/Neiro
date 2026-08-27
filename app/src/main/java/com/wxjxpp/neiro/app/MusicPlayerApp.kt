@@ -568,6 +568,9 @@ private fun RouteContent(
             label = "rootRoute",
             modifier = modifier,
         ) { currentRoute ->
+            androidx.compose.runtime.CompositionLocalProvider(
+                com.wxjxpp.neiro.ui.components.LocalRouteAnimScope provides this,
+            ) {
             Box(modifier = Modifier.fillMaxSize()) {
             when (currentRoute) {
                 Destination.Home.route, Destination.Library.route -> if (uiState.songs.isEmpty()) {
@@ -834,10 +837,12 @@ private fun RouteContent(
                     modifier = Modifier.fillMaxSize(),
                 )
             }
-            }
         }
         }
     }
+
+        }
+        }
 }
 
 private fun inSelectionModeCompat(uiState: ShellUiState): Boolean = uiState.selectedSongIds.isNotEmpty()

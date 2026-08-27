@@ -105,6 +105,7 @@ import java.util.Locale
     ExperimentalMaterial3Api::class,
     ExperimentalMaterial3ExpressiveApi::class,
     ExperimentalFoundationApi::class,
+    androidx.compose.animation.ExperimentalSharedTransitionApi::class,
 )
 @Composable
 fun HomeScreen(
@@ -576,6 +577,18 @@ fun SongsTopBar(
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(56.dp)
+                            .then(
+                                com.wxjxpp.neiro.ui.components.LocalRouteAnimScope.current?.let { animScope ->
+                                    com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope.current?.let { sts ->
+                                        with(sts) {
+                                            Modifier.sharedBounds(
+                                                sharedContentState = rememberSharedContentState(key = "search_bar"),
+                                                animatedVisibilityScope = animScope,
+                                            )
+                                        }
+                                    }
+                                } ?: Modifier
+                            )
                             .graphicsLayer {
                                 scaleX = expand; scaleY = expand
                                 transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)

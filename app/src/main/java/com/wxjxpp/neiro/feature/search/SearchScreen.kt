@@ -58,8 +58,12 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
  * - 平台筛选：官方连通按钮组（M3E connected button group）
  * - 在线搜索中展示 MD3E LoadingIndicator；空结果按原因归因提示
  */
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class,
-    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class)
+@OptIn(
+    ExperimentalMaterial3Api::class,
+    ExperimentalLayoutApi::class,
+    androidx.compose.material3.ExperimentalMaterial3ExpressiveApi::class,
+    androidx.compose.animation.ExperimentalSharedTransitionApi::class,
+)
 @Composable
 fun SearchScreen(
     query: String,
@@ -154,7 +158,21 @@ fun SearchScreen(
             // 否则 M3 全屏 SearchBar 内容被挤到中间、顶部/两侧露白）
             modifier = Modifier
                 .fillMaxWidth()
-                .then(if (active) Modifier else Modifier.padding(horizontal = dimens.spaceMd)),
+                .then(if (active) Modifier else Modifier.padding(horizontal = dimens.spaceMd))
+                // Expr：容器变换终点——与歌曲页顶栏搜索条同 key，
+                // 进页时长宽从顶栏胶囊连续变形到本 SearchBar（sharedBounds 驱动）
+                .then(
+                    com.wxjxpp.neiro.ui.components.LocalRouteAnimScope.current?.let { animScope ->
+                        com.wxjxpp.neiro.ui.components.LocalSharedTransitionScope.current?.let { sts ->
+                            with(sts) {
+                                Modifier.sharedBounds(
+                                    rememberSharedContentState(key = "search_bar"),
+                                    animatedVisibilityScope = animScope,
+                                )
+                            }
+                        }
+                    } ?: Modifier
+                ),
         ) {
             // 展开态正文：轻提示（不做历史记录）
             Text(
