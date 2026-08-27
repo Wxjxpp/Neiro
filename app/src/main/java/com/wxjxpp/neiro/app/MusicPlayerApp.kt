@@ -585,6 +585,9 @@ private fun RouteContent(
                         modifier = Modifier.fillMaxSize(),
                     )
                 } else {
+                    // Expr：SearchBar 模式状态（下滑展开搜索条 / 回顶还原）
+                    var songsSearchMode by remember { androidx.compose.runtime.mutableStateOf(false) }
+                    var scrollToTopSignal by remember { androidx.compose.runtime.mutableIntStateOf(0) }
                     HomeScreen(
                         songs = uiState.songs,
                         isRefreshing = uiState.isRefreshing,
@@ -592,6 +595,8 @@ private fun RouteContent(
                         currentPlayingId = currentPlayingId,
                         sortField = uiState.songSortField,
                         topBarBlurEnabled = uiState.topBarBlurEnabled,
+                        onSearchModeChange = { songsSearchMode = it },
+                        scrollToTopSignal = scrollToTopSignal,
                         topBar = {
                             if (inSelectionModeCompat(uiState)) {
                                 SelectionTopBar(
@@ -605,6 +610,8 @@ private fun RouteContent(
                                 SongsTopBar(
                                     onOpenDrawer = onOpenDrawer,
                                     onSearch = { onNavigate(Destination.Search.route) },
+                                    searchMode = songsSearchMode,
+                                    onScrollToTop = { scrollToTopSignal++ },
                                     onScan = onScan,
                                     onPlayRandom = { viewModel.playRandom() },
                                     sortField = uiState.songSortField,

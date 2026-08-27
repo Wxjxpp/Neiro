@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.PlaylistAdd
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Shuffle
+import androidx.compose.material.icons.rounded.VerticalAlignTop
 import androidx.compose.material.icons.rounded.SelectAll
 import androidx.compose.material.icons.rounded.Sort
 import androidx.compose.material3.AlertDialog
@@ -43,6 +44,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
@@ -107,6 +109,10 @@ fun HomeScreen(
     /** 当前正在播放的歌曲 id（用于高亮与"定位当前播放"）。 */
     currentPlayingId: String? = null,
     topBar: @Composable () -> Unit = {},
+    /** Expr：列表下滑进入 SearchBar 模式的回调（true=已下滑进入）。 */
+    onSearchModeChange: (Boolean) -> Unit = {},
+    /** Expr：外壳请求回顶的信号（每次 +1 触发一次平滑回顶）。 */
+    scrollToTopSignal: Int = 0,
     /** 歌曲排序字段：仅 Title（首字母）时启用字母索引侧边栏。 */
     sortField: SongSortField = SongSortField.Title,
     /** 顶栏下缘毛玻璃衔接带开关（设置页可控，默认关）。 */
@@ -124,6 +130,23 @@ fun HomeScreen(
     val inSelectionMode = selectedIds.isNotEmpty()
     // 一键回顶 / 定位当前播放
     val listState = rememberLazyListState()
+    // Expr：下滑超过阈值 → 顶栏切换为 SearchBar 模式（搜索图标展开成搜索条，其余按钮显示）
+    // 滚回顶部（首项可见）自动还原为常规顶栏
+    val searchModeByScroll by remember {
+        derivedStateOf {
+            listState.firstVisibleItemIndex > 0 || listState.firstVisibleItemScrollOffset > 480
+        }
+    }
+    // searchModeByScroll 变化时通知外壳（topBar 是外部传入的 slot，无法内部直接改内容）
+    androidx.compose.runtime.LaunchedEffect(searchModeByScroll) {
+        onSearchModeChange(searchModeByScroll)
+    }
+    // Expr：响应外壳的回顶信号（SearchBar 模式下点回顶按钮）
+    androidx.compose.runtime.LaunchedEffect(scrollToTopSignal) {
+        if (scrollToTopSignal > 0) {
+            listState.animateScrollToItem(0)
+        }
+    }
     // 实时毛玻璃：列表内容录进 GraphicsLayer，供顶栏下缘衔接带重放模糊
     val capturedLayer = rememberGraphicsLayer()
     // Expr：Haze 硬件加速模糊源（顶栏毛玻璃实验）
@@ -489,6 +512,10 @@ fun SongsTopBar(
     onSearch: () -> Unit,
     onScan: () -> Unit,
     onPlayRandom: () -> Unit = {},
+    /** Expr：SearchBar 模式——下滑展开后标题区变为搜索条，排序按钮并入。 */
+    searchMode: Boolean = false,
+    /** Expr：回顶按钮回调（SearchBar 模式下显示）。 */
+    onScrollToTop: () -> Unit = {},
     sortField: com.wxjxpp.neiro.core.model.SongSortField = com.wxjxpp.neiro.core.model.SongSortField.Title,
     sortDescending: Boolean = false,
     onSortFieldChange: (com.wxjxpp.neiro.core.model.SongSortField) -> Unit = {},
@@ -502,13 +529,52 @@ fun SongsTopBar(
             containerColor = Color.Transparent,
         ),
         title = {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(Icons.Rounded.MusicNote, contentDescription = null)
-                Text(
-                    text = "歌曲",
-                    style = MaterialTheme.typography.labelLarge,
-                    modifier = Modifier.padding(start = AppTheme.dimens.spaceSm),
-                )
+            // Expr：SearchBar 模式下标题区展开为假搜索条（点击进搜索页）——
+            // 参考 Google 示例 SearchBarWithAppBarIconsDemo：滚动后 AppBar 中的 SearchBar 展开
+            androidx.compose.animation.AnimatedContent(
+                targetState = searchMode,
+                transitionSpec = {
+                    (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)))
+                        togetherWith
+                        androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
+                },
+                label = "searchModeTitle",
+            ) { mode ->
+                if (mode) {
+                    Surface(
+                        onClick = onSearch,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
+                        color = MaterialTheme.colorScheme.surfaceVariant,
+                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp),
+                        ) {
+                            Icon(
+                                Icons.Rounded.Search,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.size(20.dp),
+                            )
+                            Text(
+                                text = "搜索歌曲、歌手…",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(start = 8.dp),
+                            )
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.MusicNote, contentDescription = null)
+                        Text(
+                            text = "歌曲",
+                            style = MaterialTheme.typography.labelLarge,
+                            modifier = Modifier.padding(start = AppTheme.dimens.spaceSm),
+                        )
+                    }
+                }
             }
         },
         navigationIcon = {
@@ -516,7 +582,9 @@ fun SongsTopBar(
                 Icon(Icons.Rounded.Menu, contentDescription = "打开导航")
             }
         },
-        actions = {
+                actions = {
+            // Expr：SearchBar 模式下隐藏排序（精简），只留扫描/随机/回顶
+            if (!searchMode) {
             // 排序：字段菜单 + 方向切换
             Box {
                 IconButton(onClick = { showSortMenu = !showSortMenu }) {
@@ -558,14 +626,22 @@ fun SongsTopBar(
                     )
                 }
             }
+            } // end if (!searchMode)
             IconButton(onClick = onScan) {
                 Icon(Icons.Rounded.Refresh, contentDescription = "扫描本地音乐")
             }
-            IconButton(onClick = onPlayRandom) {
+IconButton(onClick = onPlayRandom) {
                 Icon(Icons.Rounded.Shuffle, contentDescription = "随机一发")
             }
-            IconButton(onClick = onSearch) {
-                Icon(Icons.Rounded.Search, contentDescription = "搜索歌曲")
+            if (searchMode) {
+                // Expr：SearchBar 模式下原搜索图标换成"回顶"——滚回顶部即还原常规顶栏
+                IconButton(onClick = onScrollToTop) {
+                    Icon(Icons.Rounded.VerticalAlignTop, contentDescription = "回到顶部")
+                }
+            } else {
+                IconButton(onClick = onSearch) {
+                    Icon(Icons.Rounded.Search, contentDescription = "搜索歌曲")
+                }
             }
         },
     )
