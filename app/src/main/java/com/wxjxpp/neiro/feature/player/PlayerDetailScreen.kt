@@ -63,6 +63,9 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.darkColorScheme
+import androidx.compose.material3.FilledIconButton
+import androidx.compose.material3.IconButtonDefaults
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -192,7 +195,6 @@ fun PlayerDetailScreen(
     // Expr：更多操作 Sheet 开关（根部作用域，供底部 ModalBottomSheet 使用）
     var showMoreMenu by remember { mutableStateOf(false) }
     var showAudioFxSheet by remember { mutableStateOf(false) }
-    var showOffsetPanel by remember { mutableStateOf(false) }
     // 主区域顶部相对根 Box 的 Y 偏移（含状态栏+标题高度），供封面矩形插值定位
     var mainAreaTopPx by remember { mutableFloatStateOf(0f) }
     val isRemoteSong = song.location is MediaLocation.Remote
@@ -662,130 +664,146 @@ val palette = bmp.extractVividPalette()
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            // 播放控制行
+            // 播放控制行（Material 3 Expressive 规范）
+            //
+            // 布局：三段式 weight —— 左辅助键 / 中间主控组 / 右辅助键。
+            // 左右各占 weight(1f) 分别贴边，中间组 wrapContent，因此中间三键
+            // 永远处于屏幕几何正中（此前 SpaceBetween 会因左右宽度不等而偏移）。
+            //
+            // 按钮：统一用官方 FilledIconButton + IconButtonDefaults 尺寸令牌，
+            // 不再手写 Box + background。形状/按压变形/配色交给组件库，
+            // 后期维护只需替换尺寸令牌（extraLarge / large / medium / small）。
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = dimens.spaceXl, vertical = dimens.spaceSm),
+                    .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceSm),
                 verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween,
             ) {
-                if (!pureMode) {
-                    IconButton(
-                        onClick = onToggleShuffle,
-                        modifier = Modifier.pointerInput(Unit) {
-                            detectTapGestures(onLongPress = { onCycleRepeat() })
-                        },
-                    ) {
-                        // Expr：控制区图标固定单色（用户指定：流光背景不改变图标颜色，始终白/黑），
-                        // 深色沉浸画布上用白色系；激活态仅加粗字重+不透明度区分
-                        Icon(
-                            imageVector = if (state.shuffle) Icons.Rounded.Shuffle else when (state.repeatMode) {
-                                RepeatMode.One -> Icons.Rounded.RepeatOne
-                                RepeatMode.All -> Icons.Rounded.Repeat
-                                RepeatMode.Off -> Icons.Rounded.Shuffle
+                // 左侧：随机 / 循环
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    if (!pureMode) {
+                        IconButton(
+                            onClick = onToggleShuffle,
+                            modifier = Modifier.pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = { onToggleShuffle() },
+                                    onLongPress = { onCycleRepeat() },
+                                )
                             },
-                            contentDescription = "随机/循环（长按切循环）",
-                            tint = if (state.shuffle || state.repeatMode != RepeatMode.Off) {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.95f)
-                            } else {
-                                MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
-                            },
-                        )
+                        ) {
+                            Icon(
+                                imageVector = if (state.shuffle) Icons.Rounded.Shuffle else when (state.repeatMode) {
+                                    RepeatMode.One -> Icons.Rounded.RepeatOne
+                                    RepeatMode.All -> Icons.Rounded.Repeat
+                                    RepeatMode.Off -> Icons.Rounded.Shuffle
+                                },
+                                contentDescription = "随机/循环（长按切循环）",
+                                tint = if (state.shuffle || state.repeatMode != RepeatMode.Off) {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.95f)
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                },
+                            )
+                        }
                     }
-                } else {
-                    Spacer(Modifier.size(48.dp))
                 }
+                // 中间：上一首 / 播放 / 下一首（几何居中）
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
+                    horizontalArrangement = Arrangement.spacedBy(dimens.spaceSm),
                 ) {
-                    // Expr vivid：鲜艳大按钮风格（v3 取色药丸形）
                     val vivid = visualStyle == "vivid"
-                    // Expr v3：侧键中性容器色与画布对比（深画布浅钮 / 浅画布深钮），主键 accent
-                    val sideBtnBg = if (canvasLum < 0.5f) Color(0xFFE9ECF2).copy(alpha = 0.92f)
-                                    else Color(0xFF2A2C33).copy(alpha = 0.92f)
-                    val sideBtnFg = if (canvasLum < 0.5f) Color(0xFF1A1C22) else Color(0xFFF2F3F7)
-                    if (vivid) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp, 76.dp)
-                                .background(sideBtnBg, RoundedCornerShape(28.dp))
-                                .clickable(onClick = onPrevious),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一首",
-                                tint = sideBtnFg, modifier = Modifier.size(30.dp))
-                        }
+                    // 侧键容器色与画布对比（深画布→浅键 / 浅画布→深键）；主键 accent 实底。
+                    val sideColors = if (vivid) {
+                        IconButtonDefaults.filledIconButtonColors(
+                            containerColor = if (canvasLum < 0.5f) Color(0xFFE9ECF2) else Color(0xFF2A2C33),
+                            contentColor = if (canvasLum < 0.5f) Color(0xFF1A1C22) else Color(0xFFF2F3F7),
+                        )
                     } else {
-                        IconButton(onClick = onPrevious) {
-                            Icon(Icons.Rounded.SkipPrevious, contentDescription = "上一首")
-                        }
+                        IconButtonDefaults.filledTonalIconButtonColors()
                     }
-                    if (vivid) {
-                        Box(
-                            modifier = Modifier
-                                .size(96.dp, 76.dp)
-                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(30.dp))
-                                // Expr fix：clickable 与 pointerInput 不能并存（后者吞掉 down 事件），
-                                // 点击 + 长按统一由 detectTapGestures 处理
-                                .pointerInput(Unit) {
-                                    detectTapGestures(
-                                        onTap = {
-                                            if (pureMode && state.isPlaying) pureModeOverride = false
-                                            onTogglePlay()
-                                        },
-                                        onLongPress = { pureModeOverride = true },
-                                    )
-                                },
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                                modifier = Modifier.size(46.dp),
-                                tint = MaterialTheme.colorScheme.onPrimary,
+                    // 上一首：large 容器 + Uniform 宽度
+                    FilledIconButton(
+                        onClick = onPrevious,
+                        shapes = IconButtonDefaults.shapes(
+                            shape = IconButtonDefaults.largeRoundShape,
+                            pressedShape = IconButtonDefaults.largePressedShape,
+                        ),
+                        modifier = Modifier.size(
+                            IconButtonDefaults.largeContainerSize(
+                                IconButtonDefaults.IconButtonWidthOption.Uniform,
+                            ),
+                        ),
+                        colors = sideColors,
+                    ) {
+                        Icon(
+                            Icons.Rounded.SkipPrevious,
+                            contentDescription = "上一首",
+                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                        )
+                    }
+                    // 播放/暂停：主键，large 容器 + Wide 宽度（比侧键更宽，主次分明）
+                    // 点击与长按同源，避免两套手势互相吞事件
+                    FilledIconButton(
+                        onClick = {
+                            if (pureMode && state.isPlaying) pureModeOverride = false
+                            onTogglePlay()
+                        },
+                        shapes = IconButtonDefaults.shapes(
+                            shape = IconButtonDefaults.largeRoundShape,
+                            pressedShape = IconButtonDefaults.largePressedShape,
+                        ),
+                        modifier = Modifier
+                            .size(
+                                IconButtonDefaults.largeContainerSize(
+                                    IconButtonDefaults.IconButtonWidthOption.Wide,
+                                ),
                             )
-                        }
-                    } else {
-                        IconButton(
-                            onClick = {
-                                if (pureMode && state.isPlaying) pureModeOverride = false
-                                onTogglePlay()
+                            .pointerInput(Unit) {
+                                detectTapGestures(
+                                    onTap = {
+                                        if (pureMode && state.isPlaying) pureModeOverride = false
+                                        onTogglePlay()
+                                    },
+                                    onLongPress = { pureModeOverride = true },
+                                )
                             },
-                            modifier = Modifier.size(56.dp),
-                        ) {
-                            Icon(
-                                imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                                contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
-                                modifier = Modifier.size(44.dp),
-                            )
-                        }
+                        colors = IconButtonDefaults.filledIconButtonColors(),
+                    ) {
+                        Icon(
+                            imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
+                            contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
+                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                        )
                     }
-                    if (vivid) {
-                        Box(
-                            modifier = Modifier
-                                .size(64.dp, 76.dp)
-                                .background(sideBtnBg, RoundedCornerShape(28.dp))
-                                .clickable(onClick = onNext),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(Icons.Rounded.SkipNext, contentDescription = "下一首",
-                                tint = sideBtnFg, modifier = Modifier.size(30.dp))
-                        }
-                    } else {
-                        IconButton(onClick = onNext) {
-                            Icon(Icons.Rounded.SkipNext, contentDescription = "下一首")
-                        }
+                    // 下一首：与上一首同规格
+                    FilledIconButton(
+                        onClick = onNext,
+                        shapes = IconButtonDefaults.shapes(
+                            shape = IconButtonDefaults.largeRoundShape,
+                            pressedShape = IconButtonDefaults.largePressedShape,
+                        ),
+                        modifier = Modifier.size(
+                            IconButtonDefaults.largeContainerSize(
+                                IconButtonDefaults.IconButtonWidthOption.Uniform,
+                            ),
+                        ),
+                        colors = sideColors,
+                    ) {
+                        Icon(
+                            Icons.Rounded.SkipNext,
+                            contentDescription = "下一首",
+                            modifier = Modifier.size(IconButtonDefaults.largeIconSize),
+                        )
                     }
                 }
-                // 播放列表按钮（控制行右端，与左端随机/循环对称）
-                if (!pureMode) {
-                    IconButton(onClick = { showQueue = true }) {
-                        Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
+                // 右侧：播放列表
+                Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    if (!pureMode) {
+                        IconButton(onClick = { showQueue = true }) {
+                            Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
+                        }
                     }
-                } else {
-                    Spacer(Modifier.size(48.dp))
                 }
             }
             // 功能区：收藏 / 歌词切换 / 更多菜单（下载、歌词偏移、翻译、倍速、音质并入菜单）
@@ -835,17 +853,6 @@ val palette = bmp.extractVividPalette()
                 }
             }
         }
-        // 歌词偏移调节面板
-        if (showOffsetPanel && lyricsMode && !pureMode) {
-            LyricsOffsetPanel(
-                offsetMs = lyricsOffsetMs,
-                onChange = onLyricsOffsetChange,
-                onDismiss = { showOffsetPanel = false },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 120.dp),
-            )
-        }
         // 返回按钮：已移除（返回手势/下滑即可收起）
     }
     if (showQueue && !pureMode) {
@@ -884,14 +891,56 @@ val palette = bmp.extractVividPalette()
                         },
                     )
                 }
-                SheetActionRow(
-                    icon = Icons.Rounded.Schedule,
-                    label = if (lyricsOffsetMs == 0L) "歌词偏移" else "歌词偏移 (${lyricsOffsetMs}ms)",
-                    onClick = {
-                        showMoreMenu = false
-                        showOffsetPanel = !showOffsetPanel
-                    },
-                )
+                // Expr v4：歌词偏移直接内联在 Sheet 内调节（不再弹独立浮层）
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            Icons.Rounded.Schedule,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.width(16.dp))
+                        Text("歌词偏移", style = MaterialTheme.typography.bodyLarge)
+                        Spacer(Modifier.weight(1f))
+                        Text(
+                            text = "%+d ms".format(lyricsOffsetMs),
+                            style = MaterialTheme.typography.labelLarge,
+                            color = if (lyricsOffsetMs != 0L) MaterialTheme.colorScheme.primary
+                                    else MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Slider(
+                        value = lyricsOffsetMs.toFloat().coerceIn(-5000f, 5000f),
+                        onValueChange = { onLyricsOffsetChange(it.toLong()) },
+                        valueRange = -5000f..5000f,
+                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("-5s", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Spacer(Modifier.weight(1f))
+                        // 微调 ±100ms，便于精确对齐
+                        TextButton(onClick = { onLyricsOffsetChange(lyricsOffsetMs - 100) }) {
+                            Text("-100ms", style = MaterialTheme.typography.labelMedium)
+                        }
+                        TextButton(onClick = { onLyricsOffsetChange(0L) }) {
+                            Text("重置", style = MaterialTheme.typography.labelMedium)
+                        }
+                        TextButton(onClick = { onLyricsOffsetChange(lyricsOffsetMs + 100) }) {
+                            Text("+100ms", style = MaterialTheme.typography.labelMedium)
+                        }
+                        Spacer(Modifier.weight(1f))
+                        Text("+5s", style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
                 if (lyrics.hasTranslation) {
                     SheetActionRow(
                         icon = Icons.Rounded.Translate,
@@ -1235,53 +1284,6 @@ private fun android.graphics.Bitmap.extractDominantArgb(): Int {
     // 40% 均色校正明度后，统一向明亮鲜艳方向提升（用户要求：取色偏明亮风）
     return brightenVivid(androidx.core.graphics.ColorUtils.blendARGB(hue, avg, 0.40f))
 }
-/** 歌词偏移调节面板：紧凑版，±50ms。 */
-@Composable
-private fun LyricsOffsetPanel(
-    offsetMs: Long,
-    onChange: (Long) -> Unit,
-    onDismiss: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    androidx.compose.material3.Surface(
-        modifier = modifier.padding(horizontal = 56.dp),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-        tonalElevation = 4.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Column(modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("偏移", style = MaterialTheme.typography.labelLarge)
-                Spacer(Modifier.weight(1f))
-                Text(
-                    text = "%+d ms".format(offsetMs),
-                    style = MaterialTheme.typography.labelLarge,
-                    color = MaterialTheme.colorScheme.primary,
-                )
-            }
-            Slider(
-                value = offsetMs.toFloat().coerceIn(-50f, 50f),
-                onValueChange = { onChange(it.toLong()) },
-                valueRange = -5000f..5000f,
-            )
-            Row(
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text("-50", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                androidx.compose.material3.TextButton(onClick = { onChange(0L) }) {
-                    Text("重置", style = MaterialTheme.typography.labelMedium)
-                }
-                androidx.compose.material3.TextButton(onClick = onDismiss) {
-                    Text("完成", style = MaterialTheme.typography.labelMedium)
-                }
-                Text("+50", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-        }
-    }
-}
-
 /** 文本超长时启用跑马灯滚动。 */
 @OptIn(androidx.compose.foundation.ExperimentalFoundationApi::class)
 private fun Modifier.marqueeIfLong(): Modifier =
@@ -1357,17 +1359,22 @@ private fun EqualizerSection(
                     }
                 }
             }
-            // Expr v3：10 段滑杆——Row 内 weight 均分列宽，每列「增益值-竖直滑条-频率」
-            // 滑条横向绘制后旋转 270 度（graphicsLayer 不参与测量，零重叠风险）
+            // Expr v4：10 段滑杆
+            // - 滑条长度 96dp -> 184dp（旋转前的 width 即旋转后的可视长度）
+            // - 列间距 2dp -> 10dp，左右留白 8dp -> 4dp（把空间让给滑条本体）
+            // - 整组可横向滚动：10 段 * (最小列宽 + 间距) 超出窄屏时不再挤成一团
             Row(
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .padding(horizontal = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 gains.forEachIndexed { i, g ->
                     Column(
                         horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
-                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.width(34.dp),
                     ) {
                         Text(
                             text = if (g.toInt() == 0) "0" else "%+d".format(g.toInt()),
@@ -1375,8 +1382,10 @@ private fun EqualizerSection(
                             color = if (g != 0f) MaterialTheme.colorScheme.primary
                                     else MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        // 竖直滑条：横向布局 184dp，再由 graphicsLayer 旋转 270 度；
+                        // 外层 Box 高度 = 滑条长度，宽度 = 列宽，旋转不参与测量所以不会重叠。
                         Box(
-                            modifier = Modifier.height(96.dp).fillMaxWidth(),
+                            modifier = Modifier.height(184.dp).fillMaxWidth(),
                             contentAlignment = Alignment.Center,
                         ) {
                             Slider(
@@ -1386,7 +1395,7 @@ private fun EqualizerSection(
                                 },
                                 valueRange = -12f..12f,
                                 modifier = Modifier
-                                    .width(88.dp)
+                                    .width(184.dp)
                                     .graphicsLayer {
                                         rotationZ = 270f
                                         transformOrigin = androidx.compose.ui.graphics.TransformOrigin.Center
@@ -1401,3 +1410,4 @@ private fun EqualizerSection(
         }
     }
 }
+
