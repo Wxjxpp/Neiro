@@ -50,6 +50,20 @@ class LrcParser : LyricsParser {
         val ANY_WORD_TAG = Regex(
             """<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>|<-?\d+,-?\d+(?:,-?\d+)?>|\(-?\d+,-?\d+(?:,-?\d+)?\)"""
         )
+        /**
+         * 判定"翻译行"允许的最大时间戳偏差（毫秒）。
+         *
+         * 双语 LRC 的翻译行时间戳与原文行本应完全相同，少数导出器会有几十毫秒抖动。
+         * 取 80ms：足以覆盖抖动，又远小于任何真实歌词的换句间隔。
+         */
+        const val NEAR_PAIR_MS = 80L
+        /**
+         * 判定整份歌词"是双语成对结构"的最低配对占比。
+         *
+         * 双语 LRC 里几乎每句都跟一条翻译，理想值接近 0.5（每两行一对）。
+         * 取 0.30 留出容差（部分句子无翻译、以及元数据行的稀释）。
+         */
+        const val PAIR_RATIO_MIN = 0.30f
     }
 
     override fun canParse(content: String, hint: String?): Boolean {
@@ -127,33 +141,43 @@ class LrcParser : LyricsParser {
     /**
      * 双语 LRC 翻译配对。
      *
-     * 很多双语 LRC 的翻译行时间戳与原句**并不严格相等**（差几十毫秒），
-     * 只按"同一时间戳"分桶会把翻译漏成独立歌词行。补一轮启发式合并：
-     * - 与上一句起始差 ≤ 60ms：直接视为同句第二文本（翻译）
-     * - 差 ≤ 1500ms 且两行文字系统不同（一方含 CJK/韩文另一方不含）：视为翻译
-     *   （语言系统校验避免误吞快歌中相邻的两句不同歌词）
+     * ## v6 修复：删掉"1500ms + 语言不同即视为翻译"的启发式
+     *
+     * 旧规则是 `gap <= 1500ms && 一方含CJK另一方不含 → 判为翻译`。这在中英混写的
+     * 说唱/R&B 里必然误判：`[01:05.05]you are my only one` 和
+     * `[01:06.39]我不能忘记她` 是两句**独立歌词**，间隔 1.34s、语言系统不同，
+     * 正好命中该规则被吞成翻译。实测用户提供的 LRC 里这样被误吞的有 7 处。
+     *
+     * 真实的双语 LRC，翻译行时间戳与原文**几乎完全相同**（绝大多数是完全相等，
+     * 少数导出器差几十毫秒）。所以现在：
+     * - 完全相等的时间戳已由上游分桶处理；
+     * - 这里只处理"差 ≤ [NEAR_PAIR_MS] 毫秒"的准同时行；
+     * - 并且要求整份歌词**全局呈现成对结构**（准同时的配对数占总行数的比例
+     *   达到 [PAIR_RATIO_MIN]）才启用合并。单份歌词里偶然出现的一两处紧邻行
+     *   不会触发误判。
      */
     private fun mergeTranslationPairs(sorted: List<LyricLine>): List<LyricLine> {
+        // 先统计全局结构：有多少对相邻行是"准同时"的
+        var nearPairs = 0
+        for (i in 0 until sorted.size - 1) {
+            if (sorted[i + 1].startMs - sorted[i].startMs in 0..NEAR_PAIR_MS) nearPairs++
+        }
+        // 成对结构判定：双语 LRC 里几乎每句都配一条翻译，配对数应接近总行数的一半
+        val looksBilingual = sorted.size >= 4 &&
+            nearPairs.toFloat() / sorted.size >= PAIR_RATIO_MIN
+        if (!looksBilingual) return sorted
         val result = mutableListOf<LyricLine>()
         for (line in sorted) {
             val prev = result.lastOrNull()
-            if (prev != null && prev.translation == null) {
-                val gap = line.startMs - prev.startMs
-                val langDiff = hasIdeographic(prev.text) != hasIdeographic(line.text)
-                if (gap in 0..60L || (gap in 0..1500L && langDiff)) {
-                    result[result.size - 1] = prev.copy(translation = line.text)
-                    continue
-                }
+            if (prev != null && prev.translation == null &&
+                line.startMs - prev.startMs in 0..NEAR_PAIR_MS
+            ) {
+                result[result.size - 1] = prev.copy(translation = line.text)
+                continue
             }
             result += line
         }
         return result
-    }
-
-    /** 是否含有表意文字（汉字 / 日文假名 / 谚文）。 */
-    private fun hasIdeographic(text: String): Boolean = text.any {
-        val c = it.code
-        c in 0x3040..0x30FF || c in 0x3400..0x4DBF || c in 0x4E00..0x9FFF || c in 0xAC00..0xD7AF
     }
 
     /** 收集行首的所有时间戳，同时兼容 clock 与 millis 两种写法。 */

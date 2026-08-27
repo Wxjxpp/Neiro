@@ -13,7 +13,9 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew && ./gradlew assembleDebug --no-daemon
+      # 先跑单元测试（歌词解析等纯 JVM 逻辑的回归），失败就不出包
+      - run: chmod +x gradlew && ./gradlew testDebugUnitTest --no-daemon
+      - run: ./gradlew assembleDebug --no-daemon
       - uses: actions/upload-artifact@v4
         with:
           name: neiro-debug

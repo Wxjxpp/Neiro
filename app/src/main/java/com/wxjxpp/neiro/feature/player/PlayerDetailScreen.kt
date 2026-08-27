@@ -307,7 +307,11 @@ fun PlayerDetailScreen(
                 return@let
             }
             val coverLum = androidx.core.graphics.ColorUtils.calculateLuminance(c)
-            val lightCanvas = coverLum > 0.42
+            // v6 修复：画布明暗必须**先服从系统深浅色模式**。
+            // 旧规则只看封面明度（coverLum > 0.42 就走浅底），于是深色模式下
+            // 播白色专辑会得到一整屏亮米黄/亮粉 —— 用户报的正是这个。
+            // 现在深色模式一律走深底，只有浅色模式才允许浅底。
+            val lightCanvas = !isDarkTheme && coverLum > 0.42
             val bgArgb: Int
             val sfArgb: Int
             if (lightCanvas) {
@@ -353,7 +357,12 @@ fun PlayerDetailScreen(
             val contrast = kotlin.math.abs((lum(argb) - canvasLum).toDouble()).toFloat()
             Cand(hsv, (contrast * (0.35f + hsv[1])).toFloat())
         }.maxByOrNull { it.score }
-        if (best == null) immersiveScheme.primary else {
+        if (best == null) {
+            // v6：整张封面都是中性色（白/灰/黑专辑）。此时**绝不能**凭空造一个
+            // 彩色 accent —— 那正是"白封面出粉红"的观感来源。改用中性高对比：
+            // 深画布 → 近白，浅画布 → 近黑。视觉上干净，且对比度天然达标。
+            if (canvasLum < 0.5f) Color(0xFFE8EAF0) else Color(0xFF2A2C33)
+        } else {
             val hsv = floatArrayOf(best.hsv[0], best.hsv[1], best.hsv[2])
             if (canvasLum < 0.5f && hsv[2] < 0.72f) hsv[2] = 0.72f
             if (canvasLum >= 0.5f && hsv[2] > 0.55f) hsv[2] = 0.55f
@@ -384,6 +393,8 @@ fun PlayerDetailScreen(
             FluidGlowBackground(
                 palette = vividPalette,
                 enabled = ambientGlow,
+                // v6：底色由沉浸配色决定明暗（深色模式下白封面不再渲染成亮米黄）
+                canvasColor = MaterialTheme.colorScheme.background,
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(topBarHaze)
@@ -862,7 +873,27 @@ fun PlayerDetailScreen(
                             tint = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.75f),
                         )
                     }
-                    // 更多菜单：下载 / 歌词偏移 / 翻译
+                    // v6：翻译开关回到功能区（此前被收进"更多"Sheet，用户要求还原）。
+                    // 仅当歌词确实带翻译时出现，避免一个永久失效的按钮占位。
+                    if (lyrics.hasTranslation) {
+                        IconButton(
+                            onClick = {
+                                translationOn = !translationOn
+                                onToggleTranslation()
+                            },
+                        ) {
+                            Icon(
+                                Icons.Rounded.Translate,
+                                contentDescription = if (translationOn) "关闭歌词翻译" else "显示歌词翻译",
+                                tint = if (translationOn) {
+                                    MaterialTheme.colorScheme.primary
+                                } else {
+                                    MaterialTheme.colorScheme.onSurface.copy(alpha = 0.55f)
+                                },
+                            )
+                        }
+                    }
+                    // 更多菜单：下载 / 歌词偏移
                     IconButton(onClick = { showMoreMenu = true }) {
                         Icon(Icons.Rounded.MoreVert, contentDescription = "更多")
                     }
@@ -1239,12 +1270,27 @@ fun android.graphics.Bitmap.extractVividPalette(): List<Int> {
     return out
 }
 
-/** 向明亮方向提升：HSV 提 V 到 ≥0.62，S 收敛到 0.35~0.9 区间，避免脏暗色。 */
+/**
+ * 明度规整（v6 修复：不再无条件抬饱和度）。
+ *
+ * 旧实现写的是 `hsv[1] = hsv[1].coerceIn(0.35f, 0.90f)` —— 把饱和度**下限强行抬到
+ * 0.35**。这正是"白色封面取出粉红/淡黄"的根因：接近白/灰的采样色本身 S≈0.01~0.05，
+ * 其色相 H 完全是 JPEG 色度子采样和压缩噪声决定的随机值（偏红一点就出粉，偏黄一点
+ * 就出米黄）。把这种噪声色相配上 S=0.35，就等于把不存在的颜色凭空造出来并放大。
+ *
+ * 现在：
+ * - S < 0.15 判定为**中性色**（白/灰/黑封面），保持中性，只规整明度，绝不注入色相；
+ * - S >= 0.15 才是真有彩度的封面，此时把 S 收敛进 [0.30, 0.90] 避免脏暗色。
+ */
 private fun brightenVivid(argb: Int): Int {
     val hsv = FloatArray(3)
     android.graphics.Color.colorToHSV(argb, hsv)
-    hsv[1] = hsv[1].coerceIn(0.35f, 0.90f)
-    hsv[2] = hsv[2].coerceAtLeast(0.62f)
+    val neutral = hsv[1] < 0.15f
+    if (!neutral) {
+        hsv[1] = hsv[1].coerceIn(0.30f, 0.90f)
+    }
+    // 中性色只保证不过暗（留一点余量给对比度计算），彩色统一提到 0.62
+    hsv[2] = hsv[2].coerceAtLeast(if (neutral) 0.55f else 0.62f)
     return android.graphics.Color.HSVToColor(hsv)
 }
 

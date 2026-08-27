@@ -102,4 +102,6 @@ dependencies {
     // accompanist 歌词 UI 的平滑圆角组件
     implementation(libs.gaze.capsule)
     debugImplementation(libs.androidx.ui.tooling)
+    // 纯 JVM 单元测试（歌词解析回归）
+    testImplementation(libs.junit)
 }

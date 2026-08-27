@@ -47,6 +47,8 @@ haze = "1.6.10"
 gazeCapsule = "2.1.1-patch2"
 # KugouKrcMetadataDecoder 需要（accompanist 歌词 core 源码依赖）
 kotlinxSerializationJson = "1.7.3"
+# 单元测试（歌词解析等纯 JVM 逻辑的回归测试）
+junit = "4.13.2"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -95,6 +97,7 @@ androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profi
 # Haze：Compose 硬件加速模糊（事实标准库；1.x 单工件，2.0 起才拆 haze-blur）
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
+junit = { group = "junit", name = "junit", version.ref = "junit" }
 gaze-capsule = { group = "com.mocharealm.gaze", name = "capsule", version.ref = "gazeCapsule" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
