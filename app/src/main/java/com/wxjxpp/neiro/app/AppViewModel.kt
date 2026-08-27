@@ -91,6 +91,10 @@ data class ShellUiState(
     val ambientGlow: Boolean = false,
     /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮。 */
     val visualStyle: String = "dynamic",
+    /** Expr：均衡器状态（开关 + 10 段增益 dB + 自定义预设 JSON）。 */
+    val eqEnabled: Boolean = false,
+    val eqGains: FloatArray = FloatArray(10),
+    val eqCustomPresetsJson: String = "[]",
     /** 顶栏毛玻璃模糊（可选，默认关）。 */
     val topBarBlurEnabled: Boolean = false,
     /** 顶栏模糊模式：gradient / mask。 */
@@ -263,6 +267,24 @@ class AppViewModel(
             .launchIn(viewModelScope)
         container.appSettings.observeVisualStyle()
             .onEach { style -> _uiState.update { it.copy(visualStyle = style) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeEqualizerEnabled()
+            .onEach { on -> _uiState.update { it.copy(eqEnabled = on) } }
+            .launchIn(viewModelScope)
+        container.appSettings.observeEqualizerGains()
+            .onEach { json ->
+                val gains = runCatching {
+                    com.google.gson.Gson().fromJson(json, FloatArray::class.java) ?: FloatArray(10)
+                }.getOrDefault(FloatArray(10))
+                _uiState.update { it.copy(eqGains = gains) }
+                container.playerController.setEqualizer(
+                    uiState.value.eqEnabled,
+                    gains,
+                )
+            }
+            .launchIn(viewModelScope)
+        container.appSettings.observeEqCustomPresets()
+            .onEach { json -> _uiState.update { it.copy(eqCustomPresetsJson = json) } }
             .launchIn(viewModelScope)
         container.appSettings.observeTopBarBlur()
             .onEach { enabled -> _uiState.update { it.copy(topBarBlurEnabled = enabled) } }
@@ -528,6 +550,38 @@ class AppViewModel(
     fun setVisualStyle(style: String) {
         viewModelScope.launch { container.appSettings.setVisualStyle(style) }
     }
+    /** Expr：均衡器——开关/增益/预设保存，一并下发音频链。 */
+    fun setEqualizerEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(eqEnabled = enabled) }
+        viewModelScope.launch {
+            container.appSettings.setEqualizerEnabled(enabled)
+            container.playerController.setEqualizer(enabled, uiState.value.eqGains)
+        }
+    }
+    fun setEqualizerGains(gains: FloatArray) {
+        _uiState.update { it.copy(eqGains = gains) }
+        viewModelScope.launch {
+            container.playerController.setEqualizer(uiState.value.eqEnabled, gains)
+            container.appSettings.setEqualizerGains(
+                com.google.gson.Gson().toJson(gains),
+            )
+        }
+    }
+    fun saveEqCustomPreset(name: String, gains: FloatArray) {
+        viewModelScope.launch {
+            val gson = com.google.gson.Gson()
+            val list = runCatching {
+                gson.fromJson(uiState.value.eqCustomPresetsJson, Array<EqPresetItem>::class.java)
+                    ?.toList() ?: emptyList()
+            }.getOrDefault(emptyList())
+            val updated = list.filter { it.name != name } + EqPresetItem(name, gains.toList())
+            val json = gson.toJson(updated)
+            container.appSettings.setEqCustomPresets(json)
+            _uiState.update { it.copy(eqCustomPresetsJson = json) }
+        }
+    }
+
+    data class EqPresetItem(val name: String, val gains: List<Float>)
     fun setTopBarBlur(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setTopBarBlur(enabled) }
     }

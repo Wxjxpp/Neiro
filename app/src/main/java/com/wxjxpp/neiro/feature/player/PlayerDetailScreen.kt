@@ -158,6 +158,11 @@ fun PlayerDetailScreen(
     onSpeedChange: (Float) -> Unit = {},
     currentQuality: Quality = Quality.Standard,
     onQualityChange: (Quality) -> Unit = {},
+    eqEnabled: Boolean = false,
+    eqGains: FloatArray = FloatArray(10),
+    eqCustomPresetsJson: String = "[]",
+    onToggleEqualizer: (Boolean) -> Unit = {},
+    onEqGainsChange: (FloatArray) -> Unit = {},
     /** 收藏/下载能力由外壳注入；null = 隐藏对应按钮。 */
     isFavorite: Boolean = false,
     onToggleFavorite: (() -> Unit)? = null,
@@ -837,40 +842,70 @@ val palette = bmp.extractVividPalette()
                         },
                     )
                 }
-                listOf(1f, 1.25f, 1.5f, 2f).forEach { sp ->
-                    val label = when (sp) {
-                        1f -> "倍速 · 1x 正常"; 1.25f -> "倍速 · 1.25x"
-                        1.5f -> "倍速 · 1.5x"; else -> "倍速 · 2x"
-                    }
-                    SheetActionRow(
-                        icon = Icons.Rounded.Speed,
-                        label = label,
-                        checked = abs(state.speed - sp) < 0.01f,
-                        onClick = {
-                            showMoreMenu = false
-                            onSpeedChange(sp)
-                        },
-                    )
-                }
-                if (isRemoteSong) {
-                    listOf(
-                        Quality.Low,
-                        Quality.Standard,
-                        Quality.High,
-                        Quality.Lossless,
-                        Quality.HiRes,
-                    ).forEach { q ->
-                        SheetActionRow(
-                            icon = Icons.Rounded.GraphicEq,
-                            label = "音质 · " + qualityLabel(q),
-                            checked = currentQuality == q,
-                            onClick = {
-                                showMoreMenu = false
-                                if (q != currentQuality) onQualityChange(q)
+                // Expr：倍速——单行横向可滑 ButtonGroup（整合 4 个菜单项）
+                Text(
+                    text = "倍速播放",
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+                )
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .androidx_horizontalScroll(rememberScrollState())
+                        .padding(horizontal = 24.dp),
+                ) {
+                    listOf(1f, 1.25f, 1.5f, 2f).forEach { sp ->
+                        val selected = abs(state.speed - sp) < 0.01f
+                        FilterChip(
+                            selected = selected,
+                            onClick = { onSpeedChange(sp) },
+                            label = {
+                                Text(if (sp == 1f) "1x" else "${sp}x",
+                                    fontWeight = if (selected) FontWeight.Bold else FontWeight.Normal)
                             },
-                                                )
+                        )
                     }
                 }
+                // Expr：音质——同样单行 ButtonGroup（远程歌曲才可选）
+                if (isRemoteSong) {
+                    Text(
+                        text = "音质",
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+                    )
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .androidx_horizontalScroll(rememberScrollState())
+                            .padding(horizontal = 24.dp),
+                    ) {
+                        listOf(
+                            Quality.Low to "低",
+                            Quality.Standard to "标",
+                            Quality.High to "高",
+                            Quality.Lossless to "无损",
+                            Quality.HiRes to "Hi-Res",
+                        ).forEach { (q, label) ->
+                            FilterChip(
+                                selected = currentQuality == q,
+                                onClick = { if (q != currentQuality) onQualityChange(q) },
+                                label = { Text(label) },
+                            )
+                        }
+                    }
+                }
+                // Expr：均衡器区块——预设快捷 chips + 10 段竖直滑杆
+                EqualizerSection(
+                    enabled = eqEnabled,
+                    gains = eqGains,
+                    customPresetsJson = eqCustomPresetsJson,
+                    onToggle = onToggleEqualizer,
+                    onGainsChange = onEqGainsChange,
+                )
             }
         }
     }

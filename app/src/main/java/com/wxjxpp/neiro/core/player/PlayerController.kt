@@ -58,6 +58,8 @@ interface PlayerController {
     fun setEightBitMode(enabled: Boolean)
     /** [实验室] 80 倍速播放模式。 */
     fun setTurboSpeedMode(enabled: Boolean)
+    /** [Expr] 均衡器开关 + 10 段增益（dB，-12..12）。 */
+    fun setEqualizer(enabled: Boolean, gainsDb: FloatArray, preampDb: Float = 0f)
 
     /** 追加到队列尾部。 */
     fun addToQueue(songs: List<Song>)

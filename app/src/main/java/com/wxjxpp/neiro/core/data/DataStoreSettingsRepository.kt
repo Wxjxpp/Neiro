@@ -47,6 +47,11 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
         /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和。 */
         val VisualStyle = stringPreferencesKey("visual_style")
+        /** Expr：EQ 开关 + 增益 JSON（10 floats + preamp）。 */
+        val EqualizerEnabled = booleanPreferencesKey("eq_enabled")
+        val EqualizerGains = stringPreferencesKey("eq_gains_json")
+        /** Expr：用户自定义 EQ 预设（JSON 数组 [{name,gains}]）。 */
+        val EqCustomPresets = stringPreferencesKey("eq_custom_presets")
         val LyricsAlign = stringPreferencesKey("lyrics_align")
         val LabSpringLyrics = booleanPreferencesKey("lab_spring_lyrics")
 
@@ -324,6 +329,22 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.data.map { it[Keys.VisualStyle] ?: "dynamic" }
     suspend fun setVisualStyle(style: String) {
         store.edit { it[Keys.VisualStyle] = style }
+    }
+    /** Expr：均衡器持久化。 */
+    fun observeEqualizerEnabled(): Flow<Boolean> =
+        store.data.map { it[Keys.EqualizerEnabled] ?: false }
+    suspend fun setEqualizerEnabled(enabled: Boolean) {
+        store.edit { it[Keys.EqualizerEnabled] = enabled }
+    }
+    fun observeEqualizerGains(): Flow<String> =
+        store.data.map { it[Keys.EqualizerGains] ?: "" }
+    suspend fun setEqualizerGains(json: String) {
+        store.edit { it[Keys.EqualizerGains] = json }
+    }
+    fun observeEqCustomPresets(): Flow<String> =
+        store.data.map { it[Keys.EqCustomPresets] ?: "" }
+    suspend fun setEqCustomPresets(json: String) {
+        store.edit { it[Keys.EqCustomPresets] = json }
     }
 
     /** 歌词对齐方式：start / center / end。默认居中。 */

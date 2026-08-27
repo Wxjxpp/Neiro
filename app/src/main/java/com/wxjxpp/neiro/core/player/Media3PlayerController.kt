@@ -148,6 +148,13 @@ class Media3PlayerController(
     private val eightBitProcessor = EightBitAudioProcessor()
     /** 实验室音效：80 倍速（PCM 帧复制）。 */
     private val turboProcessor = TurboSpeedAudioProcessor(80)
+    /** Expr：10 段图形均衡器。 */
+    private val eqProcessor = EqualizerAudioProcessor()
+    override fun setEqualizer(enabled: Boolean, gainsDb: FloatArray, preampDb: Float) {
+        eqProcessor.setBandGains(gainsDb)
+        eqProcessor.setPreamplification(preampDb)
+        eqProcessor.setEnabledMode(enabled)
+    }
 
     override fun setEightBitMode(enabled: Boolean) {
         _state.update { it.copy(eightBitMode = enabled) }
@@ -212,7 +219,7 @@ class Media3PlayerController(
                 // 这里用 Builder 重建 sink，自定义处理器插链首
                 DefaultAudioSink.Builder(context)
                     .setAudioProcessors(
-                        arrayOf<AudioProcessor>(eightBitProcessor, turboProcessor),
+                        arrayOf<AudioProcessor>(eqProcessor, eightBitProcessor, turboProcessor),
                     )
                     .setEnableFloatOutput(enableFloatOutput)
                     .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)

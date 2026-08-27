@@ -418,6 +418,10 @@ fun MusicPlayerApp(container: AppContainer) {
                         onSpeedChange = viewModel::setSpeed,
                         currentQuality = uiState.preferredQuality,
                         onQualityChange = viewModel::setPreferredQuality,
+                        eqEnabled = uiState.eqEnabled,
+                        eqGains = uiState.eqGains,
+                        onToggleEqualizer = viewModel::setEqualizerEnabled,
+                        onEqGainsChange = viewModel::setEqualizerGains,
                         isFavorite = playback.current?.id in uiState.favoriteSongs.mapTo(mutableSetOf()) { it.id },
                         onToggleFavorite = {
                             playback.current?.let { viewModel.toggleFavorite(it) }
