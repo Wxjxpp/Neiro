@@ -10,6 +10,9 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.material3.FilterChip
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
@@ -853,7 +856,7 @@ val palette = bmp.extractVividPalette()
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .androidx_horizontalScroll(rememberScrollState())
+                        .horizontalScroll(rememberScrollState())
                         .padding(horizontal = 24.dp),
                 ) {
                     listOf(1f, 1.25f, 1.5f, 2f).forEach { sp ->
@@ -880,7 +883,7 @@ val palette = bmp.extractVividPalette()
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .androidx_horizontalScroll(rememberScrollState())
+                            .horizontalScroll(rememberScrollState())
                             .padding(horizontal = 24.dp),
                     ) {
                         listOf(

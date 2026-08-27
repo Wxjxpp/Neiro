@@ -274,7 +274,7 @@ class AppViewModel(
         container.appSettings.observeEqualizerGains()
             .onEach { json ->
                 val gains = runCatching {
-                    com.google.gson.Gson().fromJson(json, FloatArray::class.java) ?: FloatArray(10)
+                    runCatching { org.json.JSONArray(json).let { a -> FloatArray(a.length()) { i -> a.optDouble(i).toFloat() } } }.getOrDefault(FloatArray(10))
                 }.getOrDefault(FloatArray(10))
                 _uiState.update { it.copy(eqGains = gains) }
                 container.playerController.setEqualizer(
@@ -563,19 +563,21 @@ class AppViewModel(
         viewModelScope.launch {
             container.playerController.setEqualizer(uiState.value.eqEnabled, gains)
             container.appSettings.setEqualizerGains(
-                com.google.gson.Gson().toJson(gains),
+                org.json.JSONArray(gains.toList()).toString(),
             )
         }
     }
     fun saveEqCustomPreset(name: String, gains: FloatArray) {
         viewModelScope.launch {
-            val gson = com.google.gson.Gson()
             val list = runCatching {
-                gson.fromJson(uiState.value.eqCustomPresetsJson, Array<EqPresetItem>::class.java)
-                    ?.toList() ?: emptyList()
+                val arr = org.json.JSONArray(uiState.value.eqCustomPresetsJson)
+                (0 until arr.length()).mapNotNull { i ->
+                    val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                    EqPresetItem(o.optString("name"), FloatArray(o.optJSONArray("gains")?.length() ?: 0) { j -> o.optJSONArray("gains")!!.optDouble(j).toFloat() }.toList())
+                }
             }.getOrDefault(emptyList())
             val updated = list.filter { it.name != name } + EqPresetItem(name, gains.toList())
-            val json = gson.toJson(updated)
+            val json = org.json.JSONArray(updated.map { org.json.JSONObject().put("name", it.name).put("gains", org.json.JSONArray(it.gains)) }).toString()
             container.appSettings.setEqCustomPresets(json)
             _uiState.update { it.copy(eqCustomPresetsJson = json) }
         }
