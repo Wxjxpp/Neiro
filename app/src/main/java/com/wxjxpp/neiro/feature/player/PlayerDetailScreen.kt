@@ -15,6 +15,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Surface
+
+import androidx.compose.material.icons.rounded.Equalizer
 import androidx.compose.material3.Switch
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
@@ -332,7 +336,7 @@ val palette = bmp.extractVividPalette()
             Triple(col, contrast * (0.35f + hsv[1]), hsv)
         }.maxByOrNull { it.second } ?: vividPalette.firstOrNull()
         if (best == null) immersiveScheme.primary else {
-            val (_, _, hsv0) = best
+            val hsv0: FloatArray = best.third
             val hsv = floatArrayOf(hsv0[0], hsv0[1], hsv0[2])
             if (canvasLum < 0.5f && hsv[2] < 0.72f) hsv[2] = 0.72f
             if (canvasLum >= 0.5f && hsv[2] > 0.55f) hsv[2] = 0.55f
