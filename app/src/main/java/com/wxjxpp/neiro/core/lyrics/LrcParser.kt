@@ -29,41 +29,33 @@ class LrcParser : LyricsParser {
 
     private companion object {
         /** `[mm:ss.xx]` / `[mm:ss]` / `[h:mm:ss.xx]` */
-        val CLOCK_LINE = Regex("""\[(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?(?:[.:](\d{1,3}))?]""")
-
+        val CLOCK_LINE = Regex("""\[(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?(?:[.:](\d{1,4}))?]""")
         /** `[12340,2800]`：QRC 行时间戳（起点毫秒,时长毫秒） */
         val MILLIS_LINE = Regex("""\[(\d+),(-?\d+)]""")
-
         /** `<00:12.34>`：标准增强型逐字 */
-        val CLOCK_WORD = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,3}))?>""")
-
+        val CLOCK_WORD = Regex("""<(\d{1,3}):(\d{1,2})(?:[.:](\d{1,4}))?>""")
         /** `<12340,300>` / `<12340,300,0>`：LX / KRC 逐字 */
         val MILLIS_WORD_ANGLE = Regex("""<(-?\d+),(-?\d+)(?:,-?\d+)?>""")
-
         /** `(12340,300)`：QRC 原始逐字 */
         val MILLIS_WORD_PAREN = Regex("""\((-?\d+),(-?\d+)(?:,-?\d+)?\)""")
-
         /** `[ti:标题]`：key 必须以字母开头，才不会和时间戳混淆 */
         val META = Regex("""^\[([a-zA-Z#][a-zA-Z0-9_#-]*):(.*)]$""")
-
         /** 任意逐字标记，用于剥离得到纯文本 */
         val ANY_WORD_TAG = Regex(
-            """<\d{1,3}:\d{1,2}(?:[.:]\d{1,3})?>|<-?\d+,-?\d+(?:,-?\d+)?>|\(-?\d+,-?\d+(?:,-?\d+)?\)"""
+            """<\d{1,3}:\d{1,2}(?:[.:]\d{1,4})?>|<-?\d+,-?\d+(?:,-?\d+)?>|\(-?\d+,-?\d+(?:,-?\d+)?\)"""
         )
         /**
-         * 判定"翻译行"允许的最大时间戳偏差（毫秒）。
+         * **行尾**的结束时间戳，例如
+         * `[02:05.395]我一定是太过招摇 …… 反而给我打了气[02:08.168]`。
          *
-         * 双语 LRC 的翻译行时间戳与原文行本应完全相同，少数导出器会有几十毫秒抖动。
-         * 取 80ms：足以覆盖抖动，又远小于任何真实歌词的换句间隔。
+         * AMLL / 增强型 LRC 用它标注该行的结束时间。必须与行首时间戳区别对待 ——
+         * 旧实现用 `findAll` 扫全行收集起始时间，把这个结束时间也当成了一个
+         * 独立的行起点，于是**翻译文本被复制进一个凭空多出的时间桶**，
+         * 在界面上表现为"翻译变成了一条独立歌词"。
          */
-        const val NEAR_PAIR_MS = 80L
-        /**
-         * 判定整份歌词"是双语成对结构"的最低配对占比。
-         *
-         * 双语 LRC 里几乎每句都跟一条翻译，理想值接近 0.5（每两行一对）。
-         * 取 0.30 留出容差（部分句子无翻译、以及元数据行的稀释）。
-         */
-        const val PAIR_RATIO_MIN = 0.30f
+        val TRAILING_CLOCK = Regex("""\[(\d{1,3}):(\d{1,2})(?::(\d{1,2}))?(?:[.:](\d{1,4}))?]\s*$""")
+        /** 行尾 QRC 结束时间戳。 */
+        val TRAILING_MILLIS = Regex("""\[(\d+),(-?\d+)]\s*$""")
     }
 
     override fun canParse(content: String, hint: String?): Boolean {
@@ -95,13 +87,10 @@ class LrcParser : LyricsParser {
                 return@forEach
             }
 
-            val stamps = parseLineStamps(line)
-            if (stamps.isEmpty()) return@forEach
-
-            val text = stripLineStamps(line)
-            if (ANY_WORD_TAG.containsMatchIn(text)) hasWordTiming = true
-            stamps.forEach { stamp ->
-                buckets.getOrPut(stamp.startMs) { mutableListOf() } += Raw(text, stamp.endMs)
+            val parsedLine = parseLine(line) ?: return@forEach
+            if (ANY_WORD_TAG.containsMatchIn(parsedLine.text)) hasWordTiming = true
+            parsedLine.starts.forEach { start ->
+                buckets.getOrPut(start) { mutableListOf() } += Raw(parsedLine.text, parsedLine.endMs)
             }
         }
 
@@ -114,8 +103,13 @@ class LrcParser : LyricsParser {
                 if (plain.isEmpty()) return@mapNotNull null
                 LyricLine(
                     startMs = startMs,
-                    endMs = main.endMs ?: syllables.lastOrNull()?.endMs,
+                    // 结束时间来源优先级：本桶任意一条给出的行尾时间戳 → 逐字轴末尾。
+                    // 用 firstNotNullOfOrNull 而不是只看 main：AMLL 常把结束时间只写在
+                    // 翻译那一行的行尾（原文行以 <mm:ss.fff> 逐字标记收尾）。
+                    endMs = raws.firstNotNullOfOrNull { it.endMs } ?: syllables.lastOrNull()?.endMs,
                     text = plain,
+                    // 翻译判定只认**完全相同的时间戳**（同一个桶内的第二条文本）。
+                    // 不做任何时间容差 —— 见 [Raw] 上方注释。
                     translation = raws.getOrNull(1)
                         ?.let { stripWordTags(it.text) }
                         ?.takeIf { it.isNotEmpty() },
@@ -126,76 +120,127 @@ class LrcParser : LyricsParser {
                 )
             }
 
-        val merged = mergeTranslationPairs(lines.sortedBy { it.startMs })
         return Lyrics(
             format = if (hasWordTiming) LyricsFormat.EnhancedLrc else LyricsFormat.Lrc,
-            lines = merged,
+            lines = lines,
             offsetMs = offsetMs,
             metadata = metadata,
         )
     }
 
-    private data class Raw(val text: String, val endMs: Long?)
-    private data class Stamp(val startMs: Long, val endMs: Long?)
+    /**
+     * 一行的解析结果。
+     *
+     * [starts] 是该行的**起始**时间戳（可能多个，重复副歌写法）；
+     * [endMs] 是行尾的**结束**时间戳（AMLL 增强型 LRC 写法），没有则为 null。
+     */
+    private data class ParsedLine(val starts: List<Long>, val endMs: Long?, val text: String)
 
     /**
-     * 双语 LRC 翻译配对。
+     * 拆分一行为「起始时间戳 + 结束时间戳 + 正文」。
      *
-     * ## v6 修复：删掉"1500ms + 语言不同即视为翻译"的启发式
+     * ## 为什么必须区分行首与行尾时间戳
      *
-     * 旧规则是 `gap <= 1500ms && 一方含CJK另一方不含 → 判为翻译`。这在中英混写的
-     * 说唱/R&B 里必然误判：`[01:05.05]you are my only one` 和
-     * `[01:06.39]我不能忘记她` 是两句**独立歌词**，间隔 1.34s、语言系统不同，
-     * 正好命中该规则被吞成翻译。实测用户提供的 LRC 里这样被误吞的有 7 处。
-     *
-     * 真实的双语 LRC，翻译行时间戳与原文**几乎完全相同**（绝大多数是完全相等，
-     * 少数导出器差几十毫秒）。所以现在：
-     * - 完全相等的时间戳已由上游分桶处理；
-     * - 这里只处理"差 ≤ [NEAR_PAIR_MS] 毫秒"的准同时行；
-     * - 并且要求整份歌词**全局呈现成对结构**（准同时的配对数占总行数的比例
-     *   达到 [PAIR_RATIO_MIN]）才启用合并。单份歌词里偶然出现的一两处紧邻行
-     *   不会触发误判。
+     * AMLL 风格的增强型 LRC 会把行的结束时间写在**行尾**：
+     * ```
+     * [02:05.395]我一定是太过招摇 你们不该煽动大家 反而给我打了气[02:08.168]
+     * ```
+     * 旧实现用 `CLOCK_LINE.findAll(line)` 无差别扫全行收集起始时间，于是
+     * `[02:08.168]` 被当成了又一个行起点，**同一份翻译文本被复制进一个凭空多出的
+     * 时间桶**（125395 和 128168 两个桶都装了这句中文）。125395 桶里它是正常的
+     * 翻译，128168 桶里它却成了该桶唯一的文本 —— 也就是一条独立歌词行。
+     * 这才是"翻译又被当成歌词"的真正原因，与时间容差无关。
      */
-    private fun mergeTranslationPairs(sorted: List<LyricLine>): List<LyricLine> {
-        // 先统计全局结构：有多少对相邻行是"准同时"的
-        var nearPairs = 0
-        for (i in 0 until sorted.size - 1) {
-            if (sorted[i + 1].startMs - sorted[i].startMs in 0..NEAR_PAIR_MS) nearPairs++
+    private fun parseLine(line: String): ParsedLine? {
+        // 1. 先摘掉行尾结束时间戳（若有），避免它被误收为起点
+        var body = line
+        var endMs: Long? = null
+        TRAILING_MILLIS.find(body)?.let { m ->
+            val start = m.groupValues[1].toLongOrNull()
+            val duration = m.groupValues[2].toLongOrNull()
+            if (start != null) endMs = if (duration != null && duration > 0) start + duration else start
+            body = body.removeRange(m.range).trimEnd()
         }
-        // 成对结构判定：双语 LRC 里几乎每句都配一条翻译，配对数应接近总行数的一半
-        val looksBilingual = sorted.size >= 4 &&
-            nearPairs.toFloat() / sorted.size >= PAIR_RATIO_MIN
-        if (!looksBilingual) return sorted
-        val result = mutableListOf<LyricLine>()
-        for (line in sorted) {
-            val prev = result.lastOrNull()
-            if (prev != null && prev.translation == null &&
-                line.startMs - prev.startMs in 0..NEAR_PAIR_MS
-            ) {
-                result[result.size - 1] = prev.copy(translation = line.text)
+        if (endMs == null) {
+            TRAILING_CLOCK.find(body)?.let { m ->
+                // 只有当行首还存在时间戳时，行尾这个才是"结束时间"；
+                // 否则说明整行只有一个时间戳，它就是起点，不能摘走。
+                val head = body.take(m.range.first)
+                if (CLOCK_LINE.containsMatchIn(head) || MILLIS_LINE.containsMatchIn(head)) {
+                    endMs = m.clockToMillis()
+                    body = body.removeRange(m.range).trimEnd()
+                }
+            }
+        }
+
+        // 2. 只收集**行首连续**的时间戳作为起点
+        val starts = leadingStamps(body)
+        if (starts.isEmpty()) return null
+
+        val text = stripLeadingStamps(body)
+        return ParsedLine(starts = starts.map { it.startMs }, endMs = endMs ?: starts.firstOrNull()?.endMs, text = text)
+    }
+
+    /**
+     * 收集行首连续出现的时间戳。
+     *
+     * 逐个从字符串开头匹配，遇到第一个非时间戳字符就停止 —— 这样正文里出现的
+     * 方括号内容（以及行尾结束时间戳）都不会被误认为行起点。
+     */
+    private fun leadingStamps(line: String): List<Stamp> {
+        val result = mutableListOf<Stamp>()
+        var index = 0
+        while (index < line.length) {
+            // 跳过时间戳之间的空白
+            while (index < line.length && line[index].isWhitespace()) index++
+            if (index >= line.length || line[index] != '[') break
+            val rest = line.substring(index)
+            val millis = MILLIS_LINE.find(rest)?.takeIf { it.range.first == 0 }
+            if (millis != null) {
+                val start = millis.groupValues[1].toLongOrNull()
+                val duration = millis.groupValues[2].toLongOrNull() ?: 0L
+                if (start == null) break
+                result += Stamp(start, if (duration > 0) start + duration else null)
+                index += millis.range.last + 1
                 continue
             }
-            result += line
+            val clock = CLOCK_LINE.find(rest)?.takeIf { it.range.first == 0 }
+            if (clock != null) {
+                result += Stamp(clock.clockToMillis(), null)
+                index += clock.range.last + 1
+                continue
+            }
+            break
         }
         return result
     }
 
-    /** 收集行首的所有时间戳，同时兼容 clock 与 millis 两种写法。 */
-    private fun parseLineStamps(line: String): List<Stamp> {
-        val result = mutableListOf<Stamp>()
-        MILLIS_LINE.findAll(line).forEach { m ->
-            val start = m.groupValues[1].toLongOrNull() ?: return@forEach
-            val duration = m.groupValues[2].toLongOrNull() ?: 0L
-            result += Stamp(start, if (duration > 0) start + duration else null)
+    /** 剥掉行首连续时间戳，得到正文。 */
+    private fun stripLeadingStamps(line: String): String {
+        var index = 0
+        while (index < line.length) {
+            while (index < line.length && line[index].isWhitespace()) index++
+            if (index >= line.length || line[index] != '[') break
+            val rest = line.substring(index)
+            val m = MILLIS_LINE.find(rest)?.takeIf { it.range.first == 0 }
+                ?: CLOCK_LINE.find(rest)?.takeIf { it.range.first == 0 }
+                ?: break
+            index += m.range.last + 1
         }
-        CLOCK_LINE.findAll(line).forEach { m ->
-            result += Stamp(m.clockToMillis(), null)
-        }
-        return result
+        return line.substring(index).trim()
     }
 
-    private fun stripLineStamps(line: String): String =
-        line.replace(MILLIS_LINE, "").replace(CLOCK_LINE, "").trim()
+    /**
+     * [Raw] 是同一时间桶里的一条文本。
+     *
+     * 翻译配对策略（v7，用户明确要求）：**只认完全相同的时间戳**。
+     * 歌词与其翻译在所有主流格式里都共用同一个行时间戳，因此第一条是原文、
+     * 第二条即翻译、第三条为罗马音。不做任何时间容差 —— 任何"就近配对"都会在
+     * 中英混写的歌里把相邻的两句独立歌词误合成原文 + 翻译（1500ms 容差在
+     * 《苦咖啡·唯一》里实测误吞 7 处）。
+     */
+    private data class Raw(val text: String, val endMs: Long?)
+    private data class Stamp(val startMs: Long, val endMs: Long?)
 
     /**
      * 解析逐字时间戳。
@@ -272,11 +317,26 @@ class LrcParser : LyricsParser {
         }
     }
 
-    /** ".5" -> 500ms，".55" -> 550ms，".555" -> 555ms。 */
-    private fun fractionToMillis(raw: String): Long = when (raw.length) {
-        0 -> 0L
-        1 -> (raw.toLongOrNull() ?: 0L) * 100
-        2 -> (raw.toLongOrNull() ?: 0L) * 10
-        else -> raw.take(3).toLongOrNull() ?: 0L
+    /**
+     * 秒的小数部分 → 毫秒，按**双精度浮点**换算后四舍五入。
+     *
+     * 各家 LRC 的小数位数完全不统一，必须按"小数"而非"整数"理解：
+     * | 写法        | 含义      | 结果   |
+     * |-------------|-----------|--------|
+     * | `.5`        | 0.5 s     | 500ms  |
+     * | `.55`       | 0.55 s    | 550ms  |
+     * | `.395`      | 0.395 s   | 395ms  |
+     * | `.3958`     | 0.3958 s  | 396ms  |
+     *
+     * 旧实现按位数写死三个分支（1 位 ×100 / 2 位 ×10 / 其余 take(3)），
+     * 四位小数会被**截断**成 395 而非四舍五入到 396，且位数一多就没有定义。
+     * 现在统一用 `"0.$raw".toDouble() * 1000` 再 [Math.round]：
+     * 位数任意、精度取到毫秒的最近整数，AMLL 那种 `[02:05.395]` 的三位毫秒
+     * 也能精确对齐（395ms 而不是 39ms 或 350ms 之类的误读）。
+     */
+    private fun fractionToMillis(raw: String): Long {
+        if (raw.isEmpty()) return 0L
+        val seconds = "0.$raw".toDoubleOrNull() ?: return 0L
+        return Math.round(seconds * 1000.0)
     }
 }

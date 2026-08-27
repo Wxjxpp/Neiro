@@ -65,13 +65,21 @@ class LyricsParserRegistry(
     /**
      * 合并主歌词与独立提供的翻译 / 罗马音。
      *
-     * 很多音源把三者分开返回（lyric / tlyric / rlyric），这里按时间戳就近对齐。
+     * 很多音源把三者分开返回（lyric / tlyric / rlyric），这里按时间戳对齐。
+     *
+     * ## v7：默认零容差
+     *
+     * [toleranceMs] 默认改为 0，即**只接受时间戳完全相同的行**。
+     * 同一首歌的 lyric 与 tlyric 由同一个导出流程生成，行时间戳本就一致；
+     * 而一旦放开容差，快歌里相邻两句的时间差可能小于容差，翻译就会被挂到
+     * 错误的原文行上（表现为翻译错位或一句翻译顶掉另一句歌词）。
+     * 需要容差的脏数据场景请由调用方显式传值，不要改这个默认值。
      */
     fun merge(
         main: Lyrics,
         translation: Lyrics? = null,
         romanization: Lyrics? = null,
-        toleranceMs: Long = 400L,
+        toleranceMs: Long = 0L,
     ): Lyrics {
         if (translation == null && romanization == null) return main
         val lines = main.lines.map { line ->
