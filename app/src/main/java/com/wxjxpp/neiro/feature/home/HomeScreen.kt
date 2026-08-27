@@ -546,24 +546,24 @@ fun SongsTopBar(
             ) { mode ->
                 if (mode) {
                     // Expr：点击后 SearchBar 在源容器**原地弹簧展开放大 + 光晕渐变增强**，
-                    // 280ms 后才真正切页——变形发生在当前页，而非跳过去再变（Google 容器变换规范）
+                    // 300ms 后才真正切页——变形发生在当前页，而非跳过去再变（Google 容器变换规范）
                     var launching by remember { mutableStateOf(false) }
                     val expand by androidx.compose.animation.core.animateFloatAsState(
-                        targetValue = if (launching) 1.06f else 1f,
+                        targetValue = if (launching) 1.22f else 1f,
                         animationSpec = androidx.compose.animation.core.spring(
-                            dampingRatio = 0.55f,
-                            stiffness = 340f,
+                            dampingRatio = 0.62f,
+                            stiffness = 260f,
                         ),
                         label = "searchBarExpand",
                     )
                     val glow by androidx.compose.animation.core.animateFloatAsState(
                         targetValue = if (launching) 1f else 0f,
-                        animationSpec = androidx.compose.animation.core.tween(260),
+                        animationSpec = androidx.compose.animation.core.tween(280),
                         label = "searchBarGlow",
                     )
                     LaunchedEffect(launching) {
                         if (launching) {
-                            kotlinx.coroutines.delay(240)
+                            kotlinx.coroutines.delay(320)
                             onSearch()
                         }
                     }
@@ -571,15 +571,21 @@ fun SongsTopBar(
                         onClick = { if (!launching) launching = true },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        shadowElevation = if (launching) 8.dp else 0.dp,
+                        shadowElevation = if (launching) 10.dp else 0.dp,
                         modifier = Modifier
                             .fillMaxWidth()
                             .height(40.dp)
                             .graphicsLayer {
                                 scaleX = expand; scaleY = expand
-                                alpha = 1f - glow * 0.15f
+                                // 展开时轻微下沉居中放大，避免顶部裁切
+                                transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+                                shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                    androidx.compose.ui.unit.lerp(24.dp, 28.dp, glow),
+                                )
+                                clip = true
+                                shapeElevation = if (launching) 10.dp else 0.dp
                             }
-                            .blur(if (launching) 2.dp else 0.dp),
+                            .blur(if (launching) 3.dp else 0.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
