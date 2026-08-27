@@ -54,6 +54,7 @@ import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.material3.pulltorefresh.PullToRefreshDefaults
 import androidx.compose.material3.pulltorefresh.rememberPullToRefreshState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
@@ -66,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.foundation.background
 import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.blur
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.rememberGraphicsLayer
@@ -543,11 +545,41 @@ fun SongsTopBar(
                 label = "searchModeTitle",
             ) { mode ->
                 if (mode) {
+                    // Expr：点击后 SearchBar 在源容器**原地弹簧展开放大 + 光晕渐变增强**，
+                    // 280ms 后才真正切页——变形发生在当前页，而非跳过去再变（Google 容器变换规范）
+                    var launching by remember { mutableStateOf(false) }
+                    val expand by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (launching) 1.06f else 1f,
+                        animationSpec = androidx.compose.animation.core.spring(
+                            dampingRatio = 0.55f,
+                            stiffness = 340f,
+                        ),
+                        label = "searchBarExpand",
+                    )
+                    val glow by androidx.compose.animation.core.animateFloatAsState(
+                        targetValue = if (launching) 1f else 0f,
+                        animationSpec = androidx.compose.animation.core.tween(260),
+                        label = "searchBarGlow",
+                    )
+                    LaunchedEffect(launching) {
+                        if (launching) {
+                            kotlinx.coroutines.delay(240)
+                            onSearch()
+                        }
+                    }
                     Surface(
-                        onClick = onSearch,
+                        onClick = { if (!launching) launching = true },
                         shape = androidx.compose.foundation.shape.RoundedCornerShape(24.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant,
-                        modifier = Modifier.fillMaxWidth().height(40.dp),
+                        shadowElevation = if (launching) 8.dp else 0.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(40.dp)
+                            .graphicsLayer {
+                                scaleX = expand; scaleY = expand
+                                alpha = 1f - glow * 0.15f
+                            }
+                            .blur(if (launching) 2.dp else 0.dp),
                     ) {
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
@@ -562,7 +594,9 @@ fun SongsTopBar(
                             Text(
                                 text = "搜索歌曲、歌手…",
                                 style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    .copy(alpha = 1f - glow * 0.5f),
+                                maxLines = 1,
                                 modifier = Modifier.padding(start = 8.dp),
                             )
                         }

@@ -554,19 +554,13 @@ private fun RouteContent(
         AnimatedContent(
             targetState = route,
             transitionSpec = {
-                // Expr：搜索页相关跳转使用共享轴（X 轴）过渡，方向遵循进/出语义——
-                // 进搜索：新页从右滑入、旧页向左退；关搜索：镜像反向（旧页向右退）
+                // Expr：搜索页不再共享轴滑入——SearchBar 已在歌曲页原地完成弹簧展开，
+                // 页面间仅做淡入淡出衔接（Google 容器变换规范：变形发生在源容器）
                 val searchRelated =
                     initialState == Destination.Search.route ||
                         targetState == Destination.Search.route
                 if (searchRelated) {
-                    if (targetState == Destination.Search.route) {
-                        (slideInHorizontally(tween(320)) { it / 4 } + fadeIn(tween(280))) togetherWith
-                            (slideOutHorizontally(tween(320)) { -it / 4 } + fadeOut(tween(240)))
-                    } else {
-                        (slideInHorizontally(tween(320)) { -it / 4 } + fadeIn(tween(280))) togetherWith
-                            (slideOutHorizontally(tween(320)) { it / 4 } + fadeOut(tween(240)))
-                    }
+                    fadeIn(tween(260)) togetherWith fadeOut(tween(220))
                 } else {
                     fadeIn(rootMotionSpec) togetherWith fadeOut(rootMotionSpec)
                 }

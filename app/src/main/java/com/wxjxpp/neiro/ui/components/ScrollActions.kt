@@ -24,10 +24,10 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.launch
 
 /**
- * 列表悬浮操作组：一键回顶 + （可选）定位当前播放。
+ * 列表悬浮操作组：（可选）定位当前播放。
  *
- * - 下滑超过一屏后出现「回顶」按钮，点击平滑滚回第 0 项；
- * - [onLocate] 非空时显示「定位」按钮（把当前播放歌滚进可视区并短暂高亮由页面自行处理）；
+ * Expr：回顶按钮已按用户要求移除，只保留定位当前播放。
+ * - [onLocate] 非空时显示「定位」按钮；
  * - 调用方用 modifier 控制摆放位置（一般 align 到 BottomEnd 并留出播放栏高度）。
  */
 @Composable
@@ -36,7 +36,6 @@ fun ScrollActions(
     onLocate: (() -> Unit)? = null,
     modifier: Modifier = Modifier,
 ) {
-    val scope = rememberCoroutineScope()
     val showTop by remember {
         derivedStateOf { listState.firstVisibleItemIndex > 6 }
     }
@@ -48,18 +47,6 @@ fun ScrollActions(
         ) {
             SmallFloatingActionButton(onClick = { onLocate?.invoke() }) {
                 Icon(Icons.Rounded.MyLocation, contentDescription = "定位当前播放")
-            }
-        }
-        Spacer(Modifier.height(10.dp))
-        AnimatedVisibility(
-            visible = showTop,
-            enter = fadeIn() + scaleIn(initialScale = 0.6f),
-            exit = fadeOut() + scaleOut(targetScale = 0.6f),
-        ) {
-            SmallFloatingActionButton(onClick = {
-                scope.launch { listState.animateScrollToItem(0) }
-            }) {
-                Icon(Icons.Rounded.KeyboardArrowUp, contentDescription = "回到顶部")
             }
         }
     }
