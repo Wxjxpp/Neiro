@@ -537,8 +537,7 @@ fun SongsTopBar(
             androidx.compose.animation.AnimatedContent(
                 targetState = searchMode,
                 transitionSpec = {
-                    (androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)))
-                        togetherWith
+                    androidx.compose.animation.fadeIn(androidx.compose.animation.core.tween(220)) togetherWith
                         androidx.compose.animation.fadeOut(androidx.compose.animation.core.tween(180))
                 },
                 label = "searchModeTitle",
