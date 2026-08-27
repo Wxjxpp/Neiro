@@ -63,9 +63,10 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
     }
 
     fun setBandGains(gainsDb: FloatArray) {
-        require(gainsDb.size == 10) { "需要 10 个频段增益" }
+        // Expr fix：容错处理，非法输入静默忽略而不是抛异常炸掉播放线程
+        if (gainsDb.size != 10) return
         for (i in 0 until 10) bandGains[i] = gainsDb[i].coerceIn(-MAX_GAIN_DB, MAX_GAIN_DB)
-        if (sampleRate > 0) recalcCoeffs()
+        if (sampleRate > 0) runCatching { recalcCoeffs() }
     }
 
     fun setPreamplification(db: Float) {
@@ -112,6 +113,17 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
     }
 
     override fun queueInput(inputBuffer: ByteBuffer) {
+        runCatching { processQueueInput(inputBuffer) }.onFailure {
+            android.util.Log.w("EqProcessor", "queueInput failed, passthrough", it)
+            inputBuffer.position(0)
+            inputBuffer.limit(inputBuffer.capacity())
+            val output = replaceOutputBuffer(inputBuffer.remaining())
+            output.put(inputBuffer)
+            output.flip()
+        }
+    }
+
+    private fun processQueueInput(inputBuffer: ByteBuffer) {
         val remaining = inputBuffer.remaining()
         if (!enabled) {
             val output = replaceOutputBuffer(remaining)
@@ -134,7 +146,7 @@ class EqualizerAudioProcessor : BaseAudioProcessor() {
                 // 16-bit 小端：先读低字节再读高字节
                 val low = inputBuffer.get().toInt() and 0xFF
                 val high = inputBuffer.get().toInt()
-                var sample = ((high shl 8) or low).toFloat()
+                var sample = ((high shl 8) or low).toShort().toInt().toFloat()  // Expr fix: toShort 处理符号扩展
                 val st = chState[ch]
                 for (band in 0 until 10) {
                     val c = coeffs[band]

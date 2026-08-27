@@ -10,7 +10,6 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.layout.layout
 import androidx.compose.foundation.layout.width
 import androidx.compose.material3.Switch
@@ -1292,23 +1291,15 @@ private fun EqualizerSection(
                                 val next = gains.copyOf(); next[i] = v; onGainsChange(next)
                             },
                             valueRange = -12f..12f,
+                            // Expr fix：固定横条尺寸+纯视觉旋转（不碰 Constraintsmeasure，
+                            // 此前的自定义 layout 把 Constraints 参数顺序传反导致 SW 一开即崩）
                             modifier = Modifier
-                                .height(120.dp)
-                                .width(28.dp)
+                                .width(110.dp)
+                                .height(30.dp)
+                                .padding(horizontal = 8.dp)
                                 .graphicsLayer {
-                                    rotationZ = 270f
-                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
-                                }
-                                .layout { measurable, constraints ->
-                                    val placeable = measurable.measure(
-                                        Constraints(constraints.maxHeight, constraints.maxWidth)
-                                    )
-                                    layout(placeable.height, placeable.width) {
-                                        placeable.placeRelative(
-                                            x = -(placeable.width - placeable.height) / 2,
-                                            y = -(placeable.height - placeable.width) / 2,
-                                        )
-                                    }
+                                    rotationZ = -90f
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin.Center
                                 },
                         )
                         Text(bandFreqs[i], style = MaterialTheme.typography.labelSmall,
