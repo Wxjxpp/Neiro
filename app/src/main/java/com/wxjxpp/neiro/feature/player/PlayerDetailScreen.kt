@@ -10,6 +10,9 @@ import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Constraints
+import androidx.compose.ui.layout.layout
+import androidx.compose.material3.Switch
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.FilterChip
@@ -1213,4 +1216,105 @@ private fun formatDuration(ms: Long): String {
     val minutes = totalSeconds / 60
     val seconds = totalSeconds % 60
     return "%d:%02d".format(minutes, seconds)
+}
+/** Expr：均衡器区块——预设快捷 chips（可横滑）+ 10 段竖直滑杆 + 总开关。 */
+@Composable
+private fun EqualizerSection(
+    enabled: Boolean,
+    gains: FloatArray,
+    customPresetsJson: String,
+    onToggle: (Boolean) -> Unit,
+    onGainsChange: (FloatArray) -> Unit,
+) {
+    val bandFreqs = remember {
+        listOf("31", "62", "124", "249", "498", "996", "2k", "4k", "8k", "16k")
+    }
+    // Poweramp 式精选预设 + 用户自定义预设（org.json 解析）
+    val presets: List<Pair<String, FloatArray>> = remember(customPresetsJson) {
+        val builtin = listOf(
+            "平直" to FloatArray(10),
+            "摇滚" to floatArrayOf(5f, 4f, 3f, 1f, -1f, -1f, 1f, 3f, 4f, 5f),
+            "流行" to floatArrayOf(-1f, 2f, 4f, 5f, 3f, 0f, -1f, -1f, 1f, 2f),
+            "舞曲" to floatArrayOf(6f, 5f, 2f, 0f, 0f, 3f, 4f, 4f, 3f, 1f),
+            "电子" to floatArrayOf(5f, 4f, 1f, 0f, -2f, 2f, 1f, 2f, 5f, 6f),
+            "古典" to floatArrayOf(3f, 2f, 0f, 0f, 0f, 0f, -1f, 0f, 2f, 3f),
+            "低音增强" to floatArrayOf(8f, 7f, 5f, 2f, 0f, 0f, 0f, 0f, 0f, 0f),
+            "人声" to floatArrayOf(-3f, -2f, 0f, 3f, 5f, 5f, 4f, 2f, 0f, -1f),
+        )
+        val custom = runCatching {
+            val arr = org.json.JSONArray(customPresetsJson)
+            (0 until arr.length()).mapNotNull { i ->
+                val o = arr.optJSONObject(i) ?: return@mapNotNull null
+                val ga = o.optJSONArray("gains") ?: return@mapNotNull null
+                o.optString("name") to FloatArray(ga.length()) { j -> ga.optDouble(j).toFloat() }
+            }
+        }.getOrDefault(emptyList())
+        builtin + custom
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("均衡器", style = MaterialTheme.typography.titleMedium)
+            Spacer(Modifier.weight(1f))
+            Switch(checked = enabled, onCheckedChange = onToggle)
+        }
+        if (enabled) {
+            // 预设 chips：内置+自定义，横向滑动
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+            ) {
+                presets.forEach { (name, pgains) ->
+                    FilterChip(
+                        selected = gains.contentEquals(pgains),
+                        onClick = { onGainsChange(pgains.copyOf()) },
+                        label = { Text(name, style = MaterialTheme.typography.labelMedium) },
+                    )
+                }
+            }
+            // 10 段竖直滑杆
+            Row(
+                horizontalArrangement = Arrangement.SpaceBetween,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                gains.forEachIndexed { i, g ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Slider(
+                            value = g,
+                            onValueChange = { v ->
+                                val next = gains.copyOf(); next[i] = v; onGainsChange(next)
+                            },
+                            valueRange = -12f..12f,
+                            modifier = Modifier
+                                .height(120.dp)
+                                .width(28.dp)
+                                .graphicsLayer {
+                                    rotationZ = 270f
+                                    transformOrigin = androidx.compose.ui.graphics.TransformOrigin(0.5f, 0.5f)
+                                }
+                                .layout { measurable, constraints ->
+                                    val placeable = measurable.measure(
+                                        Constraints(constraints.maxHeight, constraints.maxWidth)
+                                    )
+                                    layout(placeable.height, placeable.width) {
+                                        placeable.placeRelative(
+                                            x = -(placeable.width - placeable.height) / 2,
+                                            y = -(placeable.height - placeable.width) / 2,
+                                        )
+                                    }
+                                },
+                        )
+                        Text(bandFreqs[i], style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
+        }
+    }
 }
