@@ -399,6 +399,8 @@ fun MusicPlayerApp(container: AppContainer) {
                         lyricsFontScale = uiState.lyricsFontScale,
                         lyricsGapScale = uiState.lyricsGapScale,
                         pureModeDefault = uiState.pureModeDefault,
+                        // 长按播放键切纯净模式 → 直接写设置，跨页面/跨进程都持久
+                        onPureModeChange = viewModel::setPureModeDefault,
                         sheetProgress = offsetFraction,
                         onCollapseToPlayer = { animateTo(1f) },
                         onExpandLyrics = { animateTo(2f) },
@@ -643,7 +645,8 @@ private fun RouteContent(
                             if (uiState.selectedSongIds.isNotEmpty()) {
                                 viewModel.toggleSelection(song.id)
                             } else {
-                                viewModel.play(song)
+                                // 「歌曲」页：整个本地曲库入队，从这首开始
+                                viewModel.playFromLibrary(song)
                             }
                         },
                         onSongLongPress = { song -> viewModel.toggleSelection(song.id) },
@@ -671,11 +674,11 @@ private fun RouteContent(
                     onSortFieldChange = viewModel::setAlbumSortField,
                     onSortDirectionToggle = { viewModel.setAlbumSortDescending(!uiState.albumSortDescending) },
                     onOpenDrawer = onOpenDrawer,
-                    onSongClick = viewModel::play,
+                    // 专辑详情曲目都来自本地曲库：按曲库上下文入队，避免队列只剩一首
+                    onSongClick = viewModel::playFromLibrary,
                     contentPadding = contentPadding,
                     modifier = Modifier.fillMaxSize(),
                 )
-
                 Destination.Discover.route -> DiscoverScreen(
                     sections = uiState.discoverSections,
                     isLoading = uiState.isDiscoverLoading,
@@ -686,7 +689,9 @@ private fun RouteContent(
                     isDetailLoading = uiState.isDiscoverDetailLoading,
                     toplists = container.discoverRepository.toplists,
                     onOpenDrawer = onOpenDrawer,
-                    onSongClick = viewModel::play,
+                    // 「发现」页：与歌曲页同一心智模型 —— 整个曲库入队；
+                    // 在线歌曲不在曲库里时会被置于队首再接曲库（见 playFromLibrary）
+                    onSongClick = viewModel::playFromLibrary,
                     onOpenDetail = viewModel::loadDiscoverDetail,
                     onCloseDetail = viewModel::closeDiscoverDetail,
                     onPlayList = viewModel::playDiscoverList,
@@ -824,7 +829,8 @@ private fun RouteContent(
                     songs = uiState.favoriteSongs,
                     downloadingIds = uiState.downloadingIds,
                     onOpenDrawer = onOpenDrawer,
-                    onSongClick = viewModel::play,
+                    // 收藏页是明确的列表上下文：队列只装收藏夹内容
+                    onSongClick = { song -> viewModel.playFromList(song, uiState.favoriteSongs) },
                     onRemoveFavorite = viewModel::toggleFavorite,
                     onDownloadSong = { song -> viewModel.downloadSongs(listOf(song)) },
                     contentPadding = contentPadding,

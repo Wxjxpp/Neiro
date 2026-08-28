@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
@@ -71,6 +72,15 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val LastPositionMs = longPreferencesKey("last_position_ms")
         /** 上次播放歌曲的完整快照（JSON），用于跨会话恢复在线歌曲。 */
         val LastSongJson = stringPreferencesKey("last_song_json")
+
+        /**
+         * 上次的**播放队列**快照（JSON 数组）与队列内下标。
+         *
+         * 只存 LastSongJson 的话，重启后队列里只剩一首歌 —— 上一首/下一首全失效。
+         * 这两个键让队列本身也能跨进程恢复。
+         */
+        val LastQueueJson = stringPreferencesKey("last_queue_json")
+        val LastQueueIndex = intPreferencesKey("last_queue_index")
         /** 最近播放的歌曲快照列表（JSON 数组），供"最近播放"展示与恢复。 */
         // ---- 一起听 ----
         val TogetherServerUrl = stringPreferencesKey("together_server_url")
@@ -450,6 +460,27 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
             }
             if (songJson != null) it[Keys.LastSongJson] = songJson
             it[Keys.LastPositionMs] = positionMs
+        }
+    }
+
+    /**
+     * 上次的播放队列快照（JSON 数组）。空字符串表示没有快照。
+     */
+    fun observeLastQueueJson(): Flow<String?> = store.data.map { it[Keys.LastQueueJson] }
+
+    /** 上次播放歌曲在队列中的下标。 */
+    fun observeLastQueueIndex(): Flow<Int> = store.data.map { it[Keys.LastQueueIndex] ?: 0 }
+
+    /**
+     * 保存播放队列快照。
+     *
+     * 队列可能很长（整个本地曲库），因此**只在队列本身发生变化时**调用，
+     * 不要跟着播放进度每 5 秒写一次。
+     */
+    suspend fun saveQueueSnapshot(queueJson: String, index: Int) {
+        store.edit {
+            it[Keys.LastQueueJson] = queueJson
+            it[Keys.LastQueueIndex] = index
         }
     }
 }

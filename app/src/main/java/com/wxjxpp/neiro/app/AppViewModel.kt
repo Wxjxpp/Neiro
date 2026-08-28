@@ -19,6 +19,8 @@ import com.wxjxpp.neiro.core.userapi.UserApiInfo
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.launchIn
 import kotlinx.coroutines.flow.map
@@ -177,6 +179,8 @@ class AppViewModel(
         container.songRepository.observeSongs()
             .onEach { songs ->
                 _uiState.update { it.copy(songs = sortSongs(songs)) }
+                // 队列为空时用整个曲库兜底（首次安装 / 无历史队列快照的情况）。
+                // 有历史快照时 restoreLastPlayback 已经把队列填好，这里不会覆盖。
                 if (queue.value.isEmpty() && songs.isNotEmpty()) {
                     container.playerController.setQueue(songs, autoPlay = false)
                 }
@@ -370,6 +374,16 @@ class AppViewModel(
             }
             .launchIn(viewModelScope)
         restoreLastPlayback()
+        // 队列持久化：队列内容或当前曲目变化时落盘一份快照（含下标）。
+        // 用 distinctUntilChanged + 只取 id 列表做比较，避免 5 秒进度采样把长队列反复写盘。
+        combine(queue, playbackState) { list, state -> list to state.current?.id }
+            .distinctUntilChanged { (oldList, oldId), (newList, newId) ->
+                oldId == newId && oldList.size == newList.size &&
+                    oldList.asSequence().map { it.id }.toList() ==
+                    newList.asSequence().map { it.id }.toList()
+            }
+            .onEach { (list, currentId) -> persistQueueSnapshot(list, currentId) }
+            .launchIn(viewModelScope)
         // 切歌时：结算上一首收听时长 → 写最近播放快照 → 加载新歌词
         playbackState
             .onEach { state -> onSongChanged(state.current) }
@@ -475,7 +489,48 @@ class AppViewModel(
 
     // ---- 播放 ----
 
+    /**
+     * 播放单首歌，**不改动队列**（仅把歌追加进当前队列）。
+     *
+     * 只在没有明确列表上下文时使用（例如搜索结果里点一首歌试听）。
+     * 从「歌曲」「发现」「歌单」等有明确列表的入口播放时，请分别用
+     * [playFromLibrary] / [playFromList]，否则队列里只会有孤零零一首歌。
+     */
     fun play(song: Song) = container.playerController.play(song)
+
+    /**
+     * 从**本地曲库上下文**播放：整个本地曲库入队，从这首歌开始。
+     *
+     * 用于「歌曲」页与「发现」页 —— 用户的心智模型是"我在听我的音乐库"，
+     * 因此上一首/下一首应该在整个曲库里走，而不是停在单曲。
+     * 在线歌曲（发现页）本身不在本地曲库里，此时把它插到队首再接上曲库，
+     * 保证它能播且后续能自然过渡到本地歌曲。
+     */
+    fun playFromLibrary(song: Song) {
+        val library = _uiState.value.songs
+        val index = library.indexOfFirst { it.id == song.id }
+        if (index >= 0) {
+            container.playerController.setQueue(library, startIndex = index, autoPlay = true)
+        } else {
+            // 在线歌曲：置于队首，后面接整个本地曲库
+            container.playerController.setQueue(listOf(song) + library, startIndex = 0, autoPlay = true)
+        }
+    }
+
+    /**
+     * 从**指定列表上下文**播放：该列表整体入队，从这首歌开始。
+     *
+     * 用于歌单详情、发现页榜单详情、收藏夹等 —— 队列范围严格限定在该列表内。
+     */
+    fun playFromList(song: Song, list: List<Song>) {
+        val index = list.indexOfFirst { it.id == song.id }
+        if (index < 0) {
+            // 列表里找不到（数据不一致）时退化为单曲，避免播错歌
+            container.playerController.setQueue(listOf(song), autoPlay = true)
+            return
+        }
+        container.playerController.setQueue(list, startIndex = index, autoPlay = true)
+    }
 
     /** 下载在线歌曲文件到公共音乐目录。开始/结束都走顶部横幅，进度可见。 */
     fun downloadSong(song: Song) {
@@ -712,6 +767,30 @@ class AppViewModel(
     /** 启动时加载最近播放（供猜你喜欢做推荐种子）。 */
     fun launchRecentLoad() = loadRecentSongs()
 
+    /**
+     * 把当前队列与下标写入 DataStore，供下次启动恢复。
+     *
+     * 队列可能就是整个本地曲库（上千首），所以调用方必须先做去重判断
+     * （见 init 里的 distinctUntilChanged），不要跟着播放进度反复写盘。
+     */
+    private fun persistQueueSnapshot(list: List<Song>, currentId: String?) {
+        if (list.isEmpty()) return
+        viewModelScope.launch {
+            runCatching {
+                val arr = org.json.JSONArray()
+                list.forEach { song ->
+                    arr.put(
+                        org.json.JSONObject(
+                            com.wxjxpp.neiro.core.serialization.SongJson.toJson(song),
+                        ),
+                    )
+                }
+                val index = list.indexOfFirst { it.id == currentId }.coerceAtLeast(0)
+                container.appSettings.saveQueueSnapshot(arr.toString(), index)
+            }
+        }
+    }
+
     // ---- 本地收藏夹 ----
     private fun parseSnapshotArray(json: String): List<Song> {
         val arr = runCatching { org.json.JSONArray(json) }.getOrDefault(org.json.JSONArray())
@@ -830,7 +909,20 @@ class AppViewModel(
             // 两个开关都关着就不恢复
             if (!resumeEnabled && !autoPlay) return@launch
             val positionMs = settings.observeLastPositionMs().first()
-            // 1) 快照优先：能恢复任何来源的歌（含搜索后点播的在线歌曲）
+
+            // 0) 队列快照优先：整条队列 + 下标一起恢复，重启后上一首/下一首照常可用。
+            //    旧实现只恢复单曲（setQueue(listOf(song))），这就是"每次重启队列被重置"的原因。
+            val queueJson = settings.observeLastQueueJson().first()
+            val queueSongs = queueJson?.let { parseSnapshotArray(it) }.orEmpty()
+            if (queueSongs.isNotEmpty()) {
+                val index = settings.observeLastQueueIndex().first().coerceIn(queueSongs.indices)
+                container.playerController.setQueue(queueSongs, startIndex = index, autoPlay = false)
+                if (positionMs > 0L) container.playerController.seekTo(positionMs)
+                if (autoPlay) container.playerController.resume()
+                return@launch
+            }
+
+            // 1) 单曲快照兜底：能恢复任何来源的歌（含搜索后点播的在线歌曲）
             val song = settings.observeLastSongJson().first()
                 ?.let { com.wxjxpp.neiro.core.serialization.SongJson.fromJson(it) }
                 ?: run {

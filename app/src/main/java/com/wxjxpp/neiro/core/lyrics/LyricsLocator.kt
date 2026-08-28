@@ -32,8 +32,13 @@ class LyricsLocator(
 ) {
 
     private companion object {
-        /** 主歌词候选扩展名，按优先级排列：信息量高的在前。 */
-        val MAIN_EXTENSIONS = listOf("ttml", "lrc", "qrc", "krc", "srt", "vtt", "txt")
+        /**
+         * 主歌词候选扩展名，按优先级排列：信息量高的在前。
+         *
+         * `spl` 与 `lrc` 由同一个 [LrcParser] 处理（SPL 兼容 LRC），
+         * 放在 lrc 之前是因为 SPL 文件通常带完整的逐字与译文标记。
+         */
+        val MAIN_EXTENSIONS = listOf("ttml", "spl", "lrc", "qrc", "krc", "srt", "vtt", "txt")
 
         /** 翻译外挂文件的常见后缀，例如 `song.zh.lrc`、`song.trans.lrc`。 */
         val TRANSLATION_SUFFIXES = listOf("zh", "zh-cn", "zh_cn", "chs", "cn", "trans", "translation", "tr")

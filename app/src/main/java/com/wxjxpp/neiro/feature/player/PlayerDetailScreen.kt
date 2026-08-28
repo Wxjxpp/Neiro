@@ -68,7 +68,10 @@ import androidx.compose.material3.IconButtonDefaults
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Text
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -93,6 +96,8 @@ import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
@@ -103,6 +108,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.lerp
 import kotlin.math.abs
+import kotlinx.coroutines.delay
 import com.wxjxpp.neiro.core.model.Lyrics
 import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.PlaybackState
@@ -115,6 +121,14 @@ import com.wxjxpp.neiro.ui.components.TopBarBlurMode
 import com.wxjxpp.neiro.ui.components.topBarBlur
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.theme.AppTheme
+
+/**
+ * 长按播放键切换纯净模式所需的按住时长。
+ *
+ * 用户指定 2.5s：明显长于系统默认长按阈值（约 500ms），
+ * 不会被"手指停顿一下"误触发。
+ */
+private const val PURE_MODE_LONG_PRESS_MS = 2500L
 
 /**
  * 播放详情页（Sheet 形态）。
@@ -152,6 +166,8 @@ fun PlayerDetailScreen(
     lyricsFontScale: Float = 1f,
     lyricsGapScale: Float = 1f,
     pureModeDefault: Boolean = false,
+    /** 纯净模式开关持久化回调（长按播放键切换时调用，写入设置）。 */
+    onPureModeChange: (Boolean) -> Unit = {},
     /** Sheet 连续进度：0 收起 / 1 播放页 / 2 歌词页。 */
     sheetProgress: Float = 1f,
     onCollapseToPlayer: () -> Unit = {},
@@ -189,8 +205,14 @@ fun PlayerDetailScreen(
     var dragging by remember { mutableStateOf(false) }
     // 翻译显示开关：默认开启，可在播放页直接切换（同时通知设置持久化）
     var translationOn by remember(showTranslation) { mutableStateOf(showTranslation) }
-    var pureModeOverride by remember { mutableStateOf<Boolean?>(null) }
-    val pureMode = pureModeOverride ?: pureModeDefault
+    // 纯净模式：**唯一真源是持久化设置**（pureModeDefault）。
+    //
+    // v8 之前这里有一个本地 `pureModeOverride: Boolean?`，导致两个 bug：
+    //   1) 重进播放页 / 进程重启就丢失 —— 用户说的"不持久"；
+    //   2) 播放键的 onClick 里写了 `if (pureMode && isPlaying) override = false`，
+    //      所以点两下播放键就退出了纯净模式。
+    // 现在长按 2.5s 直接把新值写进设置，UI 靠设置回流刷新，不再有第二份状态。
+    val pureMode = pureModeDefault
     var showQueue by remember { mutableStateOf(false) }
     // Expr：更多操作 Sheet 开关（根部作用域，供底部 ModalBottomSheet 使用）
     var showMoreMenu by remember { mutableStateOf(false) }
@@ -770,36 +792,54 @@ fun PlayerDetailScreen(
                         )
                     }
                     // 播放/暂停：主键，medium 容器 + Wide 宽度（比侧键更宽，主次分明）
-                    // 点击与长按同源，避免两套手势互相吞事件
+                    //
+                    // 纯净模式长按（v8 重写）：
+                    // 旧实现在 Modifier 上挂 pointerInput(detectTapGestures)，而 FilledIconButton
+                    // 内部的 clickable 已经消费了同一个指针流 —— M3E 的按压变形动效把事件吃掉，
+                    // onLongPress 基本不会触发。这里改成**读组件自己的 InteractionSource**：
+                    // 按下满 2.5s 就翻转纯净模式并给触感反馈，抬手时那一次 onClick 被丢弃
+                    // （否则长按结束还会顺带暂停音乐）。
+                    val playInteraction = remember { MutableInteractionSource() }
+                    val playPressed by playInteraction.collectIsPressedAsState()
+                    val haptic = LocalHapticFeedback.current
+                    // true 表示这次按压已经当作"长按切纯净模式"处理，抬手的点击要忽略
+                    var pureToggleConsumed by remember { mutableStateOf(false) }
+                    LaunchedEffect(playPressed) {
+                        if (!playPressed) return@LaunchedEffect
+                        pureToggleConsumed = false
+                        delay(PURE_MODE_LONG_PRESS_MS)
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        onPureModeChange(!pureMode)
+                        pureToggleConsumed = true
+                    }
                     FilledIconButton(
                         onClick = {
-                            if (pureMode && state.isPlaying) pureModeOverride = false
-                            onTogglePlay()
+                            if (pureToggleConsumed) {
+                                // 长按刚切过纯净模式，这次抬手不当播放/暂停
+                                pureToggleConsumed = false
+                            } else {
+                                onTogglePlay()
+                            }
                         },
                         shapes = IconButtonDefaults.shapes(
                             shape = IconButtonDefaults.mediumRoundShape,
                             pressedShape = IconButtonDefaults.mediumPressedShape,
                         ),
-                        modifier = Modifier
-                            .size(
-                                IconButtonDefaults.mediumContainerSize(
-                                    IconButtonDefaults.IconButtonWidthOption.Wide,
-                                ),
-                            )
-                            .pointerInput(Unit) {
-                                detectTapGestures(
-                                    onTap = {
-                                        if (pureMode && state.isPlaying) pureModeOverride = false
-                                        onTogglePlay()
-                                    },
-                                    onLongPress = { pureModeOverride = true },
-                                )
-                            },
+                        modifier = Modifier.size(
+                            IconButtonDefaults.mediumContainerSize(
+                                IconButtonDefaults.IconButtonWidthOption.Wide,
+                            ),
+                        ),
+                        interactionSource = playInteraction,
                         colors = IconButtonDefaults.filledIconButtonColors(),
                     ) {
                         Icon(
                             imageVector = if (state.isPlaying) Icons.Rounded.Pause else Icons.Rounded.PlayArrow,
-                            contentDescription = if (state.isPlaying) "暂停（长按进入纯净模式）" else "播放",
+                            contentDescription = if (state.isPlaying) {
+                                "暂停（长按 2.5 秒切换纯净模式）"
+                            } else {
+                                "播放（长按 2.5 秒切换纯净模式）"
+                            },
                             modifier = Modifier.size(IconButtonDefaults.mediumIconSize),
                         )
                     }
