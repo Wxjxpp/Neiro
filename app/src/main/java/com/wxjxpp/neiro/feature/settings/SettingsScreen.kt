@@ -426,8 +426,8 @@ fun SettingsScreen(
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceSm),
                     )
                     SwitchRow(
-                        title = "动态流光背景",
-                        subtitle = "播放页根据封面主色呈现流动渐变背景（实验性）",
+                        title = "高级背景",
+                        subtitle = "播放页根据专辑封面生成高级模糊背景",
                         checked = ambientGlow,
                         onCheckedChange = onAmbientGlowChange,
                     )

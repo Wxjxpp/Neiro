@@ -303,7 +303,7 @@ fun AlbumBlurBackground(coverUri: String?, modifier: Modifier = Modifier) {
                     scaleX = 1.35f
                     scaleY = 1.35f
                     if (Build.VERSION.SDK_INT >= 31) {
-                        renderEffect = android.graphics.RenderEffect.createBlurEffect(42f, 42f, android.graphics.Shader.TileMode.CLAMP).asComposeRenderEffect()
+                        renderEffect = android.graphics.RenderEffect.createBlurEffect(82f, 82f, android.graphics.Shader.TileMode.CLAMP).asComposeRenderEffect()
                     }
                 },
         )
