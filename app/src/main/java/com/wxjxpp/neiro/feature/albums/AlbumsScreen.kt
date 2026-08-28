@@ -360,12 +360,12 @@ private fun AlbumCollapsingHeader(
 ) {
     val dimens = AppTheme.dimens
     val totalMs = entry.songs.sumOf { it.durationMs }
-    val coverSize = 168.dp
+    val coverSize = 152.dp
     Column(
         modifier = Modifier
             .fillMaxWidth()
             .background(MaterialTheme.colorScheme.background)
-            .padding(horizontal = dimens.spaceLg, vertical = 18.dp),
+            .padding(horizontal = dimens.spaceLg, vertical = 12.dp),
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Box(
@@ -388,7 +388,7 @@ private fun AlbumCollapsingHeader(
                 Text(entry.artistName.ifBlank { "未知艺术家" }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }
-        Spacer(Modifier.height(24.dp))
+        Spacer(Modifier.height(16.dp))
         Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
             AlbumStat(songCount.toString(), "歌曲")
             AlbumStat(formatTotalDuration(totalMs), "时长")

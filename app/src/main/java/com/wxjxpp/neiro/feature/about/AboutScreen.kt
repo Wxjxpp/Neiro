@@ -20,15 +20,15 @@ import androidx.compose.ui.unit.dp
 
 @Composable
 fun AboutScreen(onOpenDrawer: () -> Unit, contentPadding: PaddingValues = PaddingValues(), modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(contentPadding).padding(horizontal = 24.dp)) {
+    Column(modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(contentPadding).padding(horizontal = 16.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth()) {
             IconButton(onClick = onOpenDrawer) { Icon(Icons.Rounded.Menu, "打开侧边栏") }
-            Text("关于", style = MaterialTheme.typography.displaySmall, fontWeight = FontWeight.Bold)
+            Text("关于", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
         Spacer(Modifier.height(20.dp))
-        Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(30.dp)).background(Brush.linearGradient(listOf(Color(0xFFE9E4FF), MaterialTheme.colorScheme.primary.copy(alpha = .55f), MaterialTheme.colorScheme.tertiary.copy(alpha = .35f), Color(0xFFFFEAF3))))) {
-            Column(Modifier.align(Alignment.BottomStart).padding(26.dp)) {
-                Text("Neiro", color = Color.White, style = MaterialTheme.typography.displayMedium, fontWeight = FontWeight.Bold)
+        Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(Color(0xFFE9E4FF), MaterialTheme.colorScheme.primary.copy(alpha = .55f), MaterialTheme.colorScheme.tertiary.copy(alpha = .35f), Color(0xFFFFEAF3))))) {
+            Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
+                Text("Neiro", color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
                 Text("1.0.2  ·  Shell++", color = Color.White.copy(alpha = .9f), style = MaterialTheme.typography.titleMedium)
             }
         }
@@ -41,7 +41,7 @@ fun AboutScreen(onOpenDrawer: () -> Unit, contentPadding: PaddingValues = Paddin
         Spacer(Modifier.height(24.dp))
     }
 }
-@Composable private fun SectionTitle(text: String) = Text(text, Modifier.padding(start = 16.dp, top = 26.dp, bottom = 10.dp), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-@Composable private fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(Modifier.fillMaxWidth(), RoundedCornerShape(28.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Column(Modifier.padding(vertical = 10.dp), content = content) }
+@Composable private fun SectionTitle(text: String) = Text(text, Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
+@Composable private fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(Modifier.fillMaxWidth(), RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Column(Modifier.padding(vertical = 10.dp), content = content) }
 @Composable private fun Contributor(name: String, role: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(48.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondaryContainer)); Spacer(Modifier.width(16.dp)); Column { Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold); Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
 @Composable private fun OpenSourceItem(name: String, description: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(3.dp)); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.Rounded.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
