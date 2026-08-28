@@ -191,7 +191,7 @@ class DefaultAppContainer(
     // === 扫描与元数据 ===
     override val metadataReader: MetadataReader = AndroidMetadataReader(
         replayGainReader = ReplayGainReader(application.contentResolver),
-        resolver = application.contentResolver,
+        context = application,
     )
     override val mediaScanner: MediaScanner = AndroidMediaScanner(application.contentResolver, metadataReader)
 

@@ -1,6 +1,6 @@
 package com.wxjxpp.neiro.core.scanner
 
-import android.content.ContentResolver
+import android.content.Context
 import android.media.MediaMetadataRetriever
 import android.net.Uri
 import com.wxjxpp.neiro.core.model.Album
@@ -16,7 +16,7 @@ import com.wxjxpp.neiro.core.model.Song
  */
 class AndroidMetadataReader(
     private val replayGainReader: ReplayGainReader? = null,
-    private val resolver: ContentResolver? = null,
+    private val context: Context? = null,
 ) : MetadataReader {
 
     override suspend fun readMetadata(song: Song): Song {
@@ -24,8 +24,8 @@ class AndroidMetadataReader(
         val retriever = MediaMetadataRetriever()
         return runCatching {
             val uri = Uri.parse(local.uri)
-            if (uri.scheme == ContentResolver.SCHEME_CONTENT && resolver != null) {
-                retriever.setDataSource(resolver, uri)
+            if (uri.scheme == "content" && context != null) {
+                retriever.setDataSource(context, uri)
             } else {
                 retriever.setDataSource(local.uri)
             }
