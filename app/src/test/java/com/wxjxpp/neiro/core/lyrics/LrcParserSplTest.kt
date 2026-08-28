@@ -298,4 +298,164 @@ class LrcParserSplTest {
         assertEquals("Hello", lyrics.lines[0].text)
         assertEquals("你好", lyrics.lines[0].translation)
     }
+
+    /**
+     * 用户实测 bug：**逐字歌词的词间空格被吃掉**。
+     *
+     * `KaraokeText` 把每个音节渲染成独立的 `Text` 再用 `FlowRow` 横向拼接，
+     * 所以音节自带的尾随空格就是词与词的分隔。之前切分音节时统一做了 trim，
+     * 拼出来变成 "Imustbegettin'"。
+     */
+    @Test
+    fun `逐字音节保留词间空格`() {
+        val lyrics = parser.parse(
+            "[02:05.395]<02:05.395>I <02:05.617>must <02:05.816>be <02:05.992>gettin'[02:08.168]",
+        )
+
+        val line = lyrics.lines[0]
+        assertEquals(
+            "音节拼接后必须与原句一致",
+            "I must be gettin'",
+            line.syllables.joinToString("") { it.text },
+        )
+        assertEquals("整行文本首尾不留空白", "I must be gettin'", line.text)
+    }
+
+    // ---------------- 主歌词位次判定（译文写在原文之前）----------------
+
+    /**
+     * **逐句**双语且译文在前：靠 `[ti:]` 标题的语种纠正主次。
+     *
+     * 逐句歌词没有逐字标记，所以不能靠"谁带逐字轴"判断 —— 这是上一版的漏洞。
+     */
+    @Test
+    fun `逐句双语 译文在前 靠标题语种纠正`() {
+        val lrc = """
+            [ti:The Sound of Silence]
+            [00:10.00]你好 黑暗 我的老朋友
+            [00:10.00]Hello darkness my old friend
+            [00:14.00]我又来和你交谈
+            [00:14.00]I've come to talk with you again
+            [00:18.00]因为有个幻象轻柔潜入
+            [00:18.00]Because a vision softly creeping
+            [00:22.00]在我入睡时留下种子
+            [00:22.00]Left its seeds while I was sleeping
+            [00:26.00]那幻象植入我的脑海
+            [00:26.00]And the vision that was planted in my brain
+            [00:30.00]仍然留存
+            [00:30.00]Still remains
+        """.trimIndent()
+
+        val lyrics = parser.parse(lrc)
+
+        assertEquals(6, lyrics.lines.size)
+        assertEquals("Hello darkness my old friend", lyrics.lines[0].text)
+        assertEquals("你好 黑暗 我的老朋友", lyrics.lines[0].translation)
+        assertEquals("Still remains", lyrics.lines.last().text)
+    }
+
+    /**
+     * **逐句**双语、译文在前、且没有 `[ti:]`：靠**孤立行**的语种纠正。
+     *
+     * 和声与语气词通常不翻译，它们在合并后是只有一条文本的时间桶，
+     * 语种必然与原文一致 —— 这是结构事实，不依赖语言学假设。
+     */
+    @Test
+    fun `逐句双语 译文在前 无标题时靠孤立行语种纠正`() {
+        val lrc = """
+            [00:10.00]你好 黑暗 我的老朋友
+            [00:10.00]Hello darkness my old friend
+            [00:14.00]我又来和你交谈
+            [00:14.00]I've come to talk with you again
+            [00:18.00]因为有个幻象轻柔潜入
+            [00:18.00]Because a vision softly creeping
+            [00:22.00]在我入睡时留下种子
+            [00:22.00]Left its seeds while I was sleeping
+            [00:26.00]那幻象植入我的脑海
+            [00:26.00]And the vision that was planted in my brain
+            [00:30.00]仍然留存
+            [00:30.00]Still remains
+            [00:34.00]Oh oh oh
+            [00:36.00]Yeah yeah
+            [00:38.00]La la la la
+        """.trimIndent()
+
+        val lyrics = parser.parse(lrc)
+
+        assertEquals("Hello darkness my old friend", lyrics.lines[0].text)
+        assertEquals("你好 黑暗 我的老朋友", lyrics.lines[0].translation)
+    }
+
+    /** 正常顺序的逐句双语绝不能被"纠正"反了。 */
+    @Test
+    fun `逐句双语 正常顺序不被误改`() {
+        val lrc = """
+            [ti:The Sound of Silence]
+            [00:10.00]Hello darkness my old friend
+            [00:10.00]你好 黑暗 我的老朋友
+            [00:14.00]I've come to talk with you again
+            [00:14.00]我又来和你交谈
+            [00:18.00]Because a vision softly creeping
+            [00:18.00]因为有个幻象轻柔潜入
+            [00:22.00]Left its seeds while I was sleeping
+            [00:22.00]在我入睡时留下种子
+            [00:26.00]Still remains
+            [00:26.00]仍然留存
+        """.trimIndent()
+
+        val lyrics = parser.parse(lrc)
+
+        assertEquals("Hello darkness my old friend", lyrics.lines[0].text)
+        assertEquals("你好 黑暗 我的老朋友", lyrics.lines[0].translation)
+    }
+
+    /**
+     * 原文与"译文"同语种（中文歌 + 中文注释）：所有判据都失效，
+     * 必须退回 SPL 的文档顺序，不能随机翻转。
+     */
+    @Test
+    fun `同语种双语退回文档顺序`() {
+        val lrc = """
+            [00:10.00]第一句原文
+            [00:10.00]第一句注释
+            [00:14.00]第二句原文
+            [00:14.00]第二句注释
+            [00:18.00]第三句原文
+            [00:18.00]第三句注释
+            [00:22.00]第四句原文
+            [00:22.00]第四句注释
+            [00:26.00]第五句原文
+            [00:26.00]第五句注释
+        """.trimIndent()
+
+        val lyrics = parser.parse(lrc)
+
+        assertEquals("第一句原文", lyrics.lines[0].text)
+        assertEquals("第一句注释", lyrics.lines[0].translation)
+    }
+
+    /**
+     * 单语歌词里两行**偶然**撞上同一时间戳时，不足以触发主次判定。
+     *
+     * 用户那份《苦咖啡·唯一》95 行里只有 1 处这样的碰撞。若拿这种孤例做语种
+     * 统计，就会把整份文件的主次判反。因此语种类判据设了样本量门槛。
+     */
+    @Test
+    fun `零星时间戳碰撞不触发主次判定`() {
+        val lrc = """
+            [00:14.77]your lov's like 苦咖啡
+            [00:17.14]让我成谜彻夜难眠bae
+            [00:18.77]我一个人煮咖啡
+            [00:20.04]像落队的大雁自己往南边飞
+            [00:22.31]im on my own
+            [00:23.29]frozen heart不会再为谁跳动
+            [00:14.77]（确定 你就是我的唯一)
+        """.trimIndent()
+
+        val lyrics = parser.parse(lrc)
+
+        val collided = lyrics.lines.first { it.startMs == 14_770L }
+        assertEquals("先出现的仍是主歌词", "your lov's like 苦咖啡", collided.text)
+        assertEquals("（确定 你就是我的唯一)", collided.translation)
+    }
 }

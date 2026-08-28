@@ -98,6 +98,17 @@ class LrcParser : LyricsParser {
 
         /** 行尾 QRC 结束时间戳。 */
         val TRAILING_MILLIS = Regex("""\[(\d+),(-?\d+)]\s*$""")
+
+        /**
+         * 启用主歌词位次判定所需的最少配对行数（见 [resolveMainIndex]）。
+         *
+         * 单语歌词里偶尔会有两行撞上同一个时间戳（用户那份《苦咖啡·唯一》
+         * 95 行里就有 1 处），这种孤例不能用来推断整份文件的排列方式。
+         */
+        const val MIN_PAIRS_FOR_DETECTION = 4
+
+        /** 同上，配对行占全部行的最低比例：真双语文件几乎每行都配对。 */
+        const val MIN_PAIR_RATIO_FOR_DETECTION = 0.5f
     }
 
     override fun canParse(content: String, hint: String?): Boolean {
@@ -181,10 +192,15 @@ class LrcParser : LyricsParser {
         }
 
         var hasWordTiming = false
+        // 主歌词位次**按整份文件统一判定一次**，不逐行猜（见 resolveMainIndex）
+        val mainIndex = resolveMainIndex(
+            buckets = buckets.values,
+            titleScript = metadata["ti"]?.let { scriptOf(it) },
+        )
         val lines = buckets.entries
             .sortedBy { it.key }
             .mapNotNull { (startMs, bucket) ->
-                val raws = promoteWordTimedMain(bucket)
+                val raws = bucket.moveToFront(mainIndex)
                 val main = raws.firstOrNull() ?: return@mapNotNull null
                 val plain = stripWordTags(main.text)
                 if (plain.isEmpty()) return@mapNotNull null
@@ -231,29 +247,110 @@ class LrcParser : LyricsParser {
     }
 
     /**
-     * 同一时间桶内，把带**逐字时间轴**的那一条提到首位（主歌词位）。
+     * 判定同时间桶内**哪一个位次是主歌词**（返回 0 表示按 SPL 默认的文档顺序）。
      *
-     * SPL 规定"在前的一句为主歌词文本，后的一句为翻译歌词文本"，所以默认按
-     * 文档顺序即可。但现实中存在把译文写在原文**之前**的文件（部分转换工具
-     * 会把 tlyric 拼在 lyric 前面），此时纯按顺序取就会出现用户看到的
-     * **"翻译在歌词之上"**。
+     * ## 为什么必须全局判定一次，而不是逐行判断
      *
-     * 判据取"是否带逐字标记"而不是语言检测：逐字时间轴只会标在演唱的原文上，
-     * 译文不可能有 —— 这是格式层面的硬事实，比任何语言启发式都可靠。
-     * 若桶内没有任何一条带逐字标记（普通双语 LRC），则完全保持原顺序，
-     * 行为与 SPL 一致。
+     * SPL 规定"在前的一句为主歌词文本，后的一句为翻译歌词文本"，绝大多数文件
+     * 都遵守，此时返回 0 即可。但确实存在把译文整体拼在原文**之前**的产物
+     * （部分工具把 tlyric 接在 lyric 前面），表现为"翻译显示在歌词之上"。
+     *
+     * 关键在于：**一份文件里两者的相对顺序是固定的**（同一个拼接流程产出）。
+     * 所以这是一个「整份文件二选一」的问题，不是逐行问题。逐行判断反而危险 ——
+     * 一旦某几行判反，画面就会中英来回跳。
+     *
+     * ## 判据（按可靠性排序，命中即返回）
+     *
+     * 1. **逐字时间轴**：逐字标记只会打在演唱的原文上，译文不可能有。
+     *    这是格式层面的硬事实。
+     * 2. **孤立行的语种**：原文一定比译文多几行 —— 词曲信息、和声、语气词
+     *    通常不翻译，它们在合并后是**只有一条文本的时间桶**。因此"与孤立行
+     *    同语种"的那一侧就是原文。这同样是结构事实，不依赖语言学假设。
+     * 3. **与曲目元数据 `[ti:]` 的语种一致性**：标题语种即原文语种。
+     *
+     * 三条都无法判定（例如同语种的原文 + 注释）时返回 0，严格退回 SPL 的
+     * 文档顺序 —— 不做无根据的猜测，宁可保持标准行为也不引入随机翻转。
      */
-    private fun promoteWordTimedMain(bucket: List<Raw>): List<Raw> {
-        if (bucket.size < 2) return bucket
-        val firstHasTiming = WORD_TAG.containsMatchIn(bucket[0].text)
-        if (firstHasTiming) return bucket
-        val timedIndex = bucket.indexOfFirst { WORD_TAG.containsMatchIn(it.text) }
-        if (timedIndex <= 0) return bucket
-        // 逐字轴只在原始的首个展开上有效（见 Raw.allowSyllables），换位时一并带走
-        val promoted = bucket[timedIndex].copyWith(allowSyllables = bucket[0].allowSyllables)
+    private fun resolveMainIndex(buckets: Collection<List<Raw>>, titleScript: Script?): Int {
+        val pairs = buckets.filter { it.size >= 2 }
+        if (pairs.isEmpty()) return 0
+
+        // 判据 1：逐字时间轴。这是格式事实而非统计推断，样本再少也成立，
+        // 因此不受下面的样本量门槛限制。
+        val timedAt0 = pairs.count { WORD_TAG.containsMatchIn(it[0].text) }
+        val timedAt1 = pairs.count { WORD_TAG.containsMatchIn(it[1].text) }
+        if (timedAt0 != timedAt1) return if (timedAt0 > timedAt1) 0 else 1
+
+        // 以下判据基于语种统计，需要足够的样本才有意义。
+        //
+        // 真正的双语文件里**几乎每行都有译文**。若只有零星几个桶配对，那本质是
+        // 单语歌词里两行偶然撞上同一时间戳（用户那份 95 行的《苦咖啡·唯一》
+        // 就只有 1 处），拿这种孤例做统计只会得到噪声 —— 直接退回文档顺序。
+        if (pairs.size < MIN_PAIRS_FOR_DETECTION) return 0
+        if (pairs.size.toFloat() / buckets.size < MIN_PAIR_RATIO_FOR_DETECTION) return 0
+
+        // 判据 2：孤立行（未被翻译的行）的主导语种
+        val soloScript = buckets.filter { it.size == 1 }
+            .mapNotNull { scriptOf(it[0].text) }
+            .dominantOrNull()
+        soloScript?.let { solo ->
+            val matchAt0 = pairs.count { scriptOf(it[0].text) == solo }
+            val matchAt1 = pairs.count { scriptOf(it[1].text) == solo }
+            if (matchAt0 != matchAt1) return if (matchAt0 > matchAt1) 0 else 1
+        }
+
+        // 判据 3：与 [ti:] 标题语种一致的一侧是原文
+        titleScript?.let { title ->
+            val sameAt0 = pairs.count { scriptOf(it[0].text) == title }
+            val sameAt1 = pairs.count { scriptOf(it[1].text) == title }
+            if (sameAt0 != sameAt1) return if (sameAt0 > sameAt1) 0 else 1
+        }
+
+        return 0
+    }
+
+    /** 出现次数最多的元素；并列或空列表返回 null（并列说明这个信号不可用）。 */
+    private fun <T> List<T>.dominantOrNull(): T? {
+        if (isEmpty()) return null
+        val counts = groupingBy { it }.eachCount().entries.sortedByDescending { it.value }
+        if (counts.size >= 2 && counts[0].value == counts[1].value) return null
+        return counts.first().key
+    }
+
+    /**
+     * 粗粒度语种判定：只区分「以 CJK 为主」「以拉丁字母为主」「假名」。
+     *
+     * 不追求准确的语言识别 —— 这里只需要一个**稳定的分类**用于两侧对比统计，
+     * 逐行准确率并不重要，统计量级上的差异才是判据。
+     * 无法归类（纯符号、数字）返回 null，不参与统计。
+     */
+    private fun scriptOf(text: String): Script? {
+        var cjk = 0
+        var latin = 0
+        var kana = 0
+        text.forEach { ch ->
+            when {
+                ch in '\u4E00'..'\u9FFF' -> cjk++
+                ch in '\u3040'..'\u30FF' -> kana++
+                ch in 'A'..'Z' || ch in 'a'..'z' -> latin++
+            }
+        }
+        // 假名优先：日文里汉字与假名混排，出现假名即判为日文
+        if (kana > 0) return Script.Kana
+        val total = cjk + latin
+        if (total == 0) return null
+        return if (cjk >= latin) Script.Cjk else Script.Latin
+    }
+
+    private enum class Script { Cjk, Latin, Kana }
+
+    /** 把第 [index] 项移到首位，其余保持相对顺序。越界或 0 时原样返回。 */
+    private fun List<Raw>.moveToFront(index: Int): List<Raw> {
+        if (index <= 0 || index >= size) return this
         return buildList {
-            add(promoted)
-            bucket.forEachIndexed { index, raw -> if (index != timedIndex) add(raw) }
+            // 逐字轴只在原始的首个展开上有效（见 Raw.allowSyllables），换位时一并带走
+            add(this@moveToFront[index].copyWith(allowSyllables = this@moveToFront[0].allowSyllables))
+            this@moveToFront.forEachIndexed { i, raw -> if (i != index) add(raw) }
         }
     }
 
@@ -440,17 +537,19 @@ class LrcParser : LyricsParser {
 
         val result = mutableListOf<LyricSyllable>()
         // 规则 1：首个标记之前的文本
-        val head = stripWordTags(text.substring(0, kept.first().range.first))
-        if (head.isNotEmpty()) {
+        val head = removeWordTags(text.substring(0, kept.first().range.first))
+        if (head.isNotBlank()) {
             result += LyricSyllable(text = head, startMs = lineStartMs, endMs = kept.first().startMs)
         }
         kept.forEachIndexed { index, tag ->
             val from = tag.range.last + 1
             val to = kept.getOrNull(index + 1)?.range?.first ?: text.length
             if (from > to) return@forEachIndexed
-            // 用 strip 而不是原样截取：被忽略掉的非法标记要一并清掉，
-            // 它后面的文本自然并入当前音节（规则 2）。
-            val word = stripWordTags(text.substring(from, to))
+            // 只删标记、**不 trim**：音节文本里的空格是词与词的分隔符。
+            // KaraokeText 把每个音节渲染成独立的 Text 再用 FlowRow 排列，
+            // trim 掉尾随空格会让整句变成 "Imustbegettin'tooflashy"。
+            // 被忽略的非法标记也在这里一并清掉，其后文本自然并入当前音节（规则 2）。
+            val word = removeWordTags(text.substring(from, to))
             if (word.isEmpty()) return@forEachIndexed
             result += LyricSyllable(
                 text = word,
@@ -483,7 +582,21 @@ class LrcParser : LyricsParser {
         return null
     }
 
-    private fun stripWordTags(text: String) = text.replace(WORD_TAG, "").trim()
+    /**
+     * 删除逐字标记但**保留所有空白**，用于切分音节文本。
+     *
+     * 与 [stripWordTags] 的区别只在 trim：音节是拿去逐个渲染再横向拼接的，
+     * 词间空格必须原样保留，否则整句会粘成一串。
+     */
+    private fun removeWordTags(text: String) = text.replace(WORD_TAG, "")
+
+    /**
+     * 删除逐字标记并去掉首尾空白，用于整行的可读文本。
+     *
+     * 行级文本前后的空白没有语义（很多文件在时间戳后带一个空格），
+     * 而且行内空格本来就完整保留，所以这里 trim 是安全的。
+     */
+    private fun stripWordTags(text: String) = removeWordTags(text).trim()
 
     /** `[时:]分:秒[.毫秒]` → 毫秒。 */
     private fun MatchResult.clockToMillis(): Long {
