@@ -4,7 +4,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.verticalScroll
+import coil.compose.AsyncImage
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Menu
 import androidx.compose.material.icons.rounded.OpenInNew
@@ -29,7 +31,7 @@ fun AboutScreen(onOpenDrawer: () -> Unit, contentPadding: PaddingValues = Paddin
         Box(Modifier.fillMaxWidth().height(220.dp).clip(RoundedCornerShape(12.dp)).background(Brush.linearGradient(listOf(Color(0xFFE9E4FF), MaterialTheme.colorScheme.primary.copy(alpha = .55f), MaterialTheme.colorScheme.tertiary.copy(alpha = .35f), Color(0xFFFFEAF3))))) {
             Column(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
                 Text("Neiro", color = Color.White, style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.Bold)
-                Text("1.0.2  ·  Shell++", color = Color.White.copy(alpha = .9f), style = MaterialTheme.typography.titleMedium)
+                Text("1.0.2", color = Color.White.copy(alpha = .9f), style = MaterialTheme.typography.titleMedium)
             }
         }
         SectionTitle("贡献者"); InfoCard { Contributor("Wxjxpp", "主要开发"); Contributor("Hoper", "捧场"); Contributor("binsys", "反馈体验") }
@@ -42,6 +44,6 @@ fun AboutScreen(onOpenDrawer: () -> Unit, contentPadding: PaddingValues = Paddin
     }
 }
 @Composable private fun SectionTitle(text: String) = Text(text, Modifier.padding(start = 4.dp, top = 24.dp, bottom = 8.dp), style = MaterialTheme.typography.titleLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, fontWeight = FontWeight.Bold)
-@Composable private fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(Modifier.fillMaxWidth(), RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Column(Modifier.padding(vertical = 10.dp), content = content) }
-@Composable private fun Contributor(name: String, role: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) { Box(Modifier.size(48.dp).clip(RoundedCornerShape(50)).background(MaterialTheme.colorScheme.secondaryContainer)); Spacer(Modifier.width(16.dp)); Column { Text(name, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold); Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant) } }
-@Composable private fun OpenSourceItem(name: String, description: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 22.dp, vertical = 13.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(3.dp)); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.Rounded.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+@Composable private fun InfoCard(content: @Composable ColumnScope.() -> Unit) = Card(Modifier.fillMaxWidth(), RoundedCornerShape(12.dp), colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) { Column(Modifier.padding(vertical = 4.dp), content = content) }
+@Composable private fun Contributor(name: String, role: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) { val avatar = when (name) { "Hoper" -> com.wxjxpp.neiro.R.drawable.avatar_hoper; "binsys" -> com.wxjxpp.neiro.R.drawable.avatar_binsys; else -> if (isSystemInDarkTheme()) com.wxjxpp.neiro.R.drawable.avatar_wxjxpp_dark else com.wxjxpp.neiro.R.drawable.avatar_wxjxpp_light }; AsyncImage(model = avatar, contentDescription = name, contentScale = androidx.compose.ui.layout.ContentScale.Crop, modifier = Modifier.size(48.dp).clip(RoundedCornerShape(50))); Spacer(Modifier.width(16.dp)); Column { Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Text(role, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium) } }
+@Composable private fun OpenSourceItem(name: String, description: String) = Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.SpaceBetween) { Column(Modifier.weight(1f)) { Text(name, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold); Spacer(Modifier.height(3.dp)); Text(description, color = MaterialTheme.colorScheme.onSurfaceVariant) }; Icon(Icons.Rounded.OpenInNew, null, tint = MaterialTheme.colorScheme.onSurfaceVariant) }
