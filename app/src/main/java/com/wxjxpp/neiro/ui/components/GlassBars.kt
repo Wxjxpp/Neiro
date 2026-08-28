@@ -292,7 +292,7 @@ fun GlassBarSurface(
 /** Static album-art background for the expanded player. */
 @Composable
 fun AlbumBlurBackground(coverUri: String?, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(0.dp))) {
+    Box(modifier = modifier.fillMaxSize()) {
         AsyncImage(
             model = coverUri,
             contentDescription = null,
