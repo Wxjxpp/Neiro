@@ -14,8 +14,8 @@ android {
         applicationId = "com.wxjxpp.neiro"
         minSdk = 24
         targetSdk = 36
-        versionCode = 12
-        versionName = "0.4.7"
+        versionCode = 25
+        versionName = "1.0.2"
     }
 
     buildTypes {
