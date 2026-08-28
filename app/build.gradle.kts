@@ -7,8 +7,8 @@ plugins {
 
 android {
     namespace = "com.wxjxpp.neiro"
-    // AGP 8.13.x 支持到 36；升 compileSdk 需要先升 AGP
-    compileSdk = 36
+    // Miuix shader 0.9.4-rc01 要求 compileSdk 37；AGP 8.13.2 可继续构建但会给出兼容性提示。
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "com.wxjxpp.neiro"
