@@ -38,6 +38,7 @@ import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -263,79 +264,27 @@ fun GlassBarSurface(
     captured: GraphicsLayer?,
     enabled: Boolean,
     modifier: Modifier = Modifier,
-    /** Expr 实验：Haze 硬件加速模糊源；null 时回退旧 RenderEffect 录制重放路径。 */
     hazeState: HazeState? = null,
     content: @Composable () -> Unit,
 ) {
     val cs = MaterialTheme.colorScheme
     Box(modifier.fillMaxWidth()) {
-        if (enabled && hazeState != null) {
-            // ---- Haze 硬件加速路径（Expr）：实时模糊背后滚过的内容 ----
+        // 顶栏主体始终保持清晰。模糊只允许出现在底部窄带，避免搜索框、图标和文字被处理。
+        content()
+        if (enabled) {
             Box(
                 modifier = Modifier
-                    .matchParentSize()
-                    .hazeEffect(
-                        state = hazeState,
-                        style = HazeStyle(
-                            backgroundColor = cs.surface.copy(alpha = 0.30f),
-                            tints = listOf(HazeTint(cs.surface.copy(alpha = 0.30f))),
-                            blurRadius = 24.dp,
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .height(28.dp)
+                    .background(
+                        Brush.verticalGradient(
+                            0f to Color.Transparent,
+                            0.35f to cs.surface.copy(alpha = 0.18f),
+                            1f to cs.surface.copy(alpha = 0.82f),
                         ),
                     ),
             )
-            // 底缘渐隐：与清晰内容软衔接
-            Box(
-                modifier = Modifier
-                    .matchParentSize()
-                    .drawWithCache {
-                        val h = size.height
-                        onDrawBehind {
-                            drawRect(
-                                Brush.verticalGradient(
-                                    0f to Color.Transparent,
-                                    0.72f to Color.Transparent,
-                                    1f to cs.surface,
-                                    startY = 0f,
-                                    endY = h,
-                                ),
-                            )
-                        }
-                    },
-            )
-        } else if (enabled && captured != null && Build.VERSION.SDK_INT >= 31) {
-            Canvas(
-                modifier = Modifier
-                    .matchParentSize()
-                    // 外层 graphicsLayer 统一模糊（先内容、后整体模糊）
-                    .graphicsLayer {
-                        renderEffect = android.graphics.RenderEffect
-                            .createBlurEffect(28f, 28f, android.graphics.Shader.TileMode.CLAMP)
-                            .asComposeRenderEffect()
-                    },
-            ) {
-                clipRect(0f, 0f, size.width, size.height) {
-                    drawIntoCanvas { c ->
-                        val sv = c.nativeCanvas.saveLayer(
-                            android.graphics.RectF(0f, 0f, size.width, size.height),
-                            null,
-                        )
-                        // 顶栏与内容层同根坐标系：原位重放即"顶栏背后的内容"
-                        // （录制节点自带页面底色，重放即为完整的模糊背景）
-                        drawLayer(captured)
-                        // 可读性蒙版
-                        drawRect(cs.surface.copy(alpha = 0.32f))
-                        // 底缘渐隐，与清晰内容软衔接
-                        c.nativeCanvas.drawRect(
-                            android.graphics.RectF(0f, 0f, size.width, size.height),
-                            fadeMaskPaint(TopBarBlurMode.Gradient, size.height * 0.72f, size.height),
-                        )
-                        c.nativeCanvas.restoreToCount(sv)
-                    }
-                }
-            }
-        } else {
-            Box(modifier = Modifier.matchParentSize().background(cs.surface))
         }
-        content()
     }
 }
