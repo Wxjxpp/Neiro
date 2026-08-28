@@ -182,9 +182,11 @@ fun AlbumsScreen(
             }
             Column(modifier = containerModifier.fillMaxSize()) {
                 TopAppBar(
-                    title = {
-                        Text(current.title, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    },
+                    windowInsets = WindowInsets(0),
+                    title = { Spacer(Modifier.size(1.dp)) },
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = Color.Transparent,
+                    ),
                     navigationIcon = {
                         IconButton(onClick = { opened = null }) {
                             Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "返回")
@@ -358,85 +360,51 @@ private fun AlbumCollapsingHeader(
 ) {
     val dimens = AppTheme.dimens
     val totalMs = entry.songs.sumOf { it.durationMs }
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val headerHeight = 280.dp
-    val collapsedHeight = 56.dp
-    val titleBlockHeight = 80.dp
-    val maxOffsetPx = with(density) { headerHeight.toPx() }
-    // 高度 280→56、圆角 0→28（胶囊）；标题块自下方上滑并淡出，字号 24→16
-    val height = lerp(headerHeight, collapsedHeight, progress)
-    val cornerRadius = lerp(0.dp, 28.dp, progress)
-    val shape = RoundedCornerShape(cornerRadius)
-    val titleOffsetPx = with(density) { titleBlockHeight.toPx() * (1f - progress) }
-    val titleAlpha = (1f - progress * 1.15f).coerceIn(0f, 1f)
-    val sts = LocalSharedTransitionScope.current
-    Box(modifier = Modifier.fillMaxSize()) {
-        // 封面容器：随 progress 收缩为顶部胶囊。
-        // 底色走主题 surfaceVariant——原来硬编码 Color.Black，封面未加载/无封面时
-        // 就是用户看到的"大黑块"。
-        Box(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .padding(horizontal = 12.dp)
-                .fillMaxWidth()
-                .height(height)
-                .clip(shape)
-                .background(MaterialTheme.colorScheme.surfaceVariant),
-        ) {
-            val baseModifier = Modifier.fillMaxSize()
-            if (sts != null && animScope != null && sharedKey != null) {
-                with(sts) {
-                    AsyncImage(
-                        model = entry.coverUri,
-                        contentDescription = entry.title,
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .sharedElement(
-                                rememberSharedContentState(key = sharedKey),
-                                animatedVisibilityScope = animScope,
-                            )
-                            .then(baseModifier),
-                    )
-                }
-            } else {
+    val coverSize = 168.dp
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = dimens.spaceLg, vertical = 18.dp),
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                modifier = Modifier
+                    .size(coverSize)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(MaterialTheme.colorScheme.surfaceVariant),
+            ) {
                 AsyncImage(
                     model = entry.coverUri,
                     contentDescription = entry.title,
                     contentScale = ContentScale.Crop,
-                    modifier = baseModifier,
+                    modifier = Modifier.fillMaxSize(),
                 )
             }
+            Spacer(Modifier.size(dimens.spaceLg))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(entry.title, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold, maxLines = 3, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
+                Text(entry.artistName.ifBlank { "未知艺术家" }, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            }
         }
-        // 标题区：位于图片下方占位区，滚动时上滑与图片合并、渐隐、缩小（24sp→16sp）
-        Column(
-            modifier = Modifier
-                .align(Alignment.TopCenter)
-                .statusBarsPadding()
-                .graphicsLayer { translationY = titleOffsetPx; alpha = titleAlpha }
-                .fillMaxWidth()
-                .padding(top = headerHeight + dimens.spaceSm),
-        ) {
-            Text(
-                text = entry.title,
-                fontSize = lerp(24.sp, 16.sp, progress),
-                fontWeight = FontWeight.Bold,
-                // 标题位于列表背景之上，随主题走（原硬编码白色在浅色主题下不可读）
-                color = MaterialTheme.colorScheme.onBackground,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
-            Text(
-                text = "${entry.artistName.ifBlank { "未知歌手" }} · $songCount 首 · ${formatTotalDuration(totalMs)}",
-                fontSize = lerp(14.sp, 12.sp, progress),
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-            )
+        Spacer(Modifier.height(24.dp))
+        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceAround) {
+            AlbumStat(songCount.toString(), "歌曲")
+            AlbumStat(formatTotalDuration(totalMs), "时长")
+            AlbumStat(entry.songs.mapNotNull { it.album?.year ?: it.releaseDate?.take(4)?.toIntOrNull() }.minOrNull()?.toString() ?: "未知", "年份")
         }
+        Spacer(Modifier.height(6.dp))
     }
 }
 
+@Composable
+private fun AlbumStat(value: String, label: String) {
+    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+        Text(value, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Text(label, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
 /** 毫秒 → 「X时Y分」/「Y分钟」。 */
 private fun formatTotalDuration(ms: Long): String {
     val minutes = ms / 60000
