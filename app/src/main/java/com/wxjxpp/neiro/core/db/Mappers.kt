@@ -152,6 +152,7 @@ fun Lyrics.toEntity(songId: String, isOverride: Boolean): LyricsCacheEntity {
         payload = array.toString(),
         isOverride = isOverride,
         updatedAt = System.currentTimeMillis(),
+        parserVersion = LYRICS_PARSER_VERSION,
     )
 }
 

@@ -86,7 +86,21 @@ data class DiaryEntryEntity(
     @ColumnInfo(name = "created_at_ms") val createdAtMs: Long,
 )
 
-/** 歌词缓存：避免每次进播放页都重新解析文件。 */
+/**
+ * 歌词缓存：避免每次进播放页都重新解析文件。
+ *
+ * ## 为什么需要 [parserVersion]
+ *
+ * [payload] 存的是**解析后的结果**（startMs / text / translation / syllables），
+ * 不是原始歌词文本。因此一旦解析器有 bug，错误结果会被永久固化在缓存里 ——
+ * `lyricsFor` 命中缓存就直接返回，修好的解析器代码根本不会执行。
+ *
+ * 实测踩过两次：v8 之前把翻译与原文存反、把音节的词间空格 trim 掉了，
+ * 修完解析器后装新包依然显示旧结果，因为读的全是旧缓存。
+ *
+ * 现在每条缓存都记下写入时的解析器版本，版本不符即视为失效重新解析。
+ * 用户手动指定的歌词（[isOverride]）不受影响 —— 那不是解析产物。
+ */
 @Entity(tableName = "lyrics_cache")
 data class LyricsCacheEntity(
     @PrimaryKey @ColumnInfo(name = "song_id") val songId: String,
@@ -97,7 +111,22 @@ data class LyricsCacheEntity(
     /** 用户手动指定/校准过，优先级高于自动查找 */
     @ColumnInfo(name = "is_override") val isOverride: Boolean,
     @ColumnInfo(name = "updated_at") val updatedAt: Long,
+    /**
+     * 写入这条缓存时的解析器版本，见 [LYRICS_PARSER_VERSION]。
+     *
+     * 默认 0 表示"版本未知的历史数据"，一定与当前版本不符，因此会被重新解析。
+     */
+    @ColumnInfo(name = "parser_version", defaultValue = "0") val parserVersion: Int = 0,
 )
+
+/**
+ * 歌词解析器的行为版本号。**任何改变解析输出的修改都必须让它 +1**，
+ * 否则用户设备上的旧缓存会继续生效，修复不会生效。
+ *
+ * 变更历史：
+ * - 1：引入版本号时的基线（SPL 标准重写 + 音节空格保留 + 主歌词位次判定）
+ */
+const val LYRICS_PARSER_VERSION = 1
 
 /** 应用启动记录：听歌热力图的"启动次数"维度，每次冷启动一行。 */
 @Entity(tableName = "app_launches")

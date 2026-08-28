@@ -174,11 +174,18 @@ class DefaultAppContainer(
     private val httpClient = HttpClient()
 
     // === 数据库 ===
+    //
+    // addMigrations 必须写在 fallbackToDestructiveMigration 之前生效：显式迁移
+    // 优先，只有找不到迁移路径时才走破坏性回退。2→3 只是给 lyrics_cache 加一列，
+    // 不能因此清空用户的歌单 / 日记 / 听歌统计。
     private val database = Room.databaseBuilder(
         application,
         MusicDatabase::class.java,
         MusicDatabase.NAME,
-    ).fallbackToDestructiveMigration(dropAllTables = true).build()
+    )
+        .addMigrations(MusicDatabase.MIGRATION_2_3)
+        .fallbackToDestructiveMigration(dropAllTables = true)
+        .build()
 
     // === 扫描与元数据 ===
     override val metadataReader: MetadataReader = AndroidMetadataReader()

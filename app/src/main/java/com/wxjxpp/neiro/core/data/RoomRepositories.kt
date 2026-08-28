@@ -3,6 +3,7 @@ package com.wxjxpp.neiro.core.data
 import com.wxjxpp.neiro.core.db.AppLaunchDao
 import com.wxjxpp.neiro.core.db.AppLaunchEntity
 import com.wxjxpp.neiro.core.db.DiaryDao
+import com.wxjxpp.neiro.core.db.LYRICS_PARSER_VERSION
 import com.wxjxpp.neiro.core.db.LyricsDao
 import com.wxjxpp.neiro.core.db.PlayEventDao
 import com.wxjxpp.neiro.core.db.PlaylistDao
@@ -110,9 +111,16 @@ class RoomLyricsRepository(
 
     override suspend fun lyricsFor(song: Song): Lyrics {
         dao.find(song.id)?.let { cached ->
-            val lyrics = cached.toDomain()
-            // 用户手动指定过就直接用；否则命中缓存也直接用，避免重复解析
-            if (!lyrics.isEmpty) return lyrics
+            // 用户手动指定/校准过的歌词不是解析产物，永远直接用。
+            //
+            // 自动解析的缓存则必须校验解析器版本：payload 里存的是**解析结果**，
+            // 解析器有 bug 时错误会被永久固化（实测两次：翻译与原文存反、
+            // 音节词间空格被 trim）。版本不符就丢弃重新解析，否则装了新包也没用。
+            val usable = cached.isOverride || cached.parserVersion == LYRICS_PARSER_VERSION
+            if (usable) {
+                val lyrics = cached.toDomain()
+                if (!lyrics.isEmpty) return lyrics
+            }
         }
         val found = locator.find(song)
         if (!found.isEmpty) dao.upsert(found.toEntity(song.id, isOverride = false))

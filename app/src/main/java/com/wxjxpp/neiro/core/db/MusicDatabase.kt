@@ -9,6 +9,9 @@ import androidx.room.Query
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Upsert
+import androidx.room.migration.Migration
+import androidx.sqlite.SQLiteConnection
+import androidx.sqlite.execSQL
 import kotlinx.coroutines.flow.Flow
 
 @Dao
@@ -139,11 +142,11 @@ interface AppLaunchDao {
         LyricsCacheEntity::class,
         AppLaunchEntity::class,
     ],
-    version = 2,
+    version = 3,
     exportSchema = false,
 )
 abstract class MusicDatabase : RoomDatabase() {
-abstract fun songDao(): SongDao
+    abstract fun songDao(): SongDao
     abstract fun playlistDao(): PlaylistDao
     abstract fun playEventDao(): PlayEventDao
     abstract fun diaryDao(): DiaryDao
@@ -152,5 +155,23 @@ abstract fun songDao(): SongDao
 
     companion object {
         const val NAME = "music_player.db"
+
+        /**
+         * 2 → 3：`lyrics_cache` 增加 `parser_version` 列。
+         *
+         * **必须写显式迁移**：装配处配了 `fallbackToDestructiveMigration`，
+         * 只升版本号会导致整库被删 —— 用户的歌单、日记、听歌统计全部丢失。
+         * 这里只 ADD COLUMN，其余数据原样保留。
+         *
+         * 默认值 0 表示"版本未知"，与当前 [LYRICS_PARSER_VERSION] 必然不符，
+         * 因此所有历史歌词缓存会在下次读取时自动重新解析。
+         */
+        val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(connection: SQLiteConnection) {
+                connection.execSQL(
+                    "ALTER TABLE lyrics_cache ADD COLUMN parser_version INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
     }
 }
