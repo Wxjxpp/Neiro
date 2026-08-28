@@ -410,8 +410,14 @@ class AppViewModel(
         if (_uiState.value.isRefreshing) return
         _uiState.update { it.copy(isRefreshing = true) }
         viewModelScope.launch {
-            runCatching { container.songRepository.rescanLocal() }
-            _uiState.update { it.copy(isRefreshing = false) }
+            try {
+                container.songRepository.rescanLocal()
+            } catch (error: Throwable) {
+                container.notify("歌曲扫描失败：${error.message ?: "未知错误"}")
+            } finally {
+                // 无论扫描/元数据补齐是否抛异常，都必须关闭加载状态。
+                _uiState.update { it.copy(isRefreshing = false) }
+            }
         }
     }
 

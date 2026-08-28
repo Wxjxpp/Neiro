@@ -24,6 +24,11 @@ import com.wxjxpp.neiro.core.scanner.ScanProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import java.util.Calendar
 
 /** Room 落库实现，替换原来的内存版本。 */
@@ -58,8 +63,16 @@ class RoomSongRepository(
         fun Song.withStableAddedAt() = toEntity(addedAt)
         // 先落轻量索引让列表立刻可见
         dao.upsert(found.map { it.withStableAddedAt() })
-        // 再逐个补齐标签/封面/码率/ReplayGain，同时沿用同一个加入时间
-        val enriched = found.map { metadataReader.readMetadata(it) }
+        // 并发补齐元数据：MediaMetadataRetriever + ReplayGain 是独立文件读取，
+        // 串行读取几百首会把扫描拖到数分钟；限制为 4 个并发，避免 IO 争抢。
+        val limiter = Semaphore(4)
+        val enriched = coroutineScope {
+            found.map { song ->
+                async {
+                    limiter.withPermit { metadataReader.readMetadata(song) }
+                }
+            }.awaitAll()
+        }
         dao.upsert(enriched.map { it.withStableAddedAt() })
     }
 }

@@ -23,7 +23,14 @@ android {
             isMinifyEnabled = false
         }
         release {
-            isMinifyEnabled = false
+            // Release 开启 R8 代码压缩、优化与混淆。
+            isMinifyEnabled = true
+            isShrinkResources = true
+            // 不保留完整 app 包，避免 R8 规则形同虚设；仅为运行时反射入口保留必要类。
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
             // 未配置签名时用 debug 签名，保证 Actions 能直接产出可安装 APK
             signingConfig = signingConfigs.getByName("debug")
         }

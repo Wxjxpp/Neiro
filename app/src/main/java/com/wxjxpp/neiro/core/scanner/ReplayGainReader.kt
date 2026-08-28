@@ -48,5 +48,5 @@ class ReplayGainReader(private val resolver: ContentResolver) {
     private fun decode(bytes: ByteArray, charset: Charset): String =
         String(bytes, charset).replace('\u0000', '\n')
 
-    private companion object { const val MAX_BYTES = 4 * 1024 * 1024 }
+    private companion object { const val MAX_BYTES = 512 * 1024 }
 }
