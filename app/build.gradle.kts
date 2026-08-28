@@ -58,17 +58,6 @@ kotlin {
     }
 }
 
-// Miuix 0.9.4-rc01 的 Gradle 元数据会请求 Compose 1.12.0-rc01，
-// 但本项目受 compileSdk 36 / AGP 8.13.2 限制，必须统一锁回已验证的 1.11.4。
-configurations.configureEach {
-    resolutionStrategy.eachDependency {
-        if (requested.group?.startsWith("androidx.compose") == true && requested.version?.startsWith("1.12") == true) {
-            useVersion(libs.versions.composeUi.get())
-            because("compileSdk 36 and AGP 8.13.2 cannot consume Compose 1.12")
-        }
-    }
-}
-
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
@@ -116,7 +105,6 @@ dependencies {
     // Haze 硬件加速毛玻璃（Expr 实验）
     implementation(libs.haze)
     // Miuix RuntimeShader：About 页使用原生 shader 流光效果（API 33+）
-    implementation(libs.miuix.shader)
     // accompanist 歌词 core 的 KRC 元数据解码需要
     implementation(libs.kotlinx.serialization.json)
     // accompanist 歌词 UI 的平滑圆角组件

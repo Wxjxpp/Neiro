@@ -44,7 +44,6 @@ profileinstaller = "1.4.1"
 # 2.0.0-beta01 要求 compileSdk 37（需先升 AGP），故用 1.x 稳定线
 haze = "1.6.10"
 # Miuix RuntimeShader：Android 原生流光渲染抽象（API 33+，低版本由页面回退）
-miuixShader = "0.9.4-rc01"
 # accompanist 歌词 UI 的平滑圆角组件依赖（同作者）
 gazeCapsule = "2.1.1-patch2"
 # KugouKrcMetadataDecoder 需要（accompanist 歌词 core 源码依赖）
@@ -98,7 +97,6 @@ coil-compose = { group = "io.coil-kt", name = "coil-compose", version.ref = "coi
 androidx-profileinstaller = { group = "androidx.profileinstaller", name = "profileinstaller", version.ref = "profileinstaller" }
 # Haze：Compose 硬件加速模糊（事实标准库；1.x 单工件，2.0 起才拆 haze-blur）
 haze = { group = "dev.chrisbanes.haze", name = "haze", version.ref = "haze" }
-miuix-shader = { group = "top.yukonga.miuix.kmp", name = "miuix-shader", version.ref = "miuixShader" }
 kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "kotlinxSerializationJson" }
 junit = { group = "junit", name = "junit", version.ref = "junit" }
 gaze-capsule = { group = "com.mocharealm.gaze", name = "capsule", version.ref = "gazeCapsule" }
