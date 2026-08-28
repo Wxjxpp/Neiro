@@ -115,6 +115,7 @@ import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.ui.components.AlbumBlurBackground
 import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
 import com.wxjxpp.neiro.ui.components.FluidGlowBackground
 import com.wxjxpp.neiro.ui.components.TopBarBlurMode
@@ -410,7 +411,9 @@ fun PlayerDetailScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
-        if (visualStyle == "dynamic" && vividPalette.isNotEmpty()) {
+        if (sheetProgress > 0.35f) {
+            AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
+        } else if (false) {
             // Expr v2：流体多点取色背景（每个采样色一个流动光斑，明亮画布融合）
             FluidGlowBackground(
                 palette = vividPalette,
@@ -564,6 +567,8 @@ fun PlayerDetailScreen(
                     },
             ) {
                 val t = lyricPhase.coerceIn(0f, 1f)
+                // 收起态不组合歌词渲染树，避免屏幕外的动画和布局继续消耗 CPU。
+                if (sheetProgress > 0.5f) {
                 // 歌词层：整层从下方滑入，过半后可交互
                 Box(
                     modifier = Modifier
@@ -603,6 +608,7 @@ fun PlayerDetailScreen(
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
+                }
                 }
             }
         }

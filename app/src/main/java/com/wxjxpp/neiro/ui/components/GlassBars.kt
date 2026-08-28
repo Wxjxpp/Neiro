@@ -39,6 +39,7 @@ import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Alignment
+import coil.compose.AsyncImage
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
@@ -286,5 +287,25 @@ fun GlassBarSurface(
                     ),
             )
         }
+    }
+}
+/** Static album-art background for the expanded player. */
+@Composable
+fun AlbumBlurBackground(coverUri: String?, modifier: Modifier = Modifier) {
+    Box(modifier = modifier.fillMaxSize().clip(androidx.compose.foundation.shape.RoundedCornerShape(0.dp))) {
+        AsyncImage(
+            model = coverUri,
+            contentDescription = null,
+            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+            modifier = Modifier
+                .fillMaxSize()
+                .graphicsLayer {
+                    scaleX = 1.35f
+                    scaleY = 1.35f
+                    if (Build.VERSION.SDK_INT >= 31) {
+                        renderEffect = android.graphics.RenderEffect.createBlurEffect(42f, 42f, android.graphics.Shader.TileMode.CLAMP).asComposeRenderEffect()
+                    }
+                },
+        )
     }
 }
