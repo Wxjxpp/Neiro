@@ -774,17 +774,14 @@ private fun RoomView(
                                     Modifier.fillMaxWidth().clickable {
                                         addingKey = s.id
                                         scope.launch {
-                                            // 先用本机音源解析直链：成功则发 URL 曲目（全房间免脚本直接播）
-                                            val url = runCatching { resolveUrl(s) }.getOrNull()
-                                            val res = if (!url.isNullOrEmpty()) {
-                                                transport.addSongByUrl(url, s.title, s.artistName, s.coverUri.orEmpty())
-                                            } else {
-                                                transport.addSongFromPlatform(s)
-                                            }
+                                            // 平台曲目必须广播 sourceId/songId/payload，而不是房主临时解析出的裸 URL。
+                                            // 直链常依赖房主的 Cookie/Referer，其他成员直接请求会播放失败。
+                                            // 每个客户端收到平台曲目后，走自己的音源解析链。
+                                            val res = transport.addSongFromPlatform(s)
                                             addingKey = null
                                             onMessage(
                                                 res.fold(
-                                                    { if (url.isNullOrEmpty()) "已加入列表（该源无效时听众需自备音源）" else "已加入列表" },
+                                                    { "已加入列表" },
                                                     { it.message ?: "添加失败" },
                                                 ),
                                             )

@@ -760,6 +760,7 @@ private fun RouteContent(
                 Destination.Settings.route -> SettingsScreen(
                     floatingPlayerBar = uiState.floatingPlayerBar,
                     showTranslation = uiState.showTranslation,
+                    replayGainEnabled = uiState.replayGainEnabled,
                     shuffleMode = uiState.shuffleMode,
                     neteaseCookie = uiState.neteaseCookie,
                     lyricsOffsetMs = uiState.lyricsOffsetMs,
@@ -770,6 +771,7 @@ private fun RouteContent(
                     topBarBlurModeStr = uiState.topBarBlurMode,
                     onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
                     onShowTranslationChange = viewModel::setShowTranslation,
+                    onReplayGainChange = viewModel::setReplayGainEnabled,
                     onShuffleModeChange = viewModel::setShuffleMode,
                     onNeteaseCookieChange = viewModel::setNeteaseCookie,
                     onLyricsOffsetChange = viewModel::setLyricsOffset,

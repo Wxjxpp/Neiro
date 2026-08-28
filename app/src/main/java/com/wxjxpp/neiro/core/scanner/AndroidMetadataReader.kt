@@ -10,9 +10,11 @@ import com.wxjxpp.neiro.core.model.Song
  * Android 内置元数据读取器。
  *
  * MediaMetadataRetriever 能读取常见音频标签、封面、时长和部分技术参数。
- * ReplayGain / 内嵌歌词在不同格式支持不一致，留给 taglib/jaudiotagger 实现补强。
+ * ReplayGain 由 ReplayGainReader 从 FLAC/Vorbis/ID3 常见文本标签补齐；内嵌歌词由歌词读取器处理。
  */
-class AndroidMetadataReader : MetadataReader {
+class AndroidMetadataReader(
+    private val replayGainReader: ReplayGainReader? = null,
+) : MetadataReader {
 
     override suspend fun readMetadata(song: Song): Song {
         val local = song.location as? MediaLocation.Local ?: return song
@@ -30,13 +32,21 @@ class AndroidMetadataReader : MetadataReader {
                 ?: song.durationMs
             val bitrate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_BITRATE)
                 ?.toIntOrNull()?.div(1000)
+            val sampleRate = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_SAMPLERATE)
+                ?.toIntOrNull()
+            val replayGain = replayGainReader?.read(local.uri) ?: song.replayGain
             val mime = retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_MIMETYPE)
             song.copy(
                 title = title,
                 artists = listOf(Artist("artist:$artist", artist)),
                 album = Album("album:$album", album, artist),
                 durationMs = duration,
-                format = song.format.copy(mimeType = mime ?: song.format.mimeType, bitrateKbps = bitrate ?: song.format.bitrateKbps),
+                format = song.format.copy(
+                    mimeType = mime ?: song.format.mimeType,
+                    bitrateKbps = bitrate ?: song.format.bitrateKbps,
+                    sampleRateHz = sampleRate ?: song.format.sampleRateHz,
+                ),
+                replayGain = replayGain,
                 metadataComplete = true,
             )
         }.getOrElse { song }.also { retriever.release() }

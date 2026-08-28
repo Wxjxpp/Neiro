@@ -39,6 +39,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.random.Random
+import kotlin.math.pow
 
 /**
  * Media3 播放控制器。
@@ -144,6 +145,24 @@ class Media3PlayerController(
 
     /** 懒初始化：必须在主线程创建。 */
     private var player: ExoPlayer? = null
+    @Volatile private var replayGainEnabled = false
+
+    override fun setReplayGainEnabled(enabled: Boolean) {
+        replayGainEnabled = enabled
+        applyReplayGain(_state.value.current)
+    }
+
+    private fun replayGainFactor(song: Song?): Float {
+        if (!replayGainEnabled || song == null) return 1f
+        val db = song.replayGain.trackGainDb ?: song.replayGain.albumGainDb ?: 0f
+        // ReplayGain 正值/负值均保持在安全范围，避免标签异常造成静音或过载。
+        return 10.0.pow(db / 20.0).toFloat().coerceIn(0.1f, 1f)
+    }
+
+    private fun applyReplayGain(song: Song?) {
+        val base = _state.value.volume
+        onPlayer { it.volume = (base * replayGainFactor(song)).coerceIn(0f, 1f) }
+    }
     /** 实验室音效：8-bit 量化。 */
     private val eightBitProcessor = EightBitAudioProcessor()
     /** 实验室音效：80 倍速（PCM 帧复制）。 */
@@ -194,7 +213,8 @@ class Media3PlayerController(
     /** 搜索页预解析的直链缓存（songId → url）：点击播放时零等待复用。 */
     private val preResolvedUrls = mutableMapOf<String, String>()
     private var resolveJob: Job? = null
-
+    /** 同一首在线歌曲只做一次自动重试，避免临时直链瞬时失效就直接跳歌。 */
+    private var retriedSongId: String? = null
     /** 在主线程执行播放器操作；已在主线程则直接跑，避免多余调度。 */
     private fun onPlayer(block: (ExoPlayer) -> Unit) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
@@ -268,6 +288,14 @@ class Media3PlayerController(
 
                 /** 单曲解码失败不能让整个应用崩，跳下一首并上报原因。 */
                 override fun onPlayerError(error: PlaybackException) {
+                    val failed = _state.value.current
+                    if (failed?.location is MediaLocation.Remote && retriedSongId != failed.id) {
+                        retriedSongId = failed.id
+                        // 临时直链可能过期；重新解析一次，失败后再正常进入下一首。
+                        resolveJob?.cancel()
+                        resolveAndPlay(failed, playWhenReady = true)
+                        return
+                    }
                     _state.update { it.copy(isPlaying = false, isBuffering = false) }
                     onPlaybackError?.invoke("播放失败：${error.errorCodeName}")
                     advance(forward = true, userTriggered = false)
@@ -277,6 +305,7 @@ class Media3PlayerController(
     }
 
     override fun setQueue(songs: List<Song>, startIndex: Int, autoPlay: Boolean) {
+        retriedSongId = null
         _queue.value = songs
         rebuildShuffleOrder()
         val target = songs.getOrNull(startIndex) ?: songs.firstOrNull()
@@ -365,7 +394,7 @@ class Media3PlayerController(
     override fun setVolume(volume: Float) {
         val clamped = volume.coerceIn(0f, 1f)
         _state.update { it.copy(volume = clamped) }
-        onPlayer { it.volume = clamped }
+        onPlayer { it.volume = (clamped * replayGainFactor(_state.value.current)).coerceIn(0f, 1f) }
     }
 
     override fun addToQueue(songs: List<Song>) {
@@ -526,6 +555,7 @@ class Media3PlayerController(
             p.setMediaItem(item, startAtMs)
             p.prepare()
             p.playWhenReady = playWhenReady
+            p.volume = (_state.value.volume * replayGainFactor(song)).coerceIn(0f, 1f)
         }
     }
 

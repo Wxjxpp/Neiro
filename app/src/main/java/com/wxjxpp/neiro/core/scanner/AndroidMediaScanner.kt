@@ -41,6 +41,7 @@ class AndroidMediaScanner(
             MediaStore.Audio.Media.TRACK,
             MediaStore.Audio.Media.YEAR,
             MediaStore.Audio.Media.DATA,
+            MediaStore.Audio.Media.DATE_MODIFIED,
         )
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
         var total = 0
@@ -62,6 +63,7 @@ class AndroidMediaScanner(
             val trackCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.TRACK)
             val yearCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.YEAR)
             val dataCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATA)
+            val modifiedCol = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_MODIFIED)
             val count = cursor.count
             var index = 0
 
@@ -102,6 +104,8 @@ class AndroidMediaScanner(
                     ),
                     format = AudioFormat(mimeType = cursor.getString(mimeCol)),
                     releaseDate = year?.toString(),
+                    // MediaStore DATE_MODIFIED 是秒，领域模型统一用毫秒。
+                    addedAt = cursor.getLong(modifiedCol) * 1000L,
                 )
                 // 直接从文件重读最新标签：MediaStore 的文本列是入库时的缓存，
                 // 用户用外部工具改了标签但 MediaStore 未重新索引时会拿到旧值

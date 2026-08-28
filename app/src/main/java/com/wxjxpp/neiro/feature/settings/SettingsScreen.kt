@@ -55,6 +55,7 @@ import com.wxjxpp.neiro.ui.theme.AppTheme
 fun SettingsScreen(
     floatingPlayerBar: Boolean,
     showTranslation: Boolean,
+    replayGainEnabled: Boolean = false,
     shuffleMode: ShuffleMode,
     neteaseCookie: String = "",
     lyricsOffsetMs: Long = 0L,
@@ -65,6 +66,7 @@ fun SettingsScreen(
     topBarBlurModeStr: String = "gradient",
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,
+    onReplayGainChange: (Boolean) -> Unit = {},
     onShuffleModeChange: (ShuffleMode) -> Unit,
     onNeteaseCookieChange: (String) -> Unit = {},
     onLyricsOffsetChange: (Long) -> Unit = {},
@@ -162,6 +164,12 @@ fun SettingsScreen(
                         subtitle = "歌词下方显示译文（若歌词包含）",
                         checked = showTranslation,
                         onCheckedChange = onShowTranslationChange,
+                    )
+                    SwitchRow(
+                        title = "ReplayGain 音量均衡",
+                        subtitle = "读取歌曲标签中的 ReplayGain，自动降低过响歌曲音量",
+                        checked = replayGainEnabled,
+                        onCheckedChange = onReplayGainChange,
                     )
                     var offsetValue by remember(lyricsOffsetMs) { mutableStateOf(lyricsOffsetMs.toFloat()) }
                     Text(

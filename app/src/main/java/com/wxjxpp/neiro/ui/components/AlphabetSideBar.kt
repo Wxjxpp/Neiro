@@ -32,15 +32,23 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import java.nio.charset.Charset
 
 /** 歌曲首字母分组索引表（A-Z + #）。 */
 val AlphabetChars: List<Char> = ('A'..'Z').toList() + '#'
 
-/** 从标题提取首字母分组键：英文归一化大写；非 A-Z 归入 '#'。 */
+/** 从标题提取首字母分组键：拉丁字母大写；常用汉字按 GB2312 一级字库映射拼音；其余归入 #。 */
 fun initialOf(title: String): Char {
     val c = title.trim().firstOrNull() ?: return '#'
     val upper = c.uppercaseChar()
-    return if (upper in 'A'..'Z') upper else '#'
+    if (upper in 'A'..'Z') return upper
+    val bytes = c.toString().toByteArray(Charset.forName("GB2312"))
+    if (bytes.size != 2) return '#'
+    val zone = ((bytes[0].toInt() and 0xff) - 160) * 100 + ((bytes[1].toInt() and 0xff) - 160)
+    val starts = intArrayOf(1601,1637,1833,2078,2274,2302,2433,2594,2787,3106,3212,3472,3635,3722,3730,3858,4027,4086,4390,4558,4684,4925,5249,5590)
+    val letters = "ABCDEFGHJKLMNOPQRSTWXYZ"
+    val i = starts.indexOfLast { zone >= it }
+    return if (i >= 0 && i < letters.length) letters[i] else '#'
 }
 
 /**

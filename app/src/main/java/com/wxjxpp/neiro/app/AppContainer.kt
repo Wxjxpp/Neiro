@@ -27,6 +27,7 @@ import com.wxjxpp.neiro.core.player.Media3PlayerController
 import com.wxjxpp.neiro.core.player.PlayerController
 import com.wxjxpp.neiro.core.scanner.AndroidMediaScanner
 import com.wxjxpp.neiro.core.scanner.AndroidMetadataReader
+import com.wxjxpp.neiro.core.scanner.ReplayGainReader
 import com.wxjxpp.neiro.core.scanner.MediaScanner
 import com.wxjxpp.neiro.core.scanner.MetadataReader
 import com.wxjxpp.neiro.core.search.OnlineSearchRepository
@@ -188,7 +189,9 @@ class DefaultAppContainer(
         .build()
 
     // === 扫描与元数据 ===
-    override val metadataReader: MetadataReader = AndroidMetadataReader()
+    override val metadataReader: MetadataReader = AndroidMetadataReader(
+        ReplayGainReader(application.contentResolver),
+    )
     override val mediaScanner: MediaScanner = AndroidMediaScanner(application.contentResolver, metadataReader)
 
     // === 歌词 ===

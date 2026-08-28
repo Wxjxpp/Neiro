@@ -16,6 +16,7 @@ import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.SongSortField
 import com.wxjxpp.neiro.core.search.searchSongs
 import com.wxjxpp.neiro.core.userapi.UserApiInfo
+import com.wxjxpp.neiro.ui.components.initialOf
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -94,6 +95,7 @@ data class ShellUiState(
     /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮。 */
     val visualStyle: String = "dynamic",
     /** Expr：均衡器状态（开关 + 10 段增益 dB + 自定义预设 JSON）。 */
+    val replayGainEnabled: Boolean = false,
     val eqEnabled: Boolean = false,
     val eqGains: FloatArray = FloatArray(10),
     val eqCustomPresetsJson: String = "[]",
@@ -272,6 +274,12 @@ class AppViewModel(
         container.appSettings.observeVisualStyle()
             .onEach { style -> _uiState.update { it.copy(visualStyle = style) } }
             .launchIn(viewModelScope)
+        container.appSettings.observeReplayGainEnabled()
+            .onEach { on ->
+                _uiState.update { it.copy(replayGainEnabled = on) }
+                container.playerController.setReplayGainEnabled(on)
+            }
+            .launchIn(viewModelScope)
         container.appSettings.observeEqualizerEnabled()
             .onEach { on -> _uiState.update { it.copy(eqEnabled = on) } }
             .launchIn(viewModelScope)
@@ -413,7 +421,15 @@ class AppViewModel(
     private fun sortSongs(songs: List<Song>): List<Song> {
         val state = _uiState.value
         val sorted = when (state.songSortField) {
-            SongSortField.Title -> songs.sortedWith(compareBy(java.text.Collator.getInstance()) { it.title })
+            SongSortField.Title -> {
+                val collator = java.text.Collator.getInstance()
+                // 先按与侧边栏完全相同的首字母键排序，再按完整标题排序。
+                // 这样英文/中文会按 A-Z 共同交错，不会被系统 Collator 拆成两块。
+                songs.sortedWith(Comparator { a, b ->
+                    val byInitial = alphabetSortKey(a.title).compareTo(alphabetSortKey(b.title))
+                    if (byInitial != 0) byInitial else collator.compare(a.title, b.title)
+                })
+            }
             SongSortField.AddedTime -> songs.sortedBy { it.addedAt }
             SongSortField.PlayCount -> songs.sortedByDescending { playCounts[it.id] ?: 0 }
             // 专辑排序：专辑名 → 曲目号 → 标题，同专辑歌曲自然聚在一起
@@ -430,6 +446,14 @@ class AppViewModel(
             }
         }
         return if (state.songSortDescending) sorted.asReversed() else sorted
+    }
+
+    private fun alphabetSortKey(title: String): Int {
+        val c = initialOf(title)
+        return when {
+            c in 'A'..'Z' -> c.code - 'A'.code
+            else -> 26
+        }
     }
 
     /** 排序设置变化后重排当前列表。 */
@@ -604,6 +628,13 @@ class AppViewModel(
     /** Expr：切换播放页视觉风格（dynamic / vivid）。 */
     fun setVisualStyle(style: String) {
         viewModelScope.launch { container.appSettings.setVisualStyle(style) }
+    }
+    fun setReplayGainEnabled(enabled: Boolean) {
+        _uiState.update { it.copy(replayGainEnabled = enabled) }
+        viewModelScope.launch {
+            container.appSettings.setReplayGainEnabled(enabled)
+            container.playerController.setReplayGainEnabled(enabled)
+        }
     }
     /** Expr：均衡器——开关/增益/预设保存，一并下发音频链。 */
     fun setEqualizerEnabled(enabled: Boolean) {

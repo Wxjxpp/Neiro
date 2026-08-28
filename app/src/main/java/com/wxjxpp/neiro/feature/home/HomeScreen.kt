@@ -81,7 +81,9 @@ import com.wxjxpp.neiro.core.model.MediaLocation
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.core.model.SongSortField
 import com.wxjxpp.neiro.ui.components.AlphabetIndicatorBall
+import com.wxjxpp.neiro.ui.components.AlphabetChars
 import com.wxjxpp.neiro.ui.components.AlphabetSideBar
+import com.wxjxpp.neiro.ui.components.initialOf
 import com.wxjxpp.neiro.ui.components.GlassBarSurface
 import com.wxjxpp.neiro.ui.components.SongCover
 import com.wxjxpp.neiro.ui.components.captureTo
@@ -264,7 +266,11 @@ fun HomeScreen(
                     barProgress = p
                     // 拖球快移：纵向位置直接映射目标曲索引，跳转远比逐格滚快
                     if (songs.isNotEmpty()) {
-                        val target = (p * (songs.size - 1)).toInt().coerceIn(0, songs.size - 1)
+                        val targetChar = AlphabetChars[((p * AlphabetChars.size).toInt()).coerceIn(0, AlphabetChars.lastIndex)]
+                        val target = songs.indexOfFirst { initialOf(it.title) == targetChar }
+                            .takeIf { it >= 0 }
+                            ?: songs.indexOfFirst { initialOf(it.title) > targetChar }.takeIf { it >= 0 }
+                            ?: songs.lastIndex
                         if (target != lastFastIndex) {
                             lastFastIndex = target
                             scope.launch { listState.scrollToItem(target) }
@@ -383,6 +389,8 @@ private fun SongDetailSheetContent(
         Spacer(Modifier.height(AppTheme.dimens.spaceMd))
         DetailRow("歌曲时长", formatMs(song.durationMs))
         DetailRow("歌曲码率", song.format.bitrateKbps?.let { "$it kbps" } ?: "未知")
+        DetailRow("采样率", song.format.sampleRateHz?.let { "${it / 1000f} kHz" } ?: "未知")
+        DetailRow("声道", song.format.channels?.let { if (it == 1) "单声道" else "${it} 声道" } ?: "未知")
         DetailRow("歌曲比特率", song.format.bitrateKbps?.let { "${it * 1000} bit/s" } ?: "未知")
         DetailRow("歌曲文件大小", filePath?.let { formatBytes(File(it).length()) } ?: "未知")
         DetailRow("文件修改日期", filePath?.let { formatDate(File(it).lastModified()) } ?: "未知")

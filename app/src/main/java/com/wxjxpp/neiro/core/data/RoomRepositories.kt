@@ -50,16 +50,17 @@ class RoomSongRepository(
         scanner.scan().collect { progress ->
             if (progress is ScanProgress.Found) found += progress.song
         }
-        // 全量替换：DELETE + 重新 upsert 保证触发 Room 失效通知，
-        // observeSongs 的 Flow 会立即重发，UI 下拉刷新后立刻看到新列表
-        // （纯 upsert 在内容未变时不触发 Flow，导致刷新"看起来没反应"）
+        // 全量替换：DELETE + 重新 upsert 保证触发 Room 失效通知。
+        // 扫描器已把 MediaStore DATE_MODIFIED 写入 addedAt，因此“文件时间”排序
+        // 使用真实文件修改时间，而不是每次重扫的当前时间。
         dao.deleteAll()
         if (found.isEmpty()) return
+        fun Song.withStableAddedAt() = toEntity(addedAt)
         // 先落轻量索引让列表立刻可见
-        dao.upsert(found.map { it.toEntity() })
-        // 再逐个补齐标签/封面/码率
+        dao.upsert(found.map { it.withStableAddedAt() })
+        // 再逐个补齐标签/封面/码率/ReplayGain，同时沿用同一个加入时间
         val enriched = found.map { metadataReader.readMetadata(it) }
-        dao.upsert(enriched.map { it.toEntity() })
+        dao.upsert(enriched.map { it.withStableAddedAt() })
     }
 }
 
