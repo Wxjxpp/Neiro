@@ -409,7 +409,7 @@ class AppViewModel(
     fun refresh() {
         if (_uiState.value.isRefreshing) return
         _uiState.update { it.copy(isRefreshing = true) }
-        viewModelScope.launch {
+        viewModelScope.launch(kotlinx.coroutines.Dispatchers.IO) {
             try {
                 container.songRepository.rescanLocal()
             } catch (error: Throwable) {

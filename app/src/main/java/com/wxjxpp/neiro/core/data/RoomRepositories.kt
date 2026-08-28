@@ -24,6 +24,11 @@ import com.wxjxpp.neiro.core.scanner.ScanProgress
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -38,6 +43,9 @@ class RoomSongRepository(
     private val scanner: MediaScanner,
     private val metadataReader: MetadataReader,
 ) : SongRepository {
+    private val metadataScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private var metadataJob: Job? = null
+    private companion object { const val METADATA_BATCH_SIZE = 24 }
 
     override fun observeSongs(): Flow<List<Song>> = dao.observeAll().map { list -> list.map { it.toDomain() } }
 
@@ -63,17 +71,26 @@ class RoomSongRepository(
         fun Song.withStableAddedAt() = toEntity(addedAt)
         // 先落轻量索引让列表立刻可见
         dao.upsert(found.map { it.withStableAddedAt() })
-        // 并发补齐元数据：MediaMetadataRetriever + ReplayGain 是独立文件读取，
-        // 串行读取几百首会把扫描拖到数分钟；限制为 4 个并发，避免 IO 争抢。
-        val limiter = Semaphore(4)
-        val enriched = coroutineScope {
-            found.map { song ->
-                async {
-                    limiter.withPermit { metadataReader.readMetadata(song) }
+        // 元数据放到独立 IO 后台任务，不阻塞扫描完成和首页加载动画。
+        // 只保留最新一次任务，避免用户连续刷新时多个批次同时读取文件。
+        metadataJob?.cancel()
+        metadataJob = metadataScope.launch {
+            val limiter = Semaphore(2)
+            found.chunked(METADATA_BATCH_SIZE).forEach { batch ->
+                coroutineScope {
+                    batch.map { song ->
+                        async {
+                            limiter.withPermit {
+                                runCatching { metadataReader.readMetadata(song) }
+                                    .getOrDefault(song)
+                            }
+                        }
+                    }.awaitAll()
+                }.let { enriched ->
+                    dao.upsert(enriched.map { it.withStableAddedAt() })
                 }
-            }.awaitAll()
+            }
         }
-        dao.upsert(enriched.map { it.withStableAddedAt() })
     }
 }
 
