@@ -24,6 +24,7 @@ sealed class Destination(val route: String) {
     data object Together : Destination("together")
     data object Report : Destination("report")
     data object Settings : Destination("settings")
+    data object About : Destination("about")
 
     /** 带参数的目的地。 */
     data object PlaylistDetail : Destination("playlist/{playlistId}") {

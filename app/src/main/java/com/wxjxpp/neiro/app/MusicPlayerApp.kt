@@ -67,6 +67,7 @@ import com.wxjxpp.neiro.app.navigation.AppDrawerSheet
 import com.wxjxpp.neiro.feature.together.TogetherScreen
 import com.wxjxpp.neiro.core.together.LitTogetherTransport
 import com.wxjxpp.neiro.app.navigation.Destination
+import com.wxjxpp.neiro.feature.about.AboutScreen
 import com.wxjxpp.neiro.feature.albums.AlbumSortField
 import com.wxjxpp.neiro.feature.albums.AlbumsScreen
 import com.wxjxpp.neiro.feature.discover.DiscoverScreen
@@ -819,6 +820,11 @@ private fun RouteContent(
                     modifier = Modifier.fillMaxSize(),
                 )
 
+                Destination.About.route -> AboutScreen(
+                    onOpenDrawer = onOpenDrawer,
+                    contentPadding = contentPadding,
+                    modifier = Modifier.fillMaxSize(),
+                )
                 Destination.Diary.route -> DiaryScreen(
                     days = uiState.heatmapDays,
                     isLoading = uiState.isHeatmapLoading,

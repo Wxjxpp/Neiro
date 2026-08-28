@@ -104,6 +104,8 @@ dependencies {
     implementation(libs.androidx.profileinstaller)
     // Haze 硬件加速毛玻璃（Expr 实验）
     implementation(libs.haze)
+    // Miuix RuntimeShader：About 页使用原生 shader 流光效果（API 33+）
+    implementation(libs.miuix.shader)
     // accompanist 歌词 core 的 KRC 元数据解码需要
     implementation(libs.kotlinx.serialization.json)
     // accompanist 歌词 UI 的平滑圆角组件

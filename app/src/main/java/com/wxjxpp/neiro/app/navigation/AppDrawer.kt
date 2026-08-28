@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.About
 import androidx.compose.material.icons.rounded.Album
 import androidx.compose.material.icons.rounded.Book
 import androidx.compose.material.icons.rounded.Explore
@@ -63,6 +64,7 @@ fun drawerItems(today: LocalDate = LocalDate.now()): List<DrawerItem> = buildLis
         add(DrawerItem(Destination.Report, "年度报告", Icons.Rounded.Insights, DrawerGroup.Personal))
     }
     add(DrawerItem(Destination.Settings, "设置", Icons.Rounded.Settings, DrawerGroup.System))
+    add(DrawerItem(Destination.About, "关于", Icons.Rounded.About, DrawerGroup.System))
 }
 
 /**
