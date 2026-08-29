@@ -141,6 +141,15 @@ class RoomLyricsRepository(
 ) : LyricsRepository {
 
     override suspend fun lyricsFor(song: Song): Lyrics {
+        // 本地外挂歌词可能在应用外被修改，不能让数据库缓存遮蔽文件的新内容。
+        // 每次进入歌词页先检查本地文件；命中后重新缓存，远程歌曲继续使用数据库缓存。
+        if (song.location is com.wxjxpp.neiro.core.model.MediaLocation.Local) {
+            val local = locator.find(song)
+            if (!local.isEmpty) {
+                dao.upsert(local.toEntity(song.id, isOverride = false))
+                return local
+            }
+        }
         dao.find(song.id)?.let { cached ->
             // 用户手动指定/校准过的歌词不是解析产物，永远直接用。
             //

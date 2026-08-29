@@ -126,7 +126,7 @@ data class LyricsCacheEntity(
  * 变更历史：
  * - 1：引入版本号时的基线（SPL 标准重写 + 音节空格保留 + 主歌词位次判定）
  */
-const val LYRICS_PARSER_VERSION = 1
+const val LYRICS_PARSER_VERSION = 2
 
 /** 应用启动记录：听歌热力图的"启动次数"维度，每次冷启动一行。 */
 @Entity(tableName = "app_launches")
