@@ -549,7 +549,7 @@ class LrcParser : LyricsParser {
             // KaraokeText 把每个音节渲染成独立的 Text 再用 FlowRow 排列，
             // trim 掉尾随空格会让整句变成 "Imustbegettin'tooflashy"。
             // 被忽略的非法标记也在这里一并清掉，其后文本自然并入当前音节（规则 2）。
-            val word = removeWordTags(text.substring(from, to))
+            val word = removeWordTags(text.substring(from, to)).replace(' ', '\u00A0')
             if (word.isEmpty()) return@forEachIndexed
             result += LyricSyllable(
                 text = word,
