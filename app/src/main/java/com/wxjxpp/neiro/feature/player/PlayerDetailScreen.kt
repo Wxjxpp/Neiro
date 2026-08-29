@@ -416,6 +416,7 @@ fun PlayerDetailScreen(
             NeiroPlayerFlowBackground(
                 colors = vividPalette,
                 fallback = Color(song.coverSeedColor),
+                coverUri = song.coverUri,
                 modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)),
             )
             // 将控制台的主题色遮罩向上延伸，统一压平极端明暗高光；
@@ -426,8 +427,8 @@ fun PlayerDetailScreen(
                     .background(
                         Brush.verticalGradient(
                             0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
-                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.34f),
                         ),
                     ),
             )
@@ -687,7 +688,7 @@ fun PlayerDetailScreen(
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                         0.12f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
+                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
                     ),
                 ),
         ) {
