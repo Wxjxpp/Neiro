@@ -9,6 +9,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -235,6 +236,7 @@ private fun DrawScope.drawFluidCircles(colors: List<Color>, phases: List<Float>)
             radius = r,
             center = Offset(cx, cy),
         )
+        Box(modifier = Modifier.fillMaxSize().background(if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.20f)))
     }
 }
 

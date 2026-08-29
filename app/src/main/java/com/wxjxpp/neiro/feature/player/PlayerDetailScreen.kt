@@ -410,7 +410,7 @@ fun PlayerDetailScreen(
     val useTopBarHaze = topBarBlurEnabled
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
-        Box(modifier = Modifier.fillMaxSize().background(Color.Transparent))
+        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
         if (ambientGlow && sheetProgress > 0.35f) {
             AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
         } else if (false) {
@@ -462,8 +462,8 @@ fun PlayerDetailScreen(
                         Modifier.topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)
                             .background(
                                 Brush.verticalGradient(
-                                    0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.20f),
-                                    0.82f to MaterialTheme.colorScheme.surface.copy(alpha = 0.28f),
+                                    0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
+                                    0.82f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
                                     1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                                 ),
                             )
@@ -668,8 +668,8 @@ fun PlayerDetailScreen(
                 .background(
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                        0.12f to MaterialTheme.colorScheme.surface.copy(alpha = 0.38f),
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.52f),
+                        0.12f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                     ),
                 ),
         ) {
