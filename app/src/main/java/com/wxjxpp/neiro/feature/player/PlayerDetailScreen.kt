@@ -115,7 +115,6 @@ import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
-import com.wxjxpp.neiro.ui.components.NeiroPlayerFlowBackground
 import com.wxjxpp.neiro.ui.components.AlbumBlurBackground
 import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
 import com.wxjxpp.neiro.ui.components.FluidGlowBackground
@@ -413,12 +412,7 @@ fun PlayerDetailScreen(
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
         if (ambientGlow && sheetProgress > 0.35f) {
-            NeiroPlayerFlowBackground(
-                colors = vividPalette,
-                fallback = Color(song.coverSeedColor),
-                coverUri = song.coverUri,
-                modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)),
-            )
+            AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
             // 将控制台的主题色遮罩向上延伸，统一压平极端明暗高光；
             // 使用 surface 而非固定黑色，白色封面在浅色主题下不会被染黑。
             Box(
@@ -427,8 +421,8 @@ fun PlayerDetailScreen(
                     .background(
                         Brush.verticalGradient(
                             0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.34f),
+                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
+                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
                         ),
                     ),
             )
@@ -688,7 +682,7 @@ fun PlayerDetailScreen(
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
                         0.12f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
+                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
                     ),
                 ),
         ) {
