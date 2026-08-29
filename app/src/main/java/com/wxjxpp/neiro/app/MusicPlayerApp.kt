@@ -388,7 +388,6 @@ fun MusicPlayerApp(container: AppContainer) {
                         showTranslation = uiState.showTranslation,
                         lyricsOffsetMs = uiState.lyricsOffsetMs,
                         ambientGlow = uiState.ambientGlow,
-                        visualStyle = uiState.visualStyle,
                         topBarBlurEnabled = uiState.topBarBlurEnabled,
                         topBarBlurMode = when (uiState.topBarBlurMode) {
                             "mask" -> com.wxjxpp.neiro.ui.components.TopBarBlurMode.Mask
@@ -767,7 +766,6 @@ private fun RouteContent(
                     lyricsOffsetMs = uiState.lyricsOffsetMs,
                     pauseOnHeadphoneDisconnect = uiState.pauseOnHeadphoneDisconnect,
                     pauseOnAudioFocusLoss = uiState.pauseOnAudioFocusLoss,
-                    ambientGlow = uiState.ambientGlow,
                     topBarBlurEnabled = uiState.topBarBlurEnabled,
                     topBarBlurModeStr = uiState.topBarBlurMode,
                     onFloatingPlayerBarChange = viewModel::setFloatingPlayerBar,
@@ -778,9 +776,6 @@ private fun RouteContent(
                     onLyricsOffsetChange = viewModel::setLyricsOffset,
                     onPauseOnHeadphoneDisconnectChange = viewModel::setPauseOnHeadphoneDisconnect,
                     onPauseOnAudioFocusLossChange = viewModel::setPauseOnAudioFocusLoss,
-                    onAmbientGlowChange = viewModel::setAmbientGlow,
-                    visualStyle = uiState.visualStyle,
-                    onVisualStyleChange = viewModel::setVisualStyle,
                     onTopBarBlurEnabledChange = viewModel::setTopBarBlur,
                     onTopBarBlurModeChange = viewModel::setTopBarBlurMode,
                     lyricsAlign = uiState.lyricsAlign,

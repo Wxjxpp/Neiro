@@ -25,10 +25,10 @@ class DiscoverRepository(
     private val http: HttpClient,
     /**
      * 动态决定榜单歌曲挂载到哪个音源 ID。
-     * 用户启用了 LX 音源后返回如 "wy-lx"，播放时即可在注册表命中该音源；
-     * 未启用时返回 null，保持平台原生 id（此时播放会提示需要音源，属预期）。
+     * [platformId] 是榜单元数据所属的平台（wy/kw/kg/tx/mg），不能用
+     * activeOnlineSources 的第一个元素代替，否则网易云歌曲可能被错误交给酷我脚本。
      */
-    private val sourceIdProvider: () -> String? = { null },
+    private val sourceIdProvider: (platformId: String) -> String? = { null },
 ) {
 
     data class Section(
@@ -95,9 +95,9 @@ class DiscoverRepository(
         val songId = info.optLong("id").takeIf { it > 0 }?.toString() ?: return null
         val title = info.optString("name").ifBlank { return null }
         val album = info.optJSONObject("al")
-        // 动态挂载：用户已启用对应 LX 音源时，榜单歌曲直接挂到该音源（可播）；
-        // 否则保持原生 "wy"（播放时会提示需要音源）
-        val mountedSourceId = sourceIdProvider() ?: "wy"
+        // 发现榜单当前由网易云提供元数据；仅在启用的脚本明确支持 wy/musicUrl 时挂载，
+        // 否则不生成“看得到但点了必失败”的在线歌曲。
+        val mountedSourceId = sourceIdProvider("wy") ?: return null
         return Song(
             id = "$mountedSourceId:$songId",
             title = title,

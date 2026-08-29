@@ -17,6 +17,7 @@ import com.wxjxpp.neiro.core.model.SongSortField
 import com.wxjxpp.neiro.core.search.searchSongs
 import com.wxjxpp.neiro.core.userapi.UserApiInfo
 import com.wxjxpp.neiro.ui.components.initialOf
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -90,16 +91,14 @@ data class ShellUiState(
     val pauseOnHeadphoneDisconnect: Boolean = true,
     /** 他源发声自动暂停。 */
     val pauseOnAudioFocusLoss: Boolean = true,
-    /** 播放页动态流光背景。 */
-    val ambientGlow: Boolean = false,
-    /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮。 */
-    val visualStyle: String = "dynamic",
+    /** 播放页动态流光背景（固定启用；视觉样式随系统主题决定）。 */
+    val ambientGlow: Boolean = true,
     /** Expr：均衡器状态（开关 + 10 段增益 dB + 自定义预设 JSON）。 */
     val replayGainEnabled: Boolean = false,
     val eqEnabled: Boolean = false,
     val eqGains: FloatArray = FloatArray(10),
     val eqCustomPresetsJson: String = "[]",
-    /** 顶栏毛玻璃模糊（可选，默认关）。 */
+    /** 顶栏模糊总开关（可选）。 */
     val topBarBlurEnabled: Boolean = false,
     /** 顶栏模糊模式：gradient / mask。 */
     val topBarBlurMode: String = "gradient",
@@ -269,10 +268,7 @@ class AppViewModel(
             }
             .launchIn(viewModelScope)
         container.appSettings.observeAmbientGlow()
-            .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
-            .launchIn(viewModelScope)
-        container.appSettings.observeVisualStyle()
-            .onEach { style -> _uiState.update { it.copy(visualStyle = style) } }
+            .onEach { _ -> _uiState.update { it.copy(ambientGlow = true) } }
             .launchIn(viewModelScope)
         container.appSettings.observeReplayGainEnabled()
             .onEach { on ->
@@ -631,10 +627,6 @@ class AppViewModel(
     fun setAmbientGlow(enabled: Boolean) {
         viewModelScope.launch { container.appSettings.setAmbientGlow(enabled) }
     }
-    /** Expr：切换播放页视觉风格（dynamic / vivid）。 */
-    fun setVisualStyle(style: String) {
-        viewModelScope.launch { container.appSettings.setVisualStyle(style) }
-    }
     fun setReplayGainEnabled(enabled: Boolean) {
         _uiState.update { it.copy(replayGainEnabled = enabled) }
         viewModelScope.launch {
@@ -761,6 +753,18 @@ class AppViewModel(
         if (_uiState.value.isDiscoverLoading) return
         _uiState.update { it.copy(isDiscoverLoading = true) }
         viewModelScope.launch {
+            // 启动时发现页可能先于自定义音源握手完成。等待已选音源完成初始化，
+            // 否则歌曲会以错误/空的 sourceId 进入队列，表现为“榜单能看但无法播放”。
+            val activeApiId = container.appSettings.observeActiveUserApiId().first()
+            if (activeApiId != null) {
+                val deadline = System.currentTimeMillis() + 20_000L
+                while (
+                    container.userApiEngine.status.value !is com.wxjxpp.neiro.core.userapi.UserApiStatus.Ready &&
+                        System.currentTimeMillis() < deadline
+                ) {
+                    delay(100L)
+                }
+            }
             val sections = runCatching {
                 container.discoverRepository.homeSections(songsPerSection = 20)
             }.getOrDefault(emptyList())

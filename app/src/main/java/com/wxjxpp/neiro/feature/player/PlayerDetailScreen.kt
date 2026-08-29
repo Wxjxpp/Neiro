@@ -155,9 +155,7 @@ fun PlayerDetailScreen(
     showTranslation: Boolean,
     lyricsOffsetMs: Long,
     ambientGlow: Boolean,
-    /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和。 */
-    visualStyle: String = "dynamic",
-    /** 顶栏模糊总开关（设置页可控，默认关）。 */
+    /** 播放页视觉风格由系统深浅主题决定：暗色动态流体，浅色鲜艳按钮。 */
     topBarBlurEnabled: Boolean = false,
     /** 顶栏模糊模式：渐变模糊 / 遮罩模糊。 */
     topBarBlurMode: TopBarBlurMode = TopBarBlurMode.Gradient,
@@ -263,8 +261,9 @@ fun PlayerDetailScreen(
     // Expr2：前景黑/白按**采样后的实际背景亮度**自适应——白色专辑封面采样出
     // 亮背景时文字/图标自动转黑，深色封面保持白字（用户指定：纯白底黑字/纯黑底白字）
     val isDarkTheme = MaterialTheme.colorScheme.surface.luminance() < 0.5f
-    // Expr v2：视觉风格——dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和
-    val vividMode = visualStyle == "vivid"
+    // 视觉风格不再提供手动开关：暗色主题固定使用动态流体取色，
+    // 浅色主题固定使用鲜艳大按钮。这样主题切换后立即得到对应的默认体验。
+    val vividMode = !isDarkTheme
     // Expr v2：多点取色板（v5 性能：移到后台线程，且全页只算一次）
     //
     // 原实现有两处问题：① `remember { bmp.extractVividPalette() }` 在**主线程组合期**
@@ -451,37 +450,13 @@ fun PlayerDetailScreen(
                 .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
         )
         }
-        // 顶部安全区实心填充 + 下滑整体收起的手势区（可选毛玻璃：先模糊再遮罩）
-        Spacer(
+        // 顶部安全区：上方保持实色；只有最底部 40dp 作为渐变模糊过渡。
+        // 不再把整块顶栏做成半透明色块，避免搜索胶囊/标题上方出现“一坨盖板”。
+        Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(statusBarPadding.calculateTopPadding() + 88.dp)
-                .then(
-                    // Expr：Haze 硬件加速模糊优先；关闭时走原 RenderEffect 路径
-                    if (useTopBarHaze) {
-                        Modifier.hazeEffect(
-                            state = topBarHaze,
-                            style = HazeStyle(
-                                backgroundColor =
-                                    MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
-                                tints = listOf(
-                                    HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.18f)),
-                                ),
-                                blurRadius = 22.dp,
-                            ),
-                        )
-                    } else {
-                        Modifier.topBarBlur(enabled = topBarBlurEnabled, mode = topBarBlurMode)
-                            .background(
-                                Brush.verticalGradient(
-                                    0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.48f),
-                                    0.82f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                                    1f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                                ),
-                            )
-                    },
-                )
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = onDragEnd,
@@ -491,7 +466,37 @@ fun PlayerDetailScreen(
                         if (dragAmount > 0f) onDrag(dragAmount) // 下滑收起
                     }
                 },
-        )
+        ) {
+            Spacer(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(MaterialTheme.colorScheme.surface),
+            )
+            if (useTopBarHaze) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .hazeEffect(
+                            state = topBarHaze,
+                            style = HazeStyle(
+                                backgroundColor = Color.Transparent,
+                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.08f))),
+                                blurRadius = 22.dp,
+                            ),
+                        )
+                        // 上端透明、下端实色：模糊/遮罩从底部向上逐渐减弱。
+                        .background(
+                            Brush.verticalGradient(
+                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
+                                0.55f to MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
+                                1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                            ),
+                        ),
+                )
+            }
+        }
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -780,7 +785,7 @@ fun PlayerDetailScreen(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(dimens.spaceSm),
                 ) {
-                    val vivid = visualStyle == "vivid"
+                    val vivid = !isDarkTheme
                     // 侧键容器色与画布对比（深画布→浅键 / 浅画布→深键）；主键 accent 实底。
                     val sideColors = if (vivid) {
                         IconButtonDefaults.filledIconButtonColors(

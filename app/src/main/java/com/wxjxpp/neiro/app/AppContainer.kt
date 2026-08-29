@@ -294,11 +294,13 @@ private val registry = DefaultMusicSourceRegistry(
         com.wxjxpp.neiro.core.discover.DiscoverRepository(
             http = httpClient,
             // 用户启用了 LX 音源后，发现页榜单歌曲动态挂到对应音源（如 "wy-lx"），可直接播放
-            sourceIdProvider = {
-                activeOnlineSources.firstOrNull()?.id
-                    ?.takeIf { id -> activeOnlineSources.any { it.id == id } }
-                    ?: registry.sources.filterIsInstance<com.wxjxpp.neiro.core.source.online.LxSourcePlatform>()
-                        .firstOrNull()?.id
+            sourceIdProvider = { platformId ->
+                // 必须按歌曲所属平台选择音源。默认列表第一个是 kw-lx，
+                // 不能把网易云榜单错误地包装成酷我歌曲。
+                activeOnlineSources.firstOrNull { source ->
+                    source.scriptPlatformId == platformId &&
+                        "musicUrl" in (activeCapabilities[platformId].orEmpty())
+                }?.id
             },
         )
     }

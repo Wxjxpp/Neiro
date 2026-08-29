@@ -46,9 +46,6 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         val PauseOnHeadphoneDisconnect = booleanPreferencesKey("pause_on_headphone_disconnect")
         val PauseOnAudioFocusLoss = booleanPreferencesKey("pause_on_audio_focus_loss")
         val AmbientGlow = booleanPreferencesKey("ambient_glow")
-        /** Expr：播放页视觉风格：dynamic=动态多点取色 / vivid=鲜艳大按钮高饱和。 */
-        val VisualStyle = stringPreferencesKey("visual_style")
-        /** Expr：EQ 开关 + 增益 JSON（10 floats + preamp）。 */
         val EqualizerEnabled = booleanPreferencesKey("eq_enabled")
         val EqualizerGains = stringPreferencesKey("eq_gains_json")
         /** Expr：用户自定义 EQ 预设（JSON 数组 [{name,gains}]）。 */
@@ -330,15 +327,11 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
 
     /** 播放页动态流光背景（根据封面取色流动渐变）。 */
     fun observeAmbientGlow(): Flow<Boolean> =
-        store.data.map { it[Keys.AmbientGlow] ?: false }
+        // 兼容读取旧键，但新版本固定启用播放页背景，不再受旧开关影响。
+        store.data.map { true }
     suspend fun setAmbientGlow(enabled: Boolean) {
-        store.edit { it[Keys.AmbientGlow] = enabled }
-    }
-    /** Expr：播放页视觉风格（dynamic=动态取色 / vivid=鲜艳大按钮）。 */
-    fun observeVisualStyle(): Flow<String> =
-        store.data.map { it[Keys.VisualStyle] ?: "dynamic" }
-    suspend fun setVisualStyle(style: String) {
-        store.edit { it[Keys.VisualStyle] = style }
+        // 保留 API 兼容调用方；新 UI 不再暴露该开关。
+        store.edit { it[Keys.AmbientGlow] = true }
     }
     /** Expr：均衡器持久化。 */
     fun observeEqualizerEnabled(): Flow<Boolean> =

@@ -61,7 +61,6 @@ fun SettingsScreen(
     lyricsOffsetMs: Long = 0L,
     pauseOnHeadphoneDisconnect: Boolean = true,
     pauseOnAudioFocusLoss: Boolean = true,
-    ambientGlow: Boolean = false,
     topBarBlurEnabled: Boolean = false,
     topBarBlurModeStr: String = "gradient",
     onFloatingPlayerBarChange: (Boolean) -> Unit,
@@ -72,11 +71,6 @@ fun SettingsScreen(
     onLyricsOffsetChange: (Long) -> Unit = {},
     onPauseOnHeadphoneDisconnectChange: (Boolean) -> Unit = {},
     onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
-    onAmbientGlowChange: (Boolean) -> Unit = {},
-    /** Expr：播放页视觉风格。 */
-    visualStyle: String = "dynamic",
-    onVisualStyleChange: (String) -> Unit = {},
-    onTopBarBlurEnabledChange: (Boolean) -> Unit = {},
     onTopBarBlurModeChange: (String) -> Unit = {},
     lyricsAlign: String = "center",
     lyricsFontScale: Float = 1f,
@@ -425,30 +419,6 @@ fun SettingsScreen(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = AppTheme.dimens.spaceSm),
                     )
-                    SwitchRow(
-                        title = "高级背景",
-                        subtitle = "播放页根据专辑封面生成高级模糊背景",
-                        checked = ambientGlow,
-                        onCheckedChange = onAmbientGlowChange,
-                    )
-                    // Expr v2：播放页视觉风格选择（动态取色 / 鲜艳大按钮）
-                    Text(
-                        text = "播放页视觉风格",
-                        style = MaterialTheme.typography.titleSmall,
-                        modifier = Modifier.padding(top = AppTheme.dimens.spaceMd, bottom = 4.dp),
-                    )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(
-                            "dynamic" to "动态流体取色",
-                            "vivid" to "鲜艳大按钮",
-                        ).forEach { (key, label) ->
-                            androidx.compose.material3.FilterChip(
-                                selected = visualStyle == key,
-                                onClick = { onVisualStyleChange(key) },
-                                label = { Text(label) },
-                            )
-                        }
-                    }
                     HorizontalDivider(modifier = Modifier.padding(vertical = AppTheme.dimens.spaceMd))
                     SwitchRow(
                         title = "顶栏毛玻璃",
