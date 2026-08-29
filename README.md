@@ -2,7 +2,7 @@ Neiro
 
 Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 ![Android](https://img.shields.io/badge/platform-Android%207+-green?logo=android)
-![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-2.2.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
 ![License](https://img.shields.io/github/license/Wxjxpp/Neiro)
 ![Stars](https://img.shields.io/github/stars/Wxjxpp/Neiro)
 ![Version](https://img.shields.io/github/v/release/Wxjxpp/Neiro)
