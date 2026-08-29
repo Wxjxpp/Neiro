@@ -573,6 +573,13 @@ fun PlayerDetailScreen(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
+                        // 极亮封面/模糊高光会让歌词的高亮层失去对比度。
+                        // 只在歌词区域加衬底，不改变顶栏、封面和控制台的视觉效果。
+                        .background(
+                            Color.Black.copy(
+                                alpha = if (ambientGlow && canvasLum > 0.42f) 0.24f else 0f,
+                            ),
+                        )
                         .graphicsLayer {
                             translationY = (1f - ((t - 0.25f) / 0.75f).coerceIn(0f, 1f)) * size.height
                             alpha = ((t - 0.15f) / 0.35f).coerceIn(0f, 1f)
