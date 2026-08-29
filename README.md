@@ -3,9 +3,9 @@ Neiro
 Kotlin + Jetpack Compose + **Material 3 Expressive** 音乐播放器。
 ![Android](https://img.shields.io/badge/platform-Android%207+-green?logo=android)
 ![Kotlin](https://img.shields.io/badge/Kotlin-2.0.21-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
-![License](https://img.shields.io/github/license/owner/repo)
-![Stars](https://img.shields.io/github/stars/owner/repo)
-![Version](https://img.shields.io/github/v/release/owner/repo)
+![License](https://img.shields.io/github/license/Wxjxpp/Neiro)
+![Stars](https://img.shields.io/github/stars/Wxjxpp/Neiro)
+![Version](https://img.shields.io/github/v/release/Wxjxpp/Neiro)
 本地曲库 + 在线搜索播放双轨并行：本地功能（扫描 / 歌单 / 统计）开箱即用，
 在线功能（聚合搜索 / 歌词 / 自定义音源取流）无需任何配置即可搜索，接入 LX 格式音源脚本后可播放在线歌曲。
 
