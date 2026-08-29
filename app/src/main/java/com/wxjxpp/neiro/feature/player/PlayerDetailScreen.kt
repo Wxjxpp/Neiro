@@ -413,6 +413,19 @@ fun PlayerDetailScreen(
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
         if (ambientGlow && sheetProgress > 0.35f) {
             AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
+            // 将控制台的主题色遮罩向上延伸，统一压平极端明暗高光；
+            // 使用 surface 而非固定黑色，白色封面在浅色主题下不会被染黑。
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
+                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
+                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                        ),
+                    ),
+            )
         } else if (false) {
             // Expr v2：流体多点取色背景（每个采样色一个流动光斑，明亮画布融合）
             FluidGlowBackground(
@@ -573,13 +586,6 @@ fun PlayerDetailScreen(
                 Box(
                     modifier = Modifier
                         .matchParentSize()
-                        // 极亮封面/模糊高光会让歌词的高亮层失去对比度。
-                        // 只在歌词区域加衬底，不改变顶栏、封面和控制台的视觉效果。
-                        .background(
-                            Color.Black.copy(
-                                alpha = if (ambientGlow && canvasLum > 0.42f) 0.24f else 0f,
-                            ),
-                        )
                         .graphicsLayer {
                             translationY = (1f - ((t - 0.25f) / 0.75f).coerceIn(0f, 1f)) * size.height
                             alpha = ((t - 0.15f) / 0.35f).coerceIn(0f, 1f)
