@@ -52,7 +52,7 @@ private fun LyricLine.toSyncedLine(offsetMs: Long, next: LyricLine?): ISyncedLin
             syllables = syllables.map { s ->
                 val sStart = (s.startMs - offsetMs).toInt()
                 KaraokeSyllable(
-                    content = s.text,
+                    content = if (line.text.any { it == ' ' || it == '\u00A0' } && !s.text.endsWith(' ') && !s.text.endsWith('\u00A0')) s.text + '\u00A0' else s.text,
                     start = sStart,
                     end = ((s.endMs ?: s.startMs + DEFAULT_SYLLABLE_DURATION_MS) - offsetMs)
                         .toInt()
