@@ -102,6 +102,7 @@ dependencies {
     // 见 aar 内 baseline-prof.txt）需要它才会在安装/首启时交给 ART 预编译。
     // 没有它，Compose 首次滚动全靠解释执行 + JIT，就是"第一次滑都很卡"的原因。
     implementation(libs.androidx.profileinstaller)
+    implementation(project(":backdrop"))
     // Haze 硬件加速毛玻璃（Expr 实验）
     implementation(libs.haze)
     // Miuix RuntimeShader：About 页使用原生 shader 流光效果（API 33+）

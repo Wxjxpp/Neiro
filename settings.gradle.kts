@@ -14,3 +14,4 @@ dependencyResolutionManagement {
 }
 rootProject.name = "Neiro"
 include(":app")
+include(":backdrop")
