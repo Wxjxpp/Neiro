@@ -478,9 +478,12 @@ fun PlayerDetailScreen(
                     }
                 },
         ) {
+            // 顶部主体保持实色；末尾 40dp 从近实色向透明过渡，避免底边硬切。
             Spacer(
                 modifier = Modifier
-                    .fillMaxSize()
+                    .align(Alignment.TopCenter)
+                    .fillMaxWidth()
+                    .height((statusBarPadding.calculateTopPadding() + 88.dp - 40.dp).coerceAtLeast(0.dp))
                     .background(MaterialTheme.colorScheme.surface),
             )
             if (useTopBarHaze) {
@@ -493,16 +496,16 @@ fun PlayerDetailScreen(
                             state = topBarHaze,
                             style = HazeStyle(
                                 backgroundColor = Color.Transparent,
-                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.08f))),
+                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))),
                                 blurRadius = 22.dp,
                             ),
                         )
-                        // 上端透明、下端实色：模糊/遮罩从底部向上逐渐减弱。
+                        // 上端接近实色，下端逐渐透明；背景内容在末尾区域自然显现。
                         .background(
                             Brush.verticalGradient(
-                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.08f),
-                                0.55f to MaterialTheme.colorScheme.surface.copy(alpha = 0.72f),
-                                1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.98f),
+                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                                0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                                1f to Color.Transparent,
                             ),
                         ),
                 )
