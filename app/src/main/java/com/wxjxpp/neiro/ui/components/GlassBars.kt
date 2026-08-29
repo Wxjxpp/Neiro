@@ -236,10 +236,8 @@ private fun DrawScope.drawFluidCircles(colors: List<Color>, phases: List<Float>)
             radius = r,
             center = Offset(cx, cy),
         )
-        Box(modifier = Modifier.fillMaxSize().background(if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.20f)))
     }
 }
-
 // ============================================================================
 // 真·实时毛玻璃：把列表内容录进 GraphicsLayer，顶栏下缘的衔接带重绘该画面
 // 并施加 RenderEffect 模糊 + 向下渐隐——内容从顶栏下滚过时即被模糊衔接。
@@ -309,5 +307,6 @@ fun AlbumBlurBackground(coverUri: String?, modifier: Modifier = Modifier) {
                     }
                 },
         )
+        Box(modifier = Modifier.fillMaxSize().background(if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.20f)))
     }
 }
