@@ -874,7 +874,7 @@ fun PlayerDetailScreen(
                 Box(modifier = Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
                     if (!pureMode) {
                         IconButton(onClick = { showQueue = true }) {
-                            Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表")
+                            Icon(Icons.Rounded.QueueMusic, contentDescription = "播放列表", tint = MaterialTheme.colorScheme.onSurface)
                         }
                     }
                 }
@@ -941,7 +941,7 @@ fun PlayerDetailScreen(
                     }
                     // 更多菜单：下载 / 歌词偏移
                     IconButton(onClick = { showMoreMenu = true }) {
-                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多")
+                        Icon(Icons.Rounded.MoreVert, contentDescription = "更多", tint = MaterialTheme.colorScheme.onSurface)
                     }
                 }
             }
