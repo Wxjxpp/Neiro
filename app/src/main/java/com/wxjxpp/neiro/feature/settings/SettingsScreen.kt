@@ -71,6 +71,7 @@ fun SettingsScreen(
     onLyricsOffsetChange: (Long) -> Unit = {},
     onPauseOnHeadphoneDisconnectChange: (Boolean) -> Unit = {},
     onPauseOnAudioFocusLossChange: (Boolean) -> Unit = {},
+    onTopBarBlurEnabledChange: (Boolean) -> Unit = {},
     onTopBarBlurModeChange: (String) -> Unit = {},
     lyricsAlign: String = "center",
     lyricsFontScale: Float = 1f,

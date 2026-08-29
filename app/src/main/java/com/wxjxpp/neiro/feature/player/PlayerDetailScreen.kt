@@ -410,7 +410,18 @@ fun PlayerDetailScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
         Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
-        if (ambientGlow && sheetProgress > 0.35f) {
+        if (!vividMode && ambientGlow && sheetProgress > 0.35f && vividPalette.isNotEmpty()) {
+            // 暗色主题默认使用实验室的动态流体取色；调色板来自真实专辑封面。
+            FluidGlowBackground(
+                palette = vividPalette,
+                enabled = true,
+                canvasColor = MaterialTheme.colorScheme.background,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(topBarHaze)
+                    .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
+            )
+        } else if (ambientGlow && sheetProgress > 0.35f) {
             AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
             // 将控制台的主题色遮罩向上延伸，统一压平极端明暗高光；
             // 使用 surface 而非固定黑色，白色封面在浅色主题下不会被染黑。
@@ -426,7 +437,7 @@ fun PlayerDetailScreen(
                     ),
             )
         } else if (false) {
-            // Expr v2：流体多点取色背景（每个采样色一个流动光斑，明亮画布融合）
+            // 已由上面的暗色主题分支统一启用动态流体；保留此处结构避免改动歌词页过渡逻辑。
             FluidGlowBackground(
                 palette = vividPalette,
                 enabled = ambientGlow,
