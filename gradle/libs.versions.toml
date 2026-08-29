@@ -102,6 +102,7 @@ junit = { group = "junit", name = "junit", version.ref = "junit" }
 gaze-capsule = { group = "com.mocharealm.gaze", name = "capsule", version.ref = "gazeCapsule" }
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
+android-library = { id = "com.android.library", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 # Room 注解处理
