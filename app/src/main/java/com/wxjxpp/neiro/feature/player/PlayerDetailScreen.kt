@@ -408,10 +408,10 @@ fun PlayerDetailScreen(
     val topBarHaze = rememberHazeState()
     val useTopBarHaze = topBarBlurEnabled
     Box(modifier = Modifier.fillMaxSize()) {
-        // 背景：流光开启时是动态光斑，关闭时也必须有 surface 实底（绝不能透明露出底层页面）
-        Box(modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface))
-        if (!vividMode && ambientGlow && sheetProgress > 0.35f && vividPalette.isNotEmpty()) {
-            // 暗色主题默认使用实验室的动态流体取色；调色板来自真实专辑封面。
+        // 背景层必须和播放页一起位移，不能用 sheetProgress 作为“从 0 渐入”的透明度。
+        // 否则下滑收起的前 30% 只露出下面页面，随后才突然出现专辑背景。
+        // 动态流体仅在用户明确开启且为暗色主题时启用；默认关闭时保留静态专辑模糊。
+        if (!vividMode && ambientGlow && vividPalette.isNotEmpty()) {
             FluidGlowBackground(
                 palette = vividPalette,
                 enabled = true,
@@ -421,45 +421,15 @@ fun PlayerDetailScreen(
                     .hazeSource(topBarHaze)
                     .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
             )
-        } else if (ambientGlow && sheetProgress > 0.35f) {
-            AlbumBlurBackground(coverUri = song.coverUri, modifier = Modifier.fillMaxSize().alpha((sheetProgress / 0.7f).coerceIn(0f, 1f)))
-            // 将控制台的主题色遮罩向上延伸，统一压平极端明暗高光；
-            // 使用 surface 而非固定黑色，白色封面在浅色主题下不会被染黑。
-            Box(
+        } else if (sheetProgress > 0.01f) {
+            // 不再使用 sheetProgress/0.7f：背景在手指拖拽期间保持同一层，
+            // 由外层 MusicPlayerApp 的 translationY 统一跟手移动。
+            AlbumBlurBackground(
+                coverUri = song.coverUri,
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(
-                        Brush.verticalGradient(
-                            0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                            0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.18f),
-                            1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                        ),
-                    ),
+                    .hazeSource(topBarHaze),
             )
-        } else if (false) {
-            // 已由上面的暗色主题分支统一启用动态流体；保留此处结构避免改动歌词页过渡逻辑。
-            FluidGlowBackground(
-                palette = vividPalette,
-                enabled = ambientGlow,
-                // v6：底色由沉浸配色决定明暗（深色模式下白封面不再渲染成亮米黄）
-                canvasColor = MaterialTheme.colorScheme.background,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(topBarHaze)
-                    .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
-            )
-        } else {
-                AmbientGlowBackground(
-            baseColor = Color(song.coverSeedColor),
-            coverUri = song.coverUri,
-            enabled = ambientGlow,
-            modifier = Modifier
-                .fillMaxSize()
-                // Expr：标记为 Haze 模糊源（顶栏实时采样流光画面）
-                .hazeSource(topBarHaze)
-                // 进入歌词页时随进度平滑淡出，避免中途突然消失
-                .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
-        )
         }
         // 顶部安全区：上方保持实色；只有最底部 40dp 作为渐变模糊过渡。
         // 不再把整块顶栏做成半透明色块，避免搜索胶囊/标题上方出现“一坨盖板”。
