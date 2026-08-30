@@ -156,7 +156,7 @@ fun PlayerDetailScreen(
     lyricsOffsetMs: Long,
     ambientGlow: Boolean,
     /** 播放页视觉风格由系统深浅主题决定：暗色动态流体，浅色鲜艳按钮。 */
-    topBarBlurEnabled: Boolean = false,
+    topBarBlurEnabled: Boolean = true,
     /** 顶栏模糊模式：渐变模糊 / 遮罩模糊。 */
     topBarBlurMode: TopBarBlurMode = TopBarBlurMode.Gradient,
     queue: List<Song>,
@@ -491,7 +491,7 @@ fun PlayerDetailScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(40.dp)
+                        .height(72.dp)
                         .hazeEffect(
                             state = topBarHaze,
                             style = HazeStyle(
@@ -507,7 +507,11 @@ fun PlayerDetailScreen(
                                 0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
                                 1f to Color.Transparent,
                             ),
-                        ),
+                        )
+                        // 过渡层向内容区域延伸 32dp，避免毛玻璃 RenderNode 在顶栏边界处被裁成硬线。
+                        .graphicsLayer {
+                            translationY = 32.dp.toPx()
+                        },
                 )
             }
         }

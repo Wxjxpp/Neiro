@@ -325,13 +325,11 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
         store.edit { it[Keys.PauseOnAudioFocusLoss] = enabled }
     }
 
-    /** 播放页动态流光背景（根据封面取色流动渐变）。 */
+    /** 播放页动态流光背景（根据封面取色流动渐变，默认关闭）。 */
     fun observeAmbientGlow(): Flow<Boolean> =
-        // 兼容读取旧键，但新版本固定启用播放页背景，不再受旧开关影响。
-        store.data.map { true }
+        store.data.map { it[Keys.AmbientGlow] ?: false }
     suspend fun setAmbientGlow(enabled: Boolean) {
-        // 保留 API 兼容调用方；新 UI 不再暴露该开关。
-        store.edit { it[Keys.AmbientGlow] = true }
+        store.edit { it[Keys.AmbientGlow] = enabled }
     }
     /** Expr：均衡器持久化。 */
     fun observeEqualizerEnabled(): Flow<Boolean> =
@@ -363,9 +361,9 @@ class DataStoreSettingsRepository(context: Context) : SettingsRepository {
     suspend fun setLabSpringLyrics(enabled: Boolean) {
         store.edit { it[Keys.LabSpringLyrics] = enabled }
     }
-    /** 顶栏毛玻璃模糊（可选功能）。默认关。 */
+    /** 顶栏毛玻璃模糊（可选功能）。默认开。 */
     fun observeTopBarBlur(): Flow<Boolean> =
-        store.data.map { it[Keys.TopBarBlur] ?: false }
+        store.data.map { it[Keys.TopBarBlur] ?: true }
     suspend fun setTopBarBlur(enabled: Boolean) {
         store.edit { it[Keys.TopBarBlur] = enabled }
     }

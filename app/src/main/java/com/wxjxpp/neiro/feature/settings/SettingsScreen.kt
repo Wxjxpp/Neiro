@@ -61,7 +61,7 @@ fun SettingsScreen(
     lyricsOffsetMs: Long = 0L,
     pauseOnHeadphoneDisconnect: Boolean = true,
     pauseOnAudioFocusLoss: Boolean = true,
-    topBarBlurEnabled: Boolean = false,
+    topBarBlurEnabled: Boolean = true,
     topBarBlurModeStr: String = "gradient",
     onFloatingPlayerBarChange: (Boolean) -> Unit,
     onShowTranslationChange: (Boolean) -> Unit,

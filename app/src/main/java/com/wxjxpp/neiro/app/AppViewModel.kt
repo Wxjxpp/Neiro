@@ -91,15 +91,15 @@ data class ShellUiState(
     val pauseOnHeadphoneDisconnect: Boolean = true,
     /** 他源发声自动暂停。 */
     val pauseOnAudioFocusLoss: Boolean = true,
-    /** 播放页动态流光背景（固定启用；视觉样式随系统主题决定）。 */
-    val ambientGlow: Boolean = true,
+    /** 播放页动态流光背景（默认关闭，减少播控页 GPU 负载）。 */
+    val ambientGlow: Boolean = false,
     /** Expr：均衡器状态（开关 + 10 段增益 dB + 自定义预设 JSON）。 */
     val replayGainEnabled: Boolean = false,
     val eqEnabled: Boolean = false,
     val eqGains: FloatArray = FloatArray(10),
     val eqCustomPresetsJson: String = "[]",
-    /** 顶栏模糊总开关（可选）。 */
-    val topBarBlurEnabled: Boolean = false,
+    /** 顶栏模糊总开关（默认开启）。 */
+    val topBarBlurEnabled: Boolean = true,
     /** 顶栏模糊模式：gradient / mask。 */
     val topBarBlurMode: String = "gradient",
 
@@ -268,7 +268,7 @@ class AppViewModel(
             }
             .launchIn(viewModelScope)
         container.appSettings.observeAmbientGlow()
-            .onEach { _ -> _uiState.update { it.copy(ambientGlow = true) } }
+            .onEach { enabled -> _uiState.update { it.copy(ambientGlow = enabled) } }
             .launchIn(viewModelScope)
         container.appSettings.observeReplayGainEnabled()
             .onEach { on ->
