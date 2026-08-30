@@ -116,7 +116,6 @@ import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
-import com.wxjxpp.neiro.ui.components.AlbumBlurBackground
 import com.wxjxpp.neiro.ui.components.FluidGlowBackground
 import com.wxjxpp.neiro.ui.components.TopBarBlurMode
 import com.wxjxpp.neiro.ui.components.topBarBlur
@@ -411,9 +410,16 @@ fun PlayerDetailScreen(
     val topBarHaze = rememberHazeState()
     val useTopBarHaze = topBarBlurEnabled
     Box(modifier = Modifier.fillMaxSize()) {
-        // 背景层必须和播放页一起位移，不能用 sheetProgress 作为“从 0 渐入”的透明度。
-        // 否则下滑收起的前 30% 只露出下面页面，随后才突然出现专辑背景。
-        // 动态流体仅在用户明确开启且为暗色主题时启用；默认关闭时保留静态专辑模糊。
+        // 背景层必须和播放页一起位移；动态背景关闭时只保留纯色底。
+        // 不能在 ambientGlow=false 时额外铺一层 AlbumBlurBackground，否则会与封面
+        // 本身及外层页面叠成“双重模糊”，并在收起末段残留。
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(MaterialTheme.colorScheme.surface)
+                .hazeSource(topBarHaze),
+        )
+        // 动态流体仅在用户明确开启且为暗色主题时启用。
         if (!vividMode && ambientGlow && vividPalette.isNotEmpty()) {
             FluidGlowBackground(
                 palette = vividPalette,
@@ -423,15 +429,6 @@ fun PlayerDetailScreen(
                     .fillMaxSize()
                     .hazeSource(topBarHaze)
                     .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
-            )
-        } else if (sheetProgress > 0.01f) {
-            // 不再使用 sheetProgress/0.7f：背景在手指拖拽期间保持同一层，
-            // 由外层 MusicPlayerApp 的 translationY 统一跟手移动。
-            AlbumBlurBackground(
-                coverUri = song.coverUri,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(topBarHaze),
             )
         }
         // 顶部安全区：上方保持实色；只有最底部 40dp 作为渐变模糊过渡。
