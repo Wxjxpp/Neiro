@@ -116,6 +116,7 @@ import com.wxjxpp.neiro.core.model.PlaybackState
 import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
+import com.wxjxpp.neiro.ui.components.AlbumBlurBackground
 import com.wxjxpp.neiro.ui.components.FluidGlowBackground
 import com.wxjxpp.neiro.ui.components.TopBarBlurMode
 import com.wxjxpp.neiro.ui.components.topBarBlur
@@ -419,7 +420,6 @@ fun PlayerDetailScreen(
                 .background(MaterialTheme.colorScheme.surface)
                 .hazeSource(topBarHaze),
         )
-        // 动态流体仅在用户明确开启且为暗色主题时启用。
         if (!vividMode && ambientGlow && vividPalette.isNotEmpty()) {
             FluidGlowBackground(
                 palette = vividPalette,
@@ -429,6 +429,15 @@ fun PlayerDetailScreen(
                     .fillMaxSize()
                     .hazeSource(topBarHaze)
                     .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
+            )
+        } else {
+            // 动态流光关闭时仍保留静态专辑模糊背景；关闭的是“流动光效”，
+            // 不是播控页的沉浸背景。该层位于当前播放页内部，会随外层 sheet 一起移动。
+            AlbumBlurBackground(
+                coverUri = song.coverUri,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .hazeSource(topBarHaze),
             )
         }
         // 顶部安全区：上方保持实色；只有最底部 40dp 作为渐变模糊过渡。
