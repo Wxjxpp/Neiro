@@ -480,14 +480,7 @@ fun PlayerDetailScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(40.dp)
-                        .background(
-                            Brush.verticalGradient(
-                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                                0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                                1f to Color.Transparent,
-                            ),
-                        )
+                        .height(72.dp)
                         .hazeEffect(
                             state = topBarHaze,
                             style = HazeStyle(
@@ -495,7 +488,19 @@ fun PlayerDetailScreen(
                                 tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))),
                                 blurRadius = 22.dp,
                             ),
-                        ),
+                        )
+                        // 上端接近实色，下端逐渐透明；背景内容在末尾区域自然显现。
+                        .background(
+                            Brush.verticalGradient(
+                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
+                                0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
+                                1f to Color.Transparent,
+                            ),
+                        )
+                        // 过渡层向内容区域延伸 32dp，避免毛玻璃 RenderNode 在顶栏边界处被裁成硬线。
+                        .graphicsLayer {
+                            translationY = 32.dp.toPx()
+                        },
                 )
             }
         }
@@ -699,14 +704,7 @@ fun PlayerDetailScreen(
         Column(
             modifier = Modifier
                 .align(if (isWidePlayer) Alignment.BottomStart else Alignment.BottomCenter)
-                .fillMaxWidth(if (isWidePlayer) 0.5f else 1f)
-                .background(
-                    Brush.verticalGradient(
-                        0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
-                        0.12f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                        1f to MaterialTheme.colorScheme.surface.copy(alpha = 0.78f),
-                    ),
-                ),
+                .fillMaxWidth(if (isWidePlayer) 0.5f else 1f),
         ) {
             // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）
             if (!lyrics.isEmpty) {
