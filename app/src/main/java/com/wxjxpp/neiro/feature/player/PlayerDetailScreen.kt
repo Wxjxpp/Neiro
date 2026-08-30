@@ -1,5 +1,6 @@
 package com.wxjxpp.neiro.feature.player
 
+import android.content.res.Configuration
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -220,8 +221,11 @@ fun PlayerDetailScreen(
     var mainAreaTopPx by remember { mutableFloatStateOf(0f) }
     val isRemoteSong = song.location is MediaLocation.Remote
     val statusBarPadding = WindowInsets.statusBars.asPaddingValues()
+    val configuration = LocalConfiguration.current
+    // 平板（最小宽度 >= 600dp）或横屏统一使用双栏播控布局。
+    val isWidePlayer = configuration.smallestScreenWidthDp >= 600 ||
+        configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
-    // 歌词段(1..2) 归一化进度，用于连续变换
     val lyricPhase = ((sheetProgress - 1f) / 1f).coerceIn(0f, 1f)
     // 歌词模式判定阈值（内容切换在过半时发生，避免中途闪烁）
     val lyricsMode = lyricPhase > 0.5f
@@ -523,7 +527,9 @@ fun PlayerDetailScreen(
             Spacer(Modifier.height(dimens.spaceSm))
             // 标题区：播放页大标题 ↔ 歌词页小封面行，同一进度上的连续交叉过渡
             Box(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth(if (isWidePlayer) 0.5f else 1f)
+                    .align(if (isWidePlayer) Alignment.Start else Alignment.CenterHorizontally),
             ) {
                 // 播放页大标题（居中，随 lyricPhase 缩小淡出）
                 Column(
@@ -589,7 +595,10 @@ fun PlayerDetailScreen(
             }
             // 主区域：歌词层（随进度滑入）+ 全域手势；大封面上浮到根层做矩形插值
             Box(
-                modifier = Modifier.weight(1f).fillMaxWidth()
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxWidth(if (isWidePlayer) 0.5f else 1f)
+                    .align(if (isWidePlayer) Alignment.End else Alignment.CenterHorizontally)
                     .onGloballyPositioned { mainAreaTopPx = it.positionInParent().y }
                     // 整个主区域上滑/下滑：全量转发像素位移，跟手由外壳 snapTo 保证
                     .pointerInput(Unit) {
@@ -652,17 +661,27 @@ fun PlayerDetailScreen(
         // 纯位移 + 尺寸变化：无淡入淡出、无实例切换；拖拽全量转发保证跟手，点击进入歌词页。
         run {
             val tMorph = lyricPhase.coerceIn(0f, 1f)
-            val configuration = LocalConfiguration.current
             val density = LocalDensity.current
             val screenWpx = with(density) { configuration.screenWidthDp.dp.toPx() }
             val screenHpx = with(density) { configuration.screenHeightDp.dp.toPx() }
             val statusBarPx = with(density) { statusBarPadding.calculateTopPadding().toPx() }
             val spaceSmPx = with(density) { dimens.spaceSm.toPx() }
             val coverTarget = dimens.detailCoverSize * 1.10f
-            val bigSizePx = with(density) { coverTarget.toPx() }
+            // 横屏左栏可用高度较小，封面按视口缩放，避免压住底部控制台。
+            val effectiveCoverTarget = if (isWidePlayer) {
+                coverTarget.coerceAtMost((configuration.screenHeightDp * 0.36f).dp)
+            } else {
+                coverTarget
+            }
+            val bigSizePx = with(density) { effectiveCoverTarget.toPx() }
             val smallLeftPx = with(density) { 12.dp.toPx() }
-            val bigLeft = (screenWpx - bigSizePx) / 2f
-            val bigTop = mainAreaTopPx + screenHpx * 0.25f - statusBarPx - spaceSmPx
+            val leftPanelWidthPx = if (isWidePlayer) screenWpx * 0.5f else screenWpx
+            val bigLeft = (leftPanelWidthPx - bigSizePx) / 2f
+            val bigTop = if (isWidePlayer) {
+                statusBarPx + with(density) { 88.dp.toPx() }
+            } else {
+                mainAreaTopPx + screenHpx * 0.25f - statusBarPx - spaceSmPx
+            }
             val smallTop = statusBarPx + spaceSmPx + with(density) { 4.dp.toPx() }
             SongCover(
                 song = song,
@@ -699,8 +718,8 @@ fun PlayerDetailScreen(
         // ---- 控制台 ----
         Column(
             modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
+                .align(if (isWidePlayer) Alignment.BottomStart else Alignment.BottomCenter)
+                .fillMaxWidth(if (isWidePlayer) 0.5f else 1f)
                 .background(
                     Brush.verticalGradient(
                         0f to MaterialTheme.colorScheme.surface.copy(alpha = 0f),
