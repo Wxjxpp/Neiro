@@ -38,10 +38,13 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.layer.GraphicsLayer
 import androidx.compose.ui.graphics.layer.drawLayer
 import androidx.compose.ui.graphics.nativeCanvas
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.Alignment
 import coil.compose.AsyncImage
-import androidx.compose.ui.unit.IntSize
+import coil.request.ImageRequest
+import coil.size.Precision
+import coil.size.Scale
 import androidx.compose.ui.unit.dp
 import kotlin.math.PI
 import kotlin.math.cos
@@ -289,24 +292,53 @@ fun GlassBarSurface(
         }
     }
 }
-/** Static album-art background for the expanded player. */
 @Composable
-fun AlbumBlurBackground(coverUri: String?, modifier: Modifier = Modifier) {
-    Box(modifier = modifier.fillMaxSize()) {
-        AsyncImage(
-            model = coverUri,
-            contentDescription = null,
-            contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+fun AlbumBlurBackground(
+    coverUri: String?,
+    seedColor: Long = 0L,
+    modifier: Modifier = Modifier,
+) {
+    val context = LocalContext.current
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(seedColor))
+            .clip(androidx.compose.foundation.shape.RoundedCornerShape(0.dp)),
+    ) {
+        if (!coverUri.isNullOrBlank()) {
+            val request = remember(coverUri) {
+                ImageRequest.Builder(context)
+                    .data(coverUri)
+                    .allowHardware(false)
+                    .precision(Precision.EXACT)
+                    .scale(Scale.FIT)
+                    .crossfade(false)
+                    .build()
+            }
+            AsyncImage(
+                model = request,
+                contentDescription = null,
+                contentScale = androidx.compose.ui.layout.ContentScale.Crop,
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        scaleX = 1.35f
+                        scaleY = 1.35f
+                        if (Build.VERSION.SDK_INT >= 31) {
+                            renderEffect = android.graphics.RenderEffect.createBlurEffect(
+                                82f, 82f, android.graphics.Shader.TileMode.CLAMP,
+                            ).asComposeRenderEffect()
+                        }
+                    },
+            )
+        }
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .graphicsLayer {
-                    scaleX = 1.35f
-                    scaleY = 1.35f
-                    if (Build.VERSION.SDK_INT >= 31) {
-                        renderEffect = android.graphics.RenderEffect.createBlurEffect(82f, 82f, android.graphics.Shader.TileMode.CLAMP).asComposeRenderEffect()
-                    }
-                },
+                .background(
+                    if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.32f)
+                    else Color.White.copy(alpha = 0.20f),
+                ),
         )
-        Box(modifier = Modifier.fillMaxSize().background(if (isSystemInDarkTheme()) Color.Black.copy(alpha = 0.32f) else Color.White.copy(alpha = 0.20f)))
     }
 }

@@ -435,6 +435,7 @@ fun PlayerDetailScreen(
             // 不是播控页的沉浸背景。该层位于当前播放页内部，会随外层 sheet 一起移动。
             AlbumBlurBackground(
                 coverUri = song.coverUri,
+                seedColor = song.coverSeedColor,
                 modifier = Modifier
                     .fillMaxSize()
                     .hazeSource(topBarHaze),
