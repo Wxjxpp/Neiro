@@ -1,6 +1,12 @@
 package com.wxjxpp.neiro.feature.player
 
 import android.content.res.Configuration
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -104,6 +110,9 @@ import androidx.compose.ui.layout.positionInParent
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.SpanStyle
+import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -471,16 +480,7 @@ fun PlayerDetailScreen(
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()
-                        .height(72.dp)
-                        .hazeEffect(
-                            state = topBarHaze,
-                            style = HazeStyle(
-                                backgroundColor = Color.Transparent,
-                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))),
-                                blurRadius = 22.dp,
-                            ),
-                        )
-                        // 上端接近实色，下端逐渐透明；背景内容在末尾区域自然显现。
+                        .height(40.dp)
                         .background(
                             Brush.verticalGradient(
                                 0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
@@ -488,10 +488,14 @@ fun PlayerDetailScreen(
                                 1f to Color.Transparent,
                             ),
                         )
-                        // 过渡层向内容区域延伸 32dp，避免毛玻璃 RenderNode 在顶栏边界处被裁成硬线。
-                        .graphicsLayer {
-                            translationY = 32.dp.toPx()
-                        },
+                        .hazeEffect(
+                            state = topBarHaze,
+                            style = HazeStyle(
+                                backgroundColor = Color.Transparent,
+                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))),
+                                blurRadius = 22.dp,
+                            ),
+                        ),
                 )
             }
         }
@@ -705,14 +709,19 @@ fun PlayerDetailScreen(
                 ),
         ) {
             // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）
-            if (!lyricsMode && !lyrics.isEmpty) {
+            if (!lyrics.isEmpty) {
                 CurrentLineBanner(
                     lyrics = lyrics,
                     positionMs = state.positionMs,
                     offsetMs = lyricsOffsetMs,
                     showTranslation = showTranslation,
                     onClick = onExpandLyrics,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .graphicsLayer {
+                            // 进入歌词页前提前淡出，避免在阈值处突然消失。
+                            alpha = (1f - lyricPhase / 0.62f).coerceIn(0f, 1f)
+                        },
                 )
             }
             var draggingProgress by remember(song.id) { mutableFloatStateOf(state.progress) }
@@ -1209,6 +1218,28 @@ internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.HiRes -> "Hi"
 }
 
+/** 封面页当前歌词的逐字高亮：有逐字时间轴时按字符推进，没有则保持整行文本。 */
+@Composable
+private fun buildKaraokeText(
+    line: com.wxjxpp.neiro.core.model.LyricLine,
+    positionMs: Long,
+): androidx.compose.ui.text.AnnotatedString {
+    if (line.syllables.isEmpty()) return androidx.compose.ui.text.AnnotatedString(line.text)
+    val active = MaterialTheme.colorScheme.primary
+    val inactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
+    return buildAnnotatedString {
+        line.syllables.forEachIndexed { index, syllable ->
+            val nextStart = line.syllables.getOrNull(index + 1)?.startMs
+            val end = syllable.endMs ?: nextStart ?: line.endMs ?: (syllable.startMs + 500L)
+            val progress = ((positionMs - syllable.startMs).toFloat() /
+                (end - syllable.startMs).coerceAtLeast(1L)).coerceIn(0f, 1f)
+            val completedChars = (syllable.text.length * progress).toInt()
+            withStyle(SpanStyle(color = active)) { append(syllable.text.take(completedChars)) }
+            withStyle(SpanStyle(color = inactive)) { append(syllable.text.drop(completedChars)) }
+        }
+    }
+}
+
 /** 封面模式下的当前歌词横幅：5 行窗口（前2 + 当前 + 后2）。 */
 @Composable
 private fun CurrentLineBanner(
@@ -1234,54 +1265,49 @@ private fun CurrentLineBanner(
         color = Color.Transparent,
         modifier = modifier.padding(horizontal = 24.dp, vertical = 4.dp),
     ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .fillMaxWidth()
-                // Offscreen 必须在 drawWithContent 之前：先隔离出离屏缓冲，
-                // DstIn 渐变才只作用于横幅自身内容（否则会擦穿背景露出黑边）
-                .graphicsLayer(compositingStrategy = CompositingStrategy.Offscreen)
-                .drawWithContent {
-                    // 上/下边缘柔和淡出（DstIn：alpha=1 保留，alpha=0 擦除）
-                    drawContent()
-                    drawRect(
-                        brush = Brush.verticalGradient(
-                            0f to Color.Black.copy(alpha = 0f),
-                            0.25f to Color.Black.copy(alpha = 1f),
-                            0.75f to Color.Black.copy(alpha = 1f),
-                            1f to Color.Black.copy(alpha = 0f),
-                        ),
-                        blendMode = BlendMode.DstIn,
-                    )
-                },
-        ) {
-            for (i in window) {
-                if (i < 0 || i >= lines.size) continue
-                val line = lines[i]
-                val isCurrent = i == index
-                Text(
-                    text = line.text,
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontSize = MaterialTheme.typography.titleMedium.fontSize * if (isCurrent) 1.15f else 0.92f,
-                        fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                    ),
-                    color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier
-                        .padding(vertical = 1.dp)
-                        .alpha(if (isCurrent) 1f else 0.75f - (abs(i - index) - 1).coerceAtMost(2) * 0.15f),
-                )
-                if (isCurrent && showTranslation && !line.translation.isNullOrBlank()) {
+        AnimatedContent(
+            targetState = index,
+            transitionSpec = {
+                (slideInVertically(tween(260)) { it / 2 } + fadeIn(tween(180))) togetherWith
+                    (slideOutVertically(tween(220)) { -it / 2 } + fadeOut(tween(140)))
+            },
+            label = "currentLyricScroll",
+        ) { animatedIndex ->
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                for (i in (animatedIndex - 2)..(animatedIndex + 2)) {
+                    if (i < 0 || i >= lines.size) continue
+                    val line = lines[i]
+                    val isCurrent = i == animatedIndex
                     Text(
-                        text = line.translation!!,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        text = if (isCurrent) buildKaraokeText(line, p) else androidx.compose.ui.text.AnnotatedString(line.text),
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontSize = MaterialTheme.typography.titleMedium.fontSize * if (isCurrent) 1.15f else 0.92f,
+                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
+                        ),
+                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
+                        softWrap = true,
+                        maxLines = Int.MAX_VALUE,
+                        overflow = TextOverflow.Clip,
+                        modifier = Modifier
+                            .padding(horizontal = 8.dp, vertical = 1.dp)
+                            .fillMaxWidth()
+                            .alpha(if (isCurrent) 1f else 0.75f - (abs(i - animatedIndex) - 1).coerceAtMost(2) * 0.15f),
                     )
+                    if (isCurrent && showTranslation && !line.translation.isNullOrBlank()) {
+                        Text(
+                            text = line.translation!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            softWrap = true,
+                            maxLines = Int.MAX_VALUE,
+                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        )
+                    }
                 }
             }
         }
