@@ -116,7 +116,6 @@ import com.wxjxpp.neiro.core.model.Quality
 import com.wxjxpp.neiro.core.model.RepeatMode
 import com.wxjxpp.neiro.core.model.Song
 import com.wxjxpp.neiro.ui.components.AlbumBlurBackground
-import com.wxjxpp.neiro.ui.components.AmbientGlowBackground
 import com.wxjxpp.neiro.ui.components.FluidGlowBackground
 import com.wxjxpp.neiro.ui.components.TopBarBlurMode
 import com.wxjxpp.neiro.ui.components.topBarBlur
