@@ -532,6 +532,7 @@ fun PlayerDetailScreen(
                     Text(
                         text = song.title,
                         style = MaterialTheme.typography.titleLarge,
+                        color = MaterialTheme.colorScheme.onSurface,
                         textAlign = TextAlign.Center,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
