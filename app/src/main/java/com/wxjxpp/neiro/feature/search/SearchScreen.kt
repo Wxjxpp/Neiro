@@ -19,6 +19,12 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items as gridItems
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Close
@@ -204,10 +210,12 @@ fun SearchScreen(
         when {
             query.isBlank() -> {
                 if (noSourceAvailable) {
-                    // 未导入音源：明确空态 + 引导（用户指定文案）
                     NoSourceHint()
                 } else {
-                    HintText("输入关键词开始搜索")
+                    MusicCategoryGrid(
+                        contentPadding = contentPadding,
+                        onCategoryClick = { category -> onQueryChange(category.searchKeyword) },
+                    )
                 }
             }
             noSourceAvailable && onlineResults.isEmpty() && localResults.isEmpty() -> NoSourceHint()
@@ -347,6 +355,97 @@ fun SearchScreen(
                     }
                     items(localResults, key = { "local_${it.id}" }) { song ->
                         SearchResultRow(song = song, onClick = { onSongClick(song) })
+                    }
+                }
+            }
+        }
+    }
+}
+
+private data class MusicCategory(
+    val name: String,
+    val subtitle: String,
+    val searchKeyword: String,
+)
+
+private val musicCategories = listOf(
+    MusicCategory("Pop", "流行热歌", "Pop 流行音乐"),
+    MusicCategory("流行乐", "华语流行", "华语流行歌曲"),
+    MusicCategory("摇滚乐", "吉他与乐队", "摇滚乐"),
+    MusicCategory("民谣", "温暖叙事", "民谣歌曲"),
+    MusicCategory("电子乐", "节��拍与合成器", "电子音乐 EDM"),
+    MusicCategory("说唱", "Hip-Hop 与 Rap", "说唱 Hip-Hop"),
+    MusicCategory("R&B", "节奏布鲁斯", "R&B 节奏布鲁斯"),
+    MusicCategory("爵士", "即兴与律动", "爵士乐"),
+    MusicCategory("古典", "管弦与钢琴", "古典音乐"),
+    MusicCategory("轻音乐", "放松与专注", "轻音乐 纯音乐"),
+    MusicCategory("粤语", "经典粤语歌", "粤语歌曲"),
+    MusicCategory("日语", "J-Pop", "日语歌曲 J-Pop"),
+)
+
+@Composable
+private fun MusicCategoryGrid(
+    contentPadding: PaddingValues,
+    onCategoryClick: (MusicCategory) -> Unit,
+) {
+    val dimens = AppTheme.dimens
+    Column(modifier = Modifier.fillMaxSize()) {
+        Text(
+            text = "音乐分类",
+            style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.padding(
+                start = dimens.spaceLg,
+                top = dimens.spaceLg,
+                end = dimens.spaceLg,
+                bottom = dimens.spaceXs,
+            ),
+        )
+        Text(
+            text = "选择分类，从已启用音源加载相关歌曲",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = dimens.spaceLg),
+        )
+        LazyVerticalGrid(
+            columns = GridCells.Fixed(2),
+            horizontalArrangement = Arrangement.spacedBy(dimens.spaceMd),
+            verticalArrangement = Arrangement.spacedBy(dimens.spaceMd),
+            contentPadding = PaddingValues(
+                start = dimens.spaceLg,
+                top = dimens.spaceLg,
+                end = dimens.spaceLg,
+                bottom = contentPadding.calculateBottomPadding() + dimens.spaceLg,
+            ),
+            modifier = Modifier.fillMaxSize(),
+        ) {
+            gridItems(musicCategories, key = { it.name }) { category ->
+                Card(
+                    onClick = { onCategoryClick(category) },
+                    shape = RoundedCornerShape(20.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.secondaryContainer,
+                    ),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(108.dp),
+                ) {
+                    Column(
+                        verticalArrangement = Arrangement.Center,
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(dimens.spaceLg),
+                    ) {
+                        Text(
+                            text = category.name,
+                            style = MaterialTheme.typography.titleLarge,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer,
+                        )
+                        Spacer(Modifier.height(dimens.spaceXs))
+                        Text(
+                            text = category.subtitle,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.72f),
+                        )
                     }
                 }
             }
