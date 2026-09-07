@@ -110,10 +110,6 @@ fun SearchScreen(
         if (!selectedOnline.remove(song.id)) selectedOnline.add(song.id)
     }
     val selectedSongsList = onlineResults.filter { it.id in selectedOnline }
-    var selectedResultCategory by remember(query) {
-        mutableStateOf(SearchResultCategory.Song)
-    }
-    val resultCategoryLabels = SearchResultCategory.entries.map { it.label }
     val allLocalEmpty = localResults.isEmpty() && !isLoadingOnline && onlineResults.isEmpty()
     Column(
         modifier = modifier
@@ -199,17 +195,8 @@ fun SearchScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
 
-        if (query.isNotBlank()) {
-            Column {
-                ConnectedChoiceGroup(
-                    options = resultCategoryLabels,
-                    selectedIndex = selectedResultCategory.ordinal,
-                    onSelect = { selectedResultCategory = SearchResultCategory.entries[it] },
-                    modifier = Modifier.padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs),
-                )
-
-                // 聚合搜索时展示平台筛选器：官方连通按钮组（M3E connected button group）
-                if (onlinePlatforms.size > 1) {
+        // 聚合搜索时展示平台筛选器：官方连通按钮组（M3E connected button group）
+        if (query.isNotBlank() && onlinePlatforms.size > 1) {
             ConnectedChoiceGroup(
                 options = onlinePlatforms.map { it.displayName },
                 selectedIndex = onlinePlatforms.indexOfFirst { it.id == currentOnlinePlatform }
@@ -218,8 +205,6 @@ fun SearchScreen(
                 modifier = Modifier
                     .padding(horizontal = dimens.spaceLg, vertical = dimens.spaceXs),
             )
-                }
-            }
         }
         }
         when {
@@ -352,33 +337,15 @@ fun SearchScreen(
                             )
                         }
                     }
-                    val categorizedOnline = when (selectedResultCategory) {
-                        SearchResultCategory.Song -> onlineResults
-                        SearchResultCategory.Album -> onlineResults.distinctBy { it.album?.id ?: it.albumTitle }
-                        SearchResultCategory.Artist -> onlineResults.distinctBy { it.artists.firstOrNull()?.id ?: it.artistName }
-                        SearchResultCategory.Playlist -> emptyList()
-                    }
-                    if (selectedResultCategory == SearchResultCategory.Playlist) {
-                        item(key = "playlist_unavailable") {
-                            HintText("当前音源仅返回歌曲结果，暂不支持歌单搜索")
-                        }
-                    } else {
-                        items(categorizedOnline, key = { "online_${selectedResultCategory.name}_${it.id}" }) { song ->
-                            SearchResultRow(
-                                song = song,
-                                onClick = { onSongClick(song) },
-                                onDownloadSong = onDownloadSong.takeIf {
-                                    selectedOnline.isEmpty() && selectedResultCategory == SearchResultCategory.Song
-                                },
-                                onDownloadLyrics = onDownloadLyrics.takeIf {
-                                    selectedOnline.isEmpty() && selectedResultCategory == SearchResultCategory.Song
-                                },
-                                selected = song.id in selectedOnline,
-                                onLongClick = if (selectedResultCategory == SearchResultCategory.Song) {
-                                    { toggleSelect(song) }
-                                } else null,
-                            )
-                        }
+                    items(onlineResults, key = { "online_${it.id}" }) { song ->
+                        SearchResultRow(
+                            song = song,
+                            onClick = { onSongClick(song) },
+                            onDownloadSong = onDownloadSong.takeIf { selectedOnline.isEmpty() },
+                            onDownloadLyrics = onDownloadLyrics.takeIf { selectedOnline.isEmpty() },
+                            selected = song.id in selectedOnline,
+                            onLongClick = { toggleSelect(song) },
+                        )
                     }
                 }
                 // 本地结果
@@ -386,32 +353,13 @@ fun SearchScreen(
                     item {
                         SectionHeader("本地曲库（${localResults.size}）")
                     }
-                    val categorizedLocal = when (selectedResultCategory) {
-                        SearchResultCategory.Song -> localResults
-                        SearchResultCategory.Album -> localResults.distinctBy { it.album?.id ?: it.albumTitle }
-                        SearchResultCategory.Artist -> localResults.distinctBy { it.artists.firstOrNull()?.id ?: it.artistName }
-                        SearchResultCategory.Playlist -> emptyList()
-                    }
-                    if (categorizedLocal.isEmpty() && selectedResultCategory == SearchResultCategory.Playlist) {
-                        item(key = "local_playlist_unavailable") {
-                            HintText("本地搜索暂不包含歌单")
-                        }
-                    } else {
-                        items(categorizedLocal, key = { "local_${selectedResultCategory.name}_${it.id}" }) { song ->
-                            SearchResultRow(song = song, onClick = { onSongClick(song) })
-                        }
+                    items(localResults, key = { "local_${it.id}" }) { song ->
+                        SearchResultRow(song = song, onClick = { onSongClick(song) })
                     }
                 }
             }
         }
     }
-}
-
-private enum class SearchResultCategory(val label: String) {
-    Song("歌曲"),
-    Album("专辑"),
-    Artist("歌手"),
-    Playlist("歌单"),
 }
 
 private data class MusicCategory(
