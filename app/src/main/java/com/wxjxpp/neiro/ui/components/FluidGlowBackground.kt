@@ -1,6 +1,5 @@
 package com.wxjxpp.neiro.ui.components
 
-import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -8,44 +7,41 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.CompositingStrategy
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
+import kotlin.math.cos
+import kotlin.math.max
+import kotlin.math.sin
 
 /**
- * 流体渐变背景（v6 重写）。
+ * 流体渐变背景（v7：每个光斑独立流动，Apple Music 式“流光”）。
  *
- * ## v5 为什么会出现硬边三角形
+ * ## v6 为什么“不像在流”
  *
- * v5 把「底色 + 光斑」画在同一个 `graphicsLayer` 里再整层 `rotationZ`。
- * graphicsLayer 的绘制内容被裁剪到组件边界，**旋转后这个矩形边界本身
- * 就变成了画面里的斜切硬边** —— 截图里那两条从左上到右下的直线就是它。
- * 底色 `drawRect` 向外扩 35% 也救不了，因为扩出去的部分同样在裁剪之外。
+ * v6 把所有光斑画在同一层里，**整组一起**做缓慢平移 + 缩放：光斑之间的相对位置
+ * 永远不变，所以画面只是在“整体晃”，看不出颜色在交汇、流动。
  *
- * ## v6 结构：三层，各管一件事
+ * ## v7 做法
  *
- * 1. **底色层**（不参与动画、不裁剪）：整屏铺封面主色的浅化版，永远填满，
- *    所以任何情况下都不可能露出硬边或空白。
- * 2. **光斑层**（参与动画）：只画数个 alpha 渐变到全透明的径向光斑，
- *    自身没有任何实心矩形，因此就算被边界裁剪也看不出接缝。
- *    动画改为**纯平移**（各光斑沿独立的慢速李萨如轨迹漂移），不再旋转整层。
- *    位移写在 `graphicsLayer` 的 `translationX/Y` 上 —— 只更新 RenderNode
- *    变换属性，不触发重组也不触发重绘，绘制指令由 [drawWithCache] 缓存。
- * 3. **柔化层**：API 31+ 用 `RenderEffect` 给光斑层加一次大半径高斯模糊，
- *    把渐变边界彻底抹平，得到真正"融进水里"的流体感；低版本自动跳过，
- *    退化为纯径向渐变叠加（仍然柔和，只是层次略少）。
+ * 每个光斑有自己的李萨如轨迹：X / Y 方向各用不同的整数频率（1~3 圈 / 周期）、
+ * 不同的初相和半径“呼吸”，光斑之间会不断靠近、重叠、分开 —— 颜色在交汇处混合，
+ * 这就是流光感的来源。
+ *
+ * - **无缝循环**：所有频率都是整数，周期结束时每个光斑都精确回到起点，
+ *   `RepeatMode.Restart` 不会有跳变。
+ * - **不再需要 RenderEffect 模糊**：光斑本身就是多段 alpha 衰减到全透明的径向渐变，
+ *   天然柔和；去掉整层 80px 模糊后，所有 API 级别的观感一致，GPU 开销也更低。
+ * - **只重绘不重组**：动画值只在 Canvas 的绘制 lambda 里读取，每帧只触发绘制，
+ *   不触发重组。
+ * - 底色仍由调用方传入的 [canvasColor] 决定（明暗交给上层配色方案），
+ *   光斑全是半透明叠加，不会出现 v5 的斜切硬边。
  */
 @Composable
 fun FluidGlowBackground(
@@ -55,118 +51,102 @@ fun FluidGlowBackground(
     /**
      * 画布底色。由调用方传入沉浸配色方案的 `background`——它已经根据
      * **封面明度 + 系统深浅色模式**算好了该走浅底还是深底。
-     *
-     * v6 修复：旧实现在组件内部无条件 `blendARGB(主色, WHITE, 0.72f)`，
-     * 于是深色模式下遇到白色封面也会渲染出米黄/粉的亮底 —— 用户报的
-     * "暗色模式下背景是淡黄色"就是这里。底色的明暗决策不属于本组件，
-     * 统一交给上层配色方案。
+     * 底色的明暗决策不属于本组件，统一交给上层配色方案。
      */
     canvasColor: Color,
 ) {
     if (!enabled || palette.isEmpty()) return
     val darkCanvas = canvasColor.luminance() < 0.5f
-    // 底色在传入画布色上做轻微的纵向渐变，制造纵深；不改变其明暗属性
     val baseTop = remember(canvasColor, darkCanvas) {
         val target = if (darkCanvas) android.graphics.Color.BLACK else android.graphics.Color.WHITE
-        Color(
-            androidx.core.graphics.ColorUtils.blendARGB(canvasColor.toArgb(), target, 0.10f),
-        )
+        Color(androidx.core.graphics.ColorUtils.blendARGB(canvasColor.toArgb(), target, 0.10f))
     }
-    val spots = remember(palette) { palette.take(4) }
+    // 每个光斑的颜色：封面取色板循环取用；取色板不足 5 色时，多出来的光斑用邻近色相补齐，
+    // 避免几个光斑同色而看不出流动
+    val blobColors = remember(palette) {
+        List(BLOBS.size) { i ->
+            val base = palette[BLOBS[i].colorIndex % palette.size]
+            if (BLOBS[i].colorIndex < palette.size) base else base.shiftHue(if (i % 2 == 0) 26f else -26f)
+        }
+    }
     val transition = rememberInfiniteTransition(label = "fluid")
-    // 单一相位驱动所有光斑：每个光斑用不同的频率系数与初相，轨迹互不同步。
-    // 37s 一周期，慢到不会让人察觉在"动"，只感到画面在缓慢呼吸。
-    val phase by transition.animateFloat(
+    // 一个周期 40s；各光斑频率是 1~3 的整数，对应 13~40s 绕一圈 —— 肉眼可见在流，但不躁
+    val phase = transition.animateFloat(
         initialValue = 0f,
         targetValue = (2 * Math.PI).toFloat(),
-        animationSpec = infiniteRepeatable(tween(37_000, easing = LinearEasing), RepeatMode.Restart),
+        animationSpec = infiniteRepeatable(tween(40_000, easing = LinearEasing), RepeatMode.Restart),
         label = "fluidPhase",
     )
-    Box(modifier = modifier) {
-        // ---- 第 1 层：底色，永远铺满，不参与动画 ----
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    val bg = Brush.verticalGradient(listOf(baseTop, canvasColor))
-                    onDrawBehind { drawRect(bg) }
-                },
-        ) {}
-        // ---- 第 2 层：光斑组，单层平移 + 一次大半径模糊 ----
-        //
-        // 所有光斑画在**同一个** Canvas 里：只需要一个离屏缓冲和一次模糊，
-        // 而不是每个光斑各来一次（4 个全屏 blur 会比 v5 更慢）。
-        // 组内光斑位置静态、由 drawWithCache 缓存；整组做慢速平移 + 呼吸缩放，
-        // 视觉上足够产生"色彩在缓慢交汇流动"的观感。
-        //
-        // 层内只有 alpha 收敛到全透明的径向渐变，没有任何实心矩形，
-        // 因此即使内容被层边界裁掉也不会像 v5 那样出现斜切硬边。
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .graphicsLayer {
-                    // 只读动画值：仅更新 RenderNode 变换属性，不重绘
-                    translationX = size.width * 0.10f * kotlin.math.cos(phase)
-                    translationY = size.height * 0.07f * kotlin.math.sin(phase * 1.37f)
-                    val s = 1.04f + 0.05f * kotlin.math.sin(phase * 0.61f)
-                    scaleX = s
-                    scaleY = s
-                    compositingStrategy = CompositingStrategy.Offscreen
-                    if (Build.VERSION.SDK_INT >= 31) {
-                        // 大半径高斯模糊：把径向渐变的层次彻底抹开成流体交融。
-                        // DECAL 让层外按透明处理，避免边缘颜色被拉伸复制。
-                        renderEffect = android.graphics.RenderEffect
-                            .createBlurEffect(80f, 80f, android.graphics.Shader.TileMode.DECAL)
-                            .asComposeRenderEffect()
-                    }
-                }
-                .drawWithCache {
-                    val w = size.width
-                    val h = size.height
-                    // 四个象限错开分布；半径足够大保证互相重叠融合
-                    val precomputed = spots.mapIndexed { i, color ->
-                        val cx = w * (0.30f + 0.40f * (i % 2))
-                        val cy = h * (0.26f + 0.46f * (i / 2))
-                        val r = maxOf(w, h) * (0.50f + 0.07f * i)
-                        val center = Offset(cx, cy)
-                        // 三段式 alpha：中心较实 → 中段半透 → 边缘全透，
-                        // 全透明收尾保证与相邻光斑和底色无缝融合
-                        val brush = Brush.radialGradient(
-                            colors = listOf(
-                                color.copy(alpha = 0.46f),
-                                color.copy(alpha = 0.20f),
-                                Color.Transparent,
-                            ),
-                            center = center,
-                            radius = r,
-                        )
-                        Triple(brush, center, r)
-                    }
-                    onDrawBehind {
-                        precomputed.forEach { (brush, center, r) ->
-                            drawCircle(brush = brush, radius = r, center = center)
-                        }
-                    }
-                },
-        ) {}
-        // ---- 第 3 层：极轻的雾化，统一整体色调 ----
-        // 深色画布上叠白会发灰，改叠黑做压角；浅色画布保持叠白
-        Canvas(
-            modifier = Modifier
-                .fillMaxSize()
-                .drawWithCache {
-                    val veil = if (darkCanvas) {
-                        Color.Black.copy(alpha = 0.12f)
-                    } else {
-                        Color.White.copy(alpha = 0.10f)
-                    }
-                    val haze = Brush.radialGradient(
-                        listOf(veil, Color.Transparent),
-                        center = Offset(size.width * 0.5f, size.height * 0.42f),
-                        radius = maxOf(size.width, size.height) * 0.8f,
-                    )
-                    onDrawBehind { drawRect(haze) }
-                },
-        ) {}
+    Canvas(modifier = modifier.fillMaxSize()) {
+        // 只在绘制阶段读取动画值 → 每帧仅重绘，不重组
+        val t = phase.value
+        val w = size.width
+        val h = size.height
+        val m = max(w, h)
+        // 底色：纵向轻渐变制造纵深，永远铺满
+        drawRect(Brush.verticalGradient(listOf(baseTop, canvasColor)))
+        BLOBS.forEachIndexed { i, b ->
+            val cx = w * (b.anchorX + b.ampX * cos(t * b.kx + b.phase))
+            val cy = h * (b.anchorY + b.ampY * sin(t * b.ky + b.phase * 1.7f))
+            val r = m * (b.radius + 0.06f * sin(t * b.breath + b.phase))
+            val c = blobColors[i]
+            val center = Offset(cx, cy)
+            drawCircle(
+                brush = Brush.radialGradient(
+                    0f to c.copy(alpha = b.alpha),
+                    0.40f to c.copy(alpha = b.alpha * 0.72f),
+                    0.70f to c.copy(alpha = b.alpha * 0.28f),
+                    1f to Color.Transparent,
+                    center = center,
+                    radius = r,
+                ),
+                radius = r,
+                center = center,
+            )
+        }
+        // 底部压暗：保证下方控制区文字/图标的对比度（深色画布才需要）
+        if (darkCanvas) {
+            drawRect(
+                Brush.verticalGradient(
+                    0f to Color.Transparent,
+                    0.60f to Color.Transparent,
+                    1f to Color.Black.copy(alpha = 0.35f),
+                ),
+            )
+        }
     }
+}
+
+/**
+ * 光斑参数。位置/振幅为占屏幕宽高的比例；kx / ky / breath 必须是整数以保证 40s 周期无缝循环。
+ */
+private class Blob(
+    val anchorX: Float,
+    val anchorY: Float,
+    val ampX: Float,
+    val ampY: Float,
+    val kx: Int,
+    val ky: Int,
+    val phase: Float,
+    val radius: Float,
+    val breath: Int,
+    val colorIndex: Int,
+    val alpha: Float,
+)
+
+private val BLOBS = listOf(
+    Blob(0.25f, 0.22f, 0.30f, 0.18f, 1, 2, 0.0f, 0.62f, 2, 0, 0.95f),
+    Blob(0.78f, 0.30f, 0.26f, 0.20f, 2, 1, 1.3f, 0.58f, 3, 1, 0.85f),
+    Blob(0.30f, 0.62f, 0.30f, 0.16f, 1, 3, 2.6f, 0.60f, 1, 2, 0.80f),
+    Blob(0.75f, 0.70f, 0.24f, 0.20f, 3, 2, 3.9f, 0.56f, 2, 3, 0.80f),
+    Blob(0.50f, 0.45f, 0.34f, 0.28f, 2, 3, 5.1f, 0.52f, 3, 4, 0.80f),
+    Blob(0.55f, 0.90f, 0.30f, 0.08f, 1, 1, 0.7f, 0.60f, 1, 0, 0.70f),
+)
+
+/** HSV 色相偏移，用于取色板颜色不足时派生邻近色。 */
+private fun Color.shiftHue(degrees: Float): Color {
+    val hsv = FloatArray(3)
+    android.graphics.Color.colorToHSV(toArgb(), hsv)
+    hsv[0] = (hsv[0] + degrees + 360f) % 360f
+    return Color(android.graphics.Color.HSVToColor(hsv))
 }

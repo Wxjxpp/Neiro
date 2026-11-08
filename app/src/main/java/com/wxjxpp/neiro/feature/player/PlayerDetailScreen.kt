@@ -707,12 +707,15 @@ fun PlayerDetailScreen(
                 .align(if (isWidePlayer) Alignment.BottomStart else Alignment.BottomCenter)
                 .fillMaxWidth(if (isWidePlayer) 0.5f else 1f),
         ) {
-            // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）
-            if (!lyrics.isEmpty) {
-                CurrentLineBanner(
+            // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）。
+            // 收起态 / 已进入歌词页时不组合，避免后台白跑逐帧时钟。
+            if (!lyrics.isEmpty && sheetProgress > 0.05f && lyricPhase < 0.62f) {
+                CoverLyricsBanner(
                     lyrics = lyrics,
                     positionMs = state.positionMs,
-                    offsetMs = lyricsOffsetMs,
+                    isPlaying = state.isPlaying,
+                    title = song.title,
+                    artistName = song.artistName,
                     showTranslation = showTranslation,
                     onClick = onExpandLyrics,
                     modifier = Modifier
@@ -1217,101 +1220,6 @@ internal fun qualityLabel(q: Quality): String = when (q) {
     Quality.HiRes -> "Hi"
 }
 
-/** 封面页当前歌词的逐字高亮：有逐字时间轴时按字符推进，没有则保持整行文本。 */
-@Composable
-private fun buildKaraokeText(
-    line: com.wxjxpp.neiro.core.model.LyricLine,
-    positionMs: Long,
-): androidx.compose.ui.text.AnnotatedString {
-    if (line.syllables.isEmpty()) return androidx.compose.ui.text.AnnotatedString(line.text)
-    val active = MaterialTheme.colorScheme.primary
-    val inactive = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.72f)
-    return buildAnnotatedString {
-        line.syllables.forEachIndexed { index, syllable ->
-            val nextStart = line.syllables.getOrNull(index + 1)?.startMs
-            val end = syllable.endMs ?: nextStart ?: line.endMs ?: (syllable.startMs + 500L)
-            val progress = ((positionMs - syllable.startMs).toFloat() /
-                (end - syllable.startMs).coerceAtLeast(1L)).coerceIn(0f, 1f)
-            val completedChars = (syllable.text.length * progress).toInt()
-            withStyle(SpanStyle(color = active)) { append(syllable.text.take(completedChars)) }
-            withStyle(SpanStyle(color = inactive)) { append(syllable.text.drop(completedChars)) }
-        }
-    }
-}
-
-/** 封面模式下的当前歌词横幅：5 行窗口（前2 + 当前 + 后2）。 */
-@Composable
-private fun CurrentLineBanner(
-    lyrics: Lyrics,
-    positionMs: Long,
-    offsetMs: Long,
-    showTranslation: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier,
-) {
-    val effectiveOffset = offsetMs + lyrics.offsetMs
-    val p = positionMs - effectiveOffset
-    var index = -1
-    for (i in lyrics.lines.indices) {
-        if (lyrics.lines[i].startMs <= p) index = i else break
-    }
-    if (index < 0) return
-    val lines = lyrics.lines
-    // 5 行窗口：index-2 .. index+2，越界跳过
-    val window = (index - 2)..(index + 2)
-    androidx.compose.material3.Surface(
-        onClick = onClick,
-        color = Color.Transparent,
-        modifier = modifier.padding(horizontal = 24.dp, vertical = 4.dp),
-    ) {
-        AnimatedContent(
-            targetState = index,
-            transitionSpec = {
-                (slideInVertically(tween(260)) { it / 2 } + fadeIn(tween(180))) togetherWith
-                    (slideOutVertically(tween(220)) { -it / 2 } + fadeOut(tween(140)))
-            },
-            label = "currentLyricScroll",
-        ) { animatedIndex ->
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                for (i in (animatedIndex - 2)..(animatedIndex + 2)) {
-                    if (i < 0 || i >= lines.size) continue
-                    val line = lines[i]
-                    val isCurrent = i == animatedIndex
-                    Text(
-                        text = if (isCurrent) buildKaraokeText(line, p) else androidx.compose.ui.text.AnnotatedString(line.text),
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontSize = MaterialTheme.typography.titleMedium.fontSize * if (isCurrent) 1.15f else 0.92f,
-                            fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Normal,
-                        ),
-                        color = if (isCurrent) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
-                        textAlign = TextAlign.Center,
-                        softWrap = true,
-                        maxLines = Int.MAX_VALUE,
-                        overflow = TextOverflow.Clip,
-                        modifier = Modifier
-                            .padding(horizontal = 8.dp, vertical = 1.dp)
-                            .fillMaxWidth()
-                            .alpha(if (isCurrent) 1f else 0.75f - (abs(i - animatedIndex) - 1).coerceAtMost(2) * 0.15f),
-                    )
-                    if (isCurrent && showTranslation && !line.translation.isNullOrBlank()) {
-                        Text(
-                            text = line.translation!!,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center,
-                            softWrap = true,
-                            maxLines = Int.MAX_VALUE,
-                            modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-                        )
-                    }
-                }
-            }
-        }
-    }
-}
 /**
  * Expr：多点取样取色（v2）。
  * 在封面布 6 个采样点（中心 + 四象限 + 底部），每点在局部窗口内做
