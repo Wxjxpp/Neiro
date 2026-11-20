@@ -60,6 +60,8 @@ fun CoverLyricsBanner(
     lyrics: Lyrics,
     positionMs: Long,
     isPlaying: Boolean,
+    /** 页面是否可见。不可见时不跑逐帧时钟（但仍保持组合，避免展开时才做首次布局）。 */
+    active: Boolean = true,
     title: String,
     artistName: String,
     showTranslation: Boolean,
@@ -70,7 +72,7 @@ fun CoverLyricsBanner(
     val lines = synced.lines
     if (lines.isEmpty()) return
 
-    val smooth = rememberSmoothPositionMs(positionMs, isPlaying)
+    val smooth = rememberSmoothPositionMs(positionMs, isPlaying && active)
     // 当前行 = 最后一个已经开始的行；只有换句时才会重组
     val index by remember(lines) {
         derivedStateOf { lines.indexOfLast { it.start <= smooth.longValue } }

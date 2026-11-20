@@ -416,9 +416,6 @@ fun PlayerDetailScreen(
         )
     }
     androidx.compose.material3.MaterialTheme(colorScheme = finalScheme) {
-    // Expr：Haze 硬件加速模糊源与开关（顶栏毛玻璃实验；Haze 内部自带低版本回退）
-    val topBarHaze = rememberHazeState()
-    val useTopBarHaze = topBarBlurEnabled
     Box(modifier = Modifier.fillMaxSize()) {
         // 背景层必须和播放页一起位移；动态背景关闭时只保留纯色底。
         // 不能在 ambientGlow=false 时额外铺一层 AlbumBlurBackground，否则会与封面
@@ -426,8 +423,7 @@ fun PlayerDetailScreen(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(MaterialTheme.colorScheme.surface)
-                .hazeSource(topBarHaze),
+                .background(MaterialTheme.colorScheme.surface),
         )
         if (!vividMode && ambientGlow && vividPalette.isNotEmpty()) {
             FluidGlowBackground(
@@ -436,7 +432,6 @@ fun PlayerDetailScreen(
                 canvasColor = MaterialTheme.colorScheme.background,
                 modifier = Modifier
                     .fillMaxSize()
-                    .hazeSource(topBarHaze)
                     .alpha((1f - ((lyricPhase - 0.3f) / 0.4f)).coerceIn(0f, 1f)),
             )
         } else {
@@ -445,18 +440,23 @@ fun PlayerDetailScreen(
             AlbumBlurBackground(
                 coverUri = song.coverUri,
                 seedColor = song.coverSeedColor,
-                modifier = Modifier
-                    .fillMaxSize()
-                    .hazeSource(topBarHaze),
+                modifier = Modifier.fillMaxSize(),
             )
         }
-        // 顶部安全区：上方保持实色；只有最底部 40dp 作为渐变模糊过渡。
-        // 不再把整块顶栏做成半透明色块，避免搜索胶囊/标题上方出现“一坨盖板”。
+        // 顶部安全区：不再铺实色盖板（那就是“黑框”），背景直接延伸到状态栏后面。
+        // 只留一层很淡的上深下透渐变，保证状态栏图标和标题在亮色流光上仍然看得清；
+        // 同时仍承担“按住顶部下滑收起播放页”的手势区。
         Box(
             modifier = Modifier
                 .align(Alignment.TopCenter)
                 .fillMaxWidth()
                 .height(statusBarPadding.calculateTopPadding() + 88.dp)
+                .background(
+                    Brush.verticalGradient(
+                        0f to Color.Black.copy(alpha = 0.30f),
+                        1f to Color.Transparent,
+                    ),
+                )
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = onDragEnd,
@@ -466,44 +466,7 @@ fun PlayerDetailScreen(
                         if (dragAmount > 0f) onDrag(dragAmount) // 下滑收起
                     }
                 },
-        ) {
-            // 顶部主体保持实色；末尾 40dp 从近实色向透明过渡，避免底边硬切。
-            Spacer(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .fillMaxWidth()
-                    .height((statusBarPadding.calculateTopPadding() + 88.dp - 40.dp).coerceAtLeast(0.dp))
-                    .background(MaterialTheme.colorScheme.surface),
-            )
-            if (useTopBarHaze) {
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .fillMaxWidth()
-                        .height(72.dp)
-                        .hazeEffect(
-                            state = topBarHaze,
-                            style = HazeStyle(
-                                backgroundColor = Color.Transparent,
-                                tints = listOf(HazeTint(MaterialTheme.colorScheme.surface.copy(alpha = 0.06f))),
-                                blurRadius = 22.dp,
-                            ),
-                        )
-                        // 上端接近实色，下端逐渐透明；背景内容在末尾区域自然显现。
-                        .background(
-                            Brush.verticalGradient(
-                                0f to MaterialTheme.colorScheme.surface.copy(alpha = 0.96f),
-                                0.45f to MaterialTheme.colorScheme.surface.copy(alpha = 0.58f),
-                                1f to Color.Transparent,
-                            ),
-                        )
-                        // 过渡层向内容区域延伸 32dp，避免毛玻璃 RenderNode 在顶栏边界处被裁成硬线。
-                        .graphicsLayer {
-                            translationY = 32.dp.toPx()
-                        },
-                )
-            }
-        }
+        )
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -708,12 +671,14 @@ fun PlayerDetailScreen(
                 .fillMaxWidth(if (isWidePlayer) 0.5f else 1f),
         ) {
             // 当前歌词横幅：仅播放页显示（歌词页有完整 LyricsPane，避免重复）。
-            // 收起态 / 已进入歌词页时不组合，避免后台白跑逐帧时钟。
-            if (!lyrics.isEmpty && sheetProgress > 0.05f && lyricPhase < 0.62f) {
+            // 始终保持组合（首次测量歌词布局较重，不能放进展开动画里做）；
+            // 只在页面可见时才跑逐帧时钟。
+            if (!lyrics.isEmpty) {
                 CoverLyricsBanner(
                     lyrics = lyrics,
                     positionMs = state.positionMs,
                     isPlaying = state.isPlaying,
+                    active = sheetProgress > 0.05f && lyricPhase < 0.62f,
                     title = song.title,
                     artistName = song.artistName,
                     showTranslation = showTranslation,
